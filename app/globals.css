@@ -1,0 +1,203 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================
+   DESIGN SYSTEM - Apple-Inspired
+   ============================================ */
+
+@layer base {
+  :root {
+    /* Background & Foreground */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 9%;
+    
+    /* Card */
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 9%;
+    
+    /* Popover */
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 9%;
+    
+    /* Muted */
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+    
+    /* Accent */
+    --accent: 0 0% 96%;
+    --accent-foreground: 0 0% 9%;
+    
+    /* Border */
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 211 100% 50%;
+    
+    /* Radius base */
+    --radius: 0.5rem;
+  }
+  
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --background: 0 0% 9%;
+      --foreground: 0 0% 98%;
+      
+      --card: 0 0% 9%;
+      --card-foreground: 0 0% 98%;
+      
+      --popover: 0 0% 9%;
+      --popover-foreground: 0 0% 98%;
+      
+      --muted: 0 0% 15%;
+      --muted-foreground: 0 0% 65%;
+      
+      --accent: 0 0% 15%;
+      --accent-foreground: 0 0% 98%;
+      
+      --border: 0 0% 15%;
+      --input: 0 0% 15%;
+      --ring: 211 100% 50%;
+    }
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground;
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+
+@layer utilities {
+  /* Text balance */
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  /* Scrollbar personalizado (Apple-style) */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(203 213 225) transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: rgb(203 213 225);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(148 163 184);
+  }
+  
+  /* Glass effect (Apple-style blur) */
+  .glass {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+  
+  /* Safe area (para mobile) */
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  .safe-left {
+    padding-left: env(safe-area-inset-left);
+  }
+  
+  .safe-right {
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* ============================================
+   ANIMACIONES GLOBALES
+   ============================================ */
+
+@layer utilities {
+  /* Smooth transitions por defecto */
+  .transition-smooth {
+    transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  /* Hover lift (Apple-style) */
+  .hover-lift {
+    transition: transform 200ms ease-out, box-shadow 200ms ease-out;
+  }
+  
+  .hover-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  }
+  
+  /* Active scale (Apple-style button press) */
+  .active-scale:active {
+    transform: scale(0.98);
+  }
+}
+
+/* ============================================
+   COMPONENTES REUTILIZABLES
+   ============================================ */
+
+@layer components {
+  /* Container mejorado */
+  .container-custom {
+    @apply w-full mx-auto px-4 sm:px-6 lg:px-8;
+    max-width: 1280px;
+  }
+  
+  /* Card base (Apple-style) */
+  .card-base {
+    @apply bg-white rounded-lg shadow-sm border border-neutral-200;
+  }
+  
+  /* Input base (Apple-style) */
+  .input-base {
+    @apply w-full px-4 py-2 border border-neutral-300 rounded-lg;
+    @apply focus:ring-2 focus:ring-primary-500 focus:border-transparent;
+    @apply transition-smooth;
+  }
+  
+  /* Button base (Apple-style) */
+  .btn-base {
+    @apply px-4 py-2 rounded-lg font-medium;
+    @apply transition-smooth active-scale;
+    @apply focus:outline-none focus:ring-2 focus:ring-offset-2;
+  }
+  
+  .btn-primary {
+    @apply btn-base bg-primary-500 text-white;
+    @apply hover:bg-primary-600 focus:ring-primary-500;
+  }
+  
+  .btn-secondary {
+    @apply btn-base bg-neutral-100 text-neutral-900;
+    @apply hover:bg-neutral-200 focus:ring-neutral-500;
+  }
+}
