@@ -3,16 +3,18 @@ services:
     name: drum-school-management
     runtime: node
     plan: free
-    buildCommand: npm install && npx prisma generate && npm run build
-    startCommand: npx prisma migrate deploy && npm run start
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
     envVars:
-      - key: DATABASE_URL
-        fromValue: ${DATABASE_URL}
-      - key: DIRECT_URL
-        fromValue: ${DIRECT_URL}
       - key: NEXTAUTH_URL
         fromValue: ${RENDER_EXTERNAL_URL}
       - key: NEXTAUTH_SECRET
         generateValue: true
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
       - key: NODE_VERSION
         value: 18

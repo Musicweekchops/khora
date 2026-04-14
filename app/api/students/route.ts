@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/db"
+import { supabase, supabaseAdmin } from "@/lib/supabase"
+import bcrypt from "bcryptjs"
 
 // GET /api/students - Obtener todos los alumnos del profesor
 export async function GET(request: NextRequest) {
@@ -9,85 +10,64 @@ export async function GET(request: NextRequest) {
     const session = await getServerSession(authOptions)
 
     if (!session || session.user.role !== "TEACHER") {
-      return NextResponse.json(
-        { error: "No autorizado" },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 })
     }
 
-    // Obtener el perfil del profesor
-    const teacherProfile = await prisma.teacherProfile.findUnique({
-      where: { userId: session.user.id }
-    })
+    // Obtener el perfil del profesor vía Supabase
+    const { data: teacherProfile, error: teacherError } = await supabase
+      .from('TeacherProfile')
+      .select('id')
+      .eq('userId', session.user.id)
+      .single()
 
-    if (!teacherProfile) {
-      return NextResponse.json(
-        { error: "Perfil de profesor no encontrado" },
-        { status: 404 }
-      )
+    if (teacherError || !teacherProfile) {
+      return NextResponse.json({ error: "Perfil de profesor no encontrado" }, { status: 404 })
     }
 
-    // Obtener todos los alumnos del profesor
-    const students = await prisma.studentProfile.findMany({
-      where: {
-        teacherId: teacherProfile.id
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            phone: true
-          }
-        },
-        classes: {
-          where: {
-            status: "COMPLETED"
-          },
-          orderBy: {
-            date: "desc"
-          },
-          take: 1
-        },
-        payments: {
-          where: {
-            status: "PENDING"
-          }
-        }
-      },
-      orderBy: {
-        createdAt: "desc"
+    // Obtener todos los alumnos del profesor con joins estilo Supabase
+    const { data: students, error: studentsError } = await supabase
+      .from('StudentProfile')
+      .select(`
+        *,
+        user:User(id, email, name, phone),
+        classes:Class(id, date, status),
+        payments:Payment(id, status)
+      `)
+      .eq('teacherId', teacherProfile.id)
+      .order('createdAt', { ascending: false })
+
+    if (studentsError) throw studentsError
+
+    // Formatear respuesta (mismo formato que antes para no romper el front)
+    const formattedStudents = students.map((student: any) => {
+      const lastClass = student.classes
+        ?.filter((c: any) => c.status === "COMPLETED")
+        ?.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
+
+      return {
+        id: student.id,
+        userId: student.user?.id,
+        name: student.user?.name,
+        email: student.user?.email,
+        phone: student.user?.phone,
+        status: student.status,
+        leadSource: student.leadSource,
+        modalidad: student.modalidad,
+        preferredDay: student.preferredDay,
+        preferredTime: student.preferredTime,
+        totalClassesTaken: student.totalClassesTaken,
+        lifetimeValue: student.lifetimeValue,
+        lastClassDate: student.lastClassDate || lastClass?.date,
+        hasPendingPayments: student.payments?.some((p: any) => p.status === "PENDING"),
+        createdAt: student.createdAt
       }
     })
-
-    // Formatear respuesta
-    const formattedStudents = students.map(student => ({
-      id: student.id,
-      userId: student.user.id,
-      name: student.user.name,
-      email: student.user.email,
-      phone: student.user.phone,
-      status: student.status,
-      leadSource: student.leadSource,
-      modalidad: student.modalidad,
-      preferredDay: student.preferredDay,
-      preferredTime: student.preferredTime,
-      totalClassesTaken: student.totalClassesTaken,
-      lifetimeValue: student.lifetimeValue,
-      lastClassDate: student.lastClassDate,
-      hasPendingPayments: student.payments.length > 0,
-      createdAt: student.createdAt
-    }))
 
     return NextResponse.json(formattedStudents)
 
   } catch (error) {
     console.error("Error al obtener alumnos:", error)
-    return NextResponse.json(
-      { error: "Error al obtener alumnos" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Error al obtener alumnos" }, { status: 500 })
   }
 }
 
@@ -97,10 +77,7 @@ export async function POST(request: NextRequest) {
     const session = await getServerSession(authOptions)
 
     if (!session || session.user.role !== "TEACHER") {
-      return NextResponse.json(
-        { error: "No autorizado" },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 })
     }
 
     const body = await request.json()
@@ -118,105 +95,93 @@ export async function POST(request: NextRequest) {
       emergencyPhone
     } = body
 
-    // Validaciones
     if (!name || !email) {
-      return NextResponse.json(
-        { error: "Nombre y email son requeridos" },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: "Nombre y email son requeridos" }, { status: 400 })
     }
 
-    // Verificar si el email ya existe
-    const existingUser = await prisma.user.findUnique({
-      where: { email }
-    })
+    // Verificar si el email ya existe vía Supabase
+    const { data: existingUser } = await supabase
+      .from('User')
+      .select('id')
+      .eq('email', email)
+      .single()
 
     if (existingUser) {
-      return NextResponse.json(
-        { error: "El email ya está registrado" },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: "El email ya está registrado" }, { status: 400 })
     }
 
     // Obtener el perfil del profesor
-    const teacherProfile = await prisma.teacherProfile.findUnique({
-      where: { userId: session.user.id }
-    })
+    const { data: teacherProfile } = await supabase
+      .from('TeacherProfile')
+      .select('id')
+      .eq('userId', session.user.id)
+      .single()
 
     if (!teacherProfile) {
-      return NextResponse.json(
-        { error: "Perfil de profesor no encontrado" },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: "Perfil de profesor no encontrado" }, { status: 404 })
     }
 
-    // Hashear contraseña (usar email si no se proporciona)
-    const bcrypt = require("bcryptjs")
+    // Hashear contraseña
     const hashedPassword = await bcrypt.hash(
       password || email.split("@")[0] + "123", 
       10
     )
 
-    // Crear usuario y perfil de estudiante en una transacción
-    const result = await prisma.$transaction(async (tx) => {
-      // Crear usuario
-      const user = await tx.user.create({
-        data: {
-          email,
-          name,
-          phone,
-          password: hashedPassword,
-          role: "STUDENT"
-        }
+    // Simular transacción con sequential inserts y cleanup manual si falla
+    // PASO 1: Crear Usuario
+    const { data: newUser, error: userError } = await supabaseAdmin
+      .from('User')
+      .insert({
+        email,
+        name,
+        phone,
+        password: hashedPassword,
+        role: "STUDENT"
       })
+      .select()
+      .single()
 
-      // Crear perfil de estudiante
-      const studentProfile = await tx.studentProfile.create({
-        data: {
-          userId: user.id,
-          teacherId: teacherProfile.id,
-          status,
-          leadSource,
-          modalidad,
-          preferredDay,
-          preferredTime,
-          emergencyContact,
-          emergencyPhone
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              email: true,
-              name: true,
-              phone: true
-            }
-          }
-        }
+    if (userError) throw userError
+
+    // PASO 2: Crear Perfil de Estudiante
+    const { data: student, error: profileError } = await supabaseAdmin
+      .from('StudentProfile')
+      .insert({
+        userId: newUser.id,
+        teacherId: teacherProfile.id,
+        status,
+        leadSource,
+        modalidad,
+        preferredDay,
+        preferredTime,
+        emergencyContact,
+        emergencyPhone
       })
+      .select(`
+        *,
+        user:User(id, email, name, phone)
+      `)
+      .single()
 
-      return studentProfile
-    })
+    if (profileError) {
+      // Rollback manual (borrar usuario si falla el perfil)
+      await supabaseAdmin.from('User').delete().eq('id', newUser.id)
+      throw profileError
+    }
 
-    return NextResponse.json(
-      { 
-        message: "Alumno creado exitosamente",
-        student: {
-          id: result.id,
-          name: result.user.name,
-          email: result.user.email,
-          phone: result.user.phone,
-          status: result.status
-        }
-      },
-      { status: 201 }
-    )
+    return NextResponse.json({ 
+      message: "Alumno creado exitosamente",
+      student: {
+        id: student.id,
+        name: student.user.name,
+        email: student.user.email,
+        phone: student.user.phone,
+        status: student.status
+      }
+    }, { status: 201 })
 
   } catch (error) {
     console.error("Error al crear alumno:", error)
-    return NextResponse.json(
-      { error: "Error al crear alumno" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Error al crear alumno" }, { status: 500 })
   }
 }

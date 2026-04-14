@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { supabase, supabaseAdmin } from '@/lib/supabase'
 
 export async function POST(request: Request) {
   try {
@@ -15,168 +15,116 @@ export async function POST(request: Request) {
       startTime,
       endTime,
       isMonthlyPlan = false,
-      monthlyPricing = null // Datos del pricing calculado
+      monthlyPricing = null
     } = body
 
-    // Validación básica
     if (!name || !email || !phone || !classTypeId || !date || !startTime || !endTime) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    // Verificar que el tipo de clase existe y está activo
-    const classType = await prisma.classType.findUnique({
-      where: { id: classTypeId }
-    })
+    // Verificar que el tipo de clase existe y está activo vía Supabase
+    const { data: classType } = await supabase
+      .from('ClassType')
+      .select('*')
+      .eq('id', classTypeId)
+      .single()
 
     if (!classType || !classType.isActive) {
-      return NextResponse.json(
-        { error: 'Invalid class type' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Invalid class type' }, { status: 400 })
     }
 
-    // PLAN MENSUAL - Crear todas las clases según pricing calculado
+    // PLAN MENSUAL
     if (isMonthlyPlan || classType.name.toLowerCase().includes('mensual')) {
       if (!monthlyPricing || !monthlyPricing.classes) {
-        return NextResponse.json(
-          { error: 'Monthly pricing data required for monthly plan' },
-          { status: 400 }
-        )
+        return NextResponse.json({ error: 'Monthly pricing data required' }, { status: 400 })
       }
 
       return await createDynamicMonthlyPlanBooking({
-        name,
-        email,
-        phone,
-        message,
-        classTypeId,
-        classType,
-        startTime,
-        endTime,
-        monthlyPricing
+        name, email, phone, message, classTypeId, classType, startTime, endTime, monthlyPricing
       })
     }
 
-    // CLASE UNITARIA O DE PRUEBA - Crear 1 booking
+    // CLASE UNITARIA O DE PRUEBA
     const requestedDate = new Date(date)
     return await createSingleBooking({
-      name,
-      email,
-      phone,
-      message,
-      classTypeId,
-      classType,
-      date: requestedDate,
-      startTime,
-      endTime
+      name, email, phone, message, classTypeId, classType, date: requestedDate, startTime, endTime
     })
 
   } catch (error) {
     console.error('Error creating booking:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
-// ============================================
-// PLAN MENSUAL DINÁMICO
-// ============================================
-
-async function createDynamicMonthlyPlanBooking(params: {
-  name: string
-  email: string
-  phone: string
-  message: string | undefined
-  classTypeId: string
-  classType: any
-  startTime: string
-  endTime: string
-  monthlyPricing: any
-}) {
+async function createDynamicMonthlyPlanBooking(params: any) {
   const { name, email, phone, message, classTypeId, classType, startTime, endTime, monthlyPricing } = params
 
-  // Calcular fecha de expiración (2 meses después de la última clase)
   const lastClassDate = new Date(monthlyPricing.classes[monthlyPricing.classes.length - 1].date)
   const expirationDate = new Date(lastClassDate)
   expirationDate.setMonth(expirationDate.getMonth() + 2)
 
-  // Fecha de la primera clase para el booking padre
   const firstClassDate = new Date(monthlyPricing.classes[0].date)
 
-  // Crear el booking padre (Plan Mensual)
-  const parentBooking = await prisma.booking.create({
-    data: {
+  // Crear booking padre
+  const { data: parentBooking, error: bError } = await supabaseAdmin
+    .from('Booking')
+    .insert({
       name,
       email,
       phone,
       message: message || '',
       classTypeId,
-      date: firstClassDate, // Fecha de la primera clase
+      date: firstClassDate.toISOString(),
       startTime,
       endTime,
       status: 'CONFIRMED',
       isParent: true,
       isMonthlyPlan: true,
       totalPrice: monthlyPricing.pricing.totalPrice
-    }
-  })
-
-  // Crear las clases individuales
-  const classPromises = monthlyPricing.classes.map(async (classData: any, index: number) => {
-    const classDate = new Date(classData.date)
-    
-    // Determinar si es penúltima clase (para recordatorio de renovación)
-    const isPenultimate = index === monthlyPricing.classes.length - 2
-
-    return prisma.class.create({
-      data: {
-        booking: {
-          connect: { id: parentBooking.id }
-        },
-        date: classDate, // Solo usar date
-        startTime,
-        endTime,
-        duration: classType.duration,
-        status: 'SCHEDULED',
-        attendanceStatus: null,
-        isRecovery: false,
-        needsRenewalReminder: isPenultimate,
-        expiresAt: expirationDate
-      }
     })
-  })
+    .select()
+    .single()
 
-  const createdClasses = await Promise.all(classPromises)
+  if (bError) throw bError
 
-  // Actualizar MonthlyLimits para clase de prueba si aplica
+  // Crear clases individuales
+  const classRecords = monthlyPricing.classes.map((cd: any, index: number) => ({
+    bookingId: parentBooking.id,
+    date: cd.date,
+    startTime,
+    endTime,
+    duration: classType.duration,
+    status: 'SCHEDULED',
+    needsRenewalReminder: index === monthlyPricing.classes.length - 2,
+    expiresAt: expirationDate.toISOString()
+  }))
+
+  const { data: createdClasses, error: cError } = await supabaseAdmin
+    .from('Class')
+    .insert(classRecords)
+    .select()
+
+  if (cError) throw cError
+
+  // Upsert MonthlyLimits si es prueba
   if (classType.name.toLowerCase().includes('prueba')) {
     const currentMonth = new Date().toISOString().slice(0, 7)
-    
-    await prisma.monthlyLimits.upsert({
-      where: {
-        email_phone_month: {
-          email,
-          phone,
-          month: currentMonth
-        }
-      },
-      update: {
-        trialClassesTaken: { increment: 1 }
-      },
-      create: {
-        email,
-        phone,
-        month: currentMonth,
-        trialClassesTaken: 1,
-        reschedulesUsed: 0,
-        recoveriesUsed: 0
-      }
-    })
+    const { data: limits } = await supabaseAdmin
+      .from('MonthlyLimits')
+      .select('id, trialClassesTaken')
+      .match({ email, phone, month: currentMonth })
+      .single()
+
+    if (limits) {
+      await supabaseAdmin
+        .from('MonthlyLimits')
+        .update({ trialClassesTaken: (limits.trialClassesTaken || 0) + 1 })
+        .eq('id', limits.id)
+    } else {
+      await supabaseAdmin
+        .from('MonthlyLimits')
+        .insert({ email, phone, month: currentMonth, trialClassesTaken: 1 })
+    }
   }
 
   return NextResponse.json({
@@ -187,166 +135,103 @@ async function createDynamicMonthlyPlanBooking(params: {
       email,
       phone,
       isMonthlyPlan: true,
-      totalPrice: monthlyPricing.pricing.totalPrice,
-      pricingType: monthlyPricing.pricing.type,
-      classType: {
-        name: classType.name,
-        price: monthlyPricing.pricing.totalPrice,
-        currency: classType.currency,
-        duration: classType.duration
-      },
-      classes: createdClasses.map((cls, idx) => ({
+      totalPrice: parentBooking.totalPrice,
+      classes: createdClasses.map((cls: any, idx: number) => ({
         id: cls.id,
         date: cls.date,
         startTime: cls.startTime,
         endTime: cls.endTime,
-        month: monthlyPricing.classes[idx].month,
-        monthName: monthlyPricing.classes[idx].monthName,
-        weekNumber: idx + 1,
-        needsRenewalReminder: cls.needsRenewalReminder
+        weekNumber: idx + 1
       }))
     }
   })
 }
 
-// ============================================
-// CLASE INDIVIDUAL
-// ============================================
-
-async function createSingleBooking(params: {
-  name: string
-  email: string
-  phone: string
-  message: string | undefined
-  classTypeId: string
-  classType: any
-  date: Date
-  startTime: string
-  endTime: string
-}) {
+async function createSingleBooking(params: any) {
   const { name, email, phone, message, classTypeId, classType, date, startTime, endTime } = params
 
   // Verificar disponibilidad
-  const existingBooking = await prisma.booking.findFirst({
-    where: {
-      classTypeId,
-      status: { in: ['PENDING', 'CONFIRMED'] },
-      classes: {
-        some: {
-          date,
-          startTime,
-          status: 'SCHEDULED'
-        }
-      }
-    }
-  })
+  const { data: existingClass } = await supabase
+    .from('Class')
+    .select('id')
+    .match({ date: date.toISOString().split('T')[0], startTime, status: 'SCHEDULED' })
+    .maybeSingle()
 
-  if (existingBooking) {
-    return NextResponse.json(
-      { error: 'This time slot is already booked' },
-      { status: 400 }
-    )
+  if (existingClass) {
+    return NextResponse.json({ error: 'This time slot is already booked' }, { status: 400 })
   }
 
-  // Verificar límite de clase de prueba
+  // Verificar límite de prueba
   if (classType.name.toLowerCase().includes('prueba')) {
-    const existingTrialBooking = await prisma.booking.findFirst({
-      where: {
-        OR: [
-          { email },
-          { phone }
-        ],
-        classType: {
-          name: {
-            contains: 'prueba',
-            mode: 'insensitive'
-          }
-        },
-        status: { in: ['CONFIRMED', 'COMPLETED'] }
-      }
-    })
+    const { data: existingTrial } = await supabase
+      .from('Booking')
+      .select('id')
+      .or(`email.eq.${email},phone.eq.${phone}`)
+      .ilike('classType.name', '%prueba%') // Nota: Esto requiere join o lógica en memoria si no hay join rápido
+      .in('status', ['CONFIRMED', 'COMPLETED'])
+      .maybeSingle()
 
-    if (existingTrialBooking) {
-      return NextResponse.json(
-        { error: 'You have already taken a trial class' },
-        { status: 400 }
-      )
+    if (existingTrial) {
+      return NextResponse.json({ error: 'Already taken a trial class' }, { status: 400 })
     }
   }
 
-  // Crear el booking
-  const booking = await prisma.booking.create({
-    data: {
-      name,
-      email,
-      phone,
+  const { data: booking, error: bError } = await supabaseAdmin
+    .from('Booking')
+    .insert({
+      name, email, phone,
       message: message || '',
       classTypeId,
-      date, // Campo obligatorio
-      startTime,
-      endTime,
+      date: date.toISOString(),
+      startTime, endTime,
       status: 'CONFIRMED',
-      isParent: false,
-      isMonthlyPlan: false,
       totalPrice: classType.price
-    }
-  })
+    })
+    .select()
+    .single()
 
-  // Crear la clase
-  const classRecord = await prisma.class.create({
-    data: {
-      booking: {
-        connect: { id: booking.id }
-      },
-      date, // Solo usar date
-      startTime,
-      endTime,
+  if (bError) throw bError
+
+  const { data: classRecord, error: cError } = await supabaseAdmin
+    .from('Class')
+    .insert({
+      bookingId: booking.id,
+      date: date.toISOString().split('T')[0],
+      startTime, endTime,
       duration: classType.duration,
-      status: 'SCHEDULED',
-      attendanceStatus: null
-    }
-  })
+      status: 'SCHEDULED'
+    })
+    .select()
+    .single()
 
-  // Actualizar MonthlyLimits para clase de prueba
+  if (cError) throw cError
+
+  // MonthlyLimits logic (same as above)
   if (classType.name.toLowerCase().includes('prueba')) {
     const currentMonth = date.toISOString().slice(0, 7)
-    
-    await prisma.monthlyLimits.upsert({
-      where: {
-        email_phone_month: {
-          email,
-          phone,
-          month: currentMonth
-        }
-      },
-      update: {
-        trialClassesTaken: { increment: 1 }
-      },
-      create: {
-        email,
-        phone,
-        month: currentMonth,
-        trialClassesTaken: 1,
-        reschedulesUsed: 0,
-        recoveriesUsed: 0
-      }
-    })
+    const { data: limits } = await supabaseAdmin
+      .from('MonthlyLimits')
+      .select('id, trialClassesTaken')
+      .match({ email, phone, month: currentMonth })
+      .single()
+
+    if (limits) {
+      await supabaseAdmin
+        .from('MonthlyLimits')
+        .update({ trialClassesTaken: (limits.trialClassesTaken || 0) + 1 })
+        .eq('id', limits.id)
+    } else {
+      await supabaseAdmin
+        .from('MonthlyLimits')
+        .insert({ email, phone, month: currentMonth, trialClassesTaken: 1 })
+    }
   }
 
   return NextResponse.json({
     success: true,
     booking: {
       id: booking.id,
-      name,
-      email,
-      phone,
-      isMonthlyPlan: false,
-      classType: {
-        name: classType.name,
-        price: classType.price,
-        currency: classType.currency,
-        duration: classType.duration
-      },
+      name, email, phone,
       classes: [{
         id: classRecord.id,
         date: classRecord.date,

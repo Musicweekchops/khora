@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/db"
+import { supabase } from "@/lib/supabase"
 
 // GET /api/classes - Obtener todas las clases del profesor
 export async function GET(request: NextRequest) {
@@ -9,10 +9,7 @@ export async function GET(request: NextRequest) {
     const session = await getServerSession(authOptions)
 
     if (!session || session.user.role !== "TEACHER") {
-      return NextResponse.json(
-        { error: "No autorizado" },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 })
     }
 
     // Obtener parámetros de query
@@ -22,75 +19,58 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get("startDate")
     const endDate = searchParams.get("endDate")
 
-    // Obtener el perfil del profesor
-    const teacherProfile = await prisma.teacherProfile.findUnique({
-      where: { userId: session.user.id }
-    })
+    // Obtener el perfil del profesor vía Supabase
+    const { data: teacherProfile } = await supabase
+      .from('TeacherProfile')
+      .select('id')
+      .eq('userId', session.user.id)
+      .single()
 
     if (!teacherProfile) {
-      return NextResponse.json(
-        { error: "Perfil de profesor no encontrado" },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: "Perfil de profesor no encontrado" }, { status: 404 })
     }
 
-    // Construir filtros
-    const where: any = {
-      student: {
-        teacherId: teacherProfile.id
-      },
-      // Excluir clases eliminadas por defecto
-      status: status || { not: "DELETED" }
-    }
+    // Construir query de Supabase
+    let query = supabase
+      .from('Class')
+      .select(`
+        *,
+        student:StudentProfile(
+          *,
+          user:User(id, name, email, phone)
+        ),
+        notes:ClassNote(*),
+        tasks:Task(*)
+      `)
+      .order('date', { ascending: false })
 
-    // Si se especifica un status, usarlo (incluso si es DELETED)
+    // Filtrar por profesor a través del estudiante
+    query = query.eq('student.teacherId', teacherProfile.id)
+
+    // Filtros adicionales
     if (status) {
-      where.status = status
+      query = query.eq('status', status)
+    } else {
+      query = query.neq('status', 'DELETED')
     }
 
     if (studentId) {
-      where.studentId = studentId
+      query = query.eq('studentId', studentId)
     }
 
     if (startDate && endDate) {
-      where.date = {
-        gte: new Date(startDate),
-        lte: new Date(endDate)
-      }
+      query = query.gte('date', startDate).lte('date', endDate)
     }
 
-    // Obtener clases
-    const classes = await prisma.class.findMany({
-      where,
-      include: {
-        student: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                phone: true
-              }
-            }
-          }
-        },
-        notes: true,
-        tasks: true
-      },
-      orderBy: {
-        date: "desc"
-      }
-    })
+    const { data: classes, error: classesError } = await query
+
+    if (classesError) throw classesError
 
     return NextResponse.json(classes)
 
   } catch (error) {
     console.error("Error al obtener clases:", error)
-    return NextResponse.json(
-      { error: "Error al obtener clases" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Error al obtener clases" }, { status: 500 })
   }
 }
 
@@ -100,10 +80,7 @@ export async function POST(request: NextRequest) {
     const session = await getServerSession(authOptions)
 
     if (!session || session.user.role !== "TEACHER") {
-      return NextResponse.json(
-        { error: "No autorizado" },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 })
     }
 
     const body = await request.json()
@@ -117,84 +94,70 @@ export async function POST(request: NextRequest) {
       totalInPlan
     } = body
 
-    // Validaciones
     if (!studentId || !scheduledDate || !modalidad) {
-      return NextResponse.json(
-        { error: "Alumno, fecha y modalidad son requeridos" },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: "Alumno, fecha y modalidad son requeridos" }, { status: 400 })
     }
 
-    // Verificar que el alumno existe y pertenece al profesor
-    const teacherProfile = await prisma.teacherProfile.findUnique({
-      where: { userId: session.user.id }
-    })
+    // Obtener perfil del profesor
+    const { data: teacherProfile } = await supabase
+      .from('TeacherProfile')
+      .select('id')
+      .eq('userId', session.user.id)
+      .single()
 
     if (!teacherProfile) {
-      return NextResponse.json(
-        { error: "Perfil de profesor no encontrado" },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: "Perfil de profesor no encontrado" }, { status: 404 })
     }
 
-    const student = await prisma.studentProfile.findFirst({
-      where: {
-        id: studentId,
-        teacherId: teacherProfile.id
-      }
-    })
+    // Verificar que el alumno pertenece al profesor
+    const { data: student } = await supabase
+      .from('StudentProfile')
+      .select('id')
+      .eq('id', studentId)
+      .eq('teacherId', teacherProfile.id)
+      .single()
 
     if (!student) {
-      return NextResponse.json(
-        { error: "Alumno no encontrado" },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: "Alumno no encontrado" }, { status: 404 })
     }
 
-    // Crear la clase
     const classDate = new Date(scheduledDate)
-    
-    const newClass = await prisma.class.create({
-      data: {
+    const startTime = classDate.getHours().toString().padStart(2, '0') + ':' + classDate.getMinutes().toString().padStart(2, '0')
+    const endTimeObj = new Date(classDate.getTime() + duration * 60000)
+    const endTime = endTimeObj.getHours().toString().padStart(2, '0') + ':' + endTimeObj.getMinutes().toString().padStart(2, '0')
+
+    const { data: newClass, error: createError } = await supabase
+      .from('Class')
+      .insert({
         studentId,
-        date: classDate, // Campo obligatorio
-        startTime: classDate.getHours().toString().padStart(2, '0') + ':' + classDate.getMinutes().toString().padStart(2, '0'),
-        endTime: new Date(classDate.getTime() + duration * 60000).getHours().toString().padStart(2, '0') + ':' + new Date(classDate.getTime() + duration * 60000).getMinutes().toString().padStart(2, '0'),
+        date: classDate.toISOString(),
+        startTime,
+        endTime,
         duration,
         modalidad,
         isTrialClass,
         classNumber,
         totalInPlan,
         status: "SCHEDULED"
-      },
-      include: {
-        student: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true
-              }
-            }
-          }
-        }
-      }
-    })
+      })
+      .select(`
+        *,
+        student:StudentProfile(
+          *,
+          user:User(id, name, email)
+        )
+      `)
+      .single()
 
-    return NextResponse.json(
-      {
-        message: "Clase creada exitosamente",
-        class: newClass
-      },
-      { status: 201 }
-    )
+    if (createError) throw createError
+
+    return NextResponse.json({
+      message: "Clase creada exitosamente",
+      class: newClass
+    }, { status: 201 })
 
   } catch (error) {
     console.error("Error al crear clase:", error)
-    return NextResponse.json(
-      { error: "Error al crear clase" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Error al crear clase" }, { status: 500 })
   }
 }

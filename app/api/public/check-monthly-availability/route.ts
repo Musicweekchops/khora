@@ -1,21 +1,18 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { supabase } from '@/lib/supabase'
 
 export async function POST(request: Request) {
   try {
     const { date, startTime, endTime } = await request.json()
 
     if (!date || !startTime || !endTime) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
     const selectedDate = new Date(date)
     const dayOfWeek = selectedDate.getDay()
 
-    // Generar las 4 fechas (mismo día de la semana, 4 semanas consecutivas)
+    // Generar las 4 fechas
     const weekDates = []
     for (let i = 0; i < 4; i++) {
       const weekDate = new Date(selectedDate)
@@ -23,70 +20,51 @@ export async function POST(request: Request) {
       weekDates.push(weekDate)
     }
 
-    // Obtener profesor
-    const teacher = await prisma.user.findFirst({
-      where: { role: 'TEACHER' },
-      include: { teacherProfile: true }
-    })
+    // Obtener profesor vía Supabase
+    const { data: teacher } = await supabase
+      .from('User')
+      .select('id, teacherProfile:TeacherProfile(id)')
+      .eq('role', 'TEACHER')
+      .limit(1)
+      .single()
 
     if (!teacher || !teacher.teacherProfile) {
-      return NextResponse.json(
-        { error: 'Teacher not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Teacher not found' }, { status: 404 })
     }
 
-    const teacherId = teacher.teacherProfile.id
+    const teacherId = (teacher.teacherProfile as any).id
 
     // Verificar disponibilidad y conflictos para cada semana
     const weeklyStatus = await Promise.all(weekDates.map(async (weekDate, index) => {
-      const startOfDay = new Date(weekDate)
-      startOfDay.setHours(0, 0, 0, 0)
-      
-      const endOfDay = new Date(weekDate)
-      endOfDay.setHours(23, 59, 59, 999)
+      const dateStr = weekDate.toISOString().split('T')[0]
 
-      // 1. Verificar si hay disponibilidad configurada
-      const availability = await prisma.availability.findFirst({
-        where: {
-          teacherId,
-          dayOfWeek,
-          isActive: true
-        }
-      })
+      // 1. Verificar disponibilidad configurada
+      const { data: availability } = await supabase
+        .from('Availability')
+        .select('*')
+        .match({ teacherId, dayOfWeek, isActive: true })
+        .maybeSingle()
 
       if (!availability) {
         return {
           weekNumber: index + 1,
           date: weekDate,
           available: false,
-          reason: 'No hay disponibilidad configurada para este día',
+          reason: 'No hay disponibilidad configurada',
           isHoliday: false,
           alternatives: []
         }
       }
 
-      // 2. Verificar si es feriado/bloqueado
-      const exception = await prisma.availabilityException.findFirst({
-        where: {
-          teacherId,
-          date: {
-            gte: startOfDay,
-            lte: endOfDay
-          }
-        }
-      })
+      // 2. Verificar feriado/bloqueo
+      const { data: exception } = await supabase
+        .from('AvailabilityException')
+        .select('*')
+        .match({ teacherId, date: dateStr })
+        .maybeSingle()
 
       if (exception) {
-        // Obtener días alternativos para esta semana
-        const alternatives = await getAlternativeDates(
-          weekDate,
-          startTime,
-          endTime,
-          teacherId,
-          dayOfWeek
-        )
-
+        const alternatives = await getAlternativeDates(weekDate, startTime, endTime, teacherId, dayOfWeek)
         return {
           weekNumber: index + 1,
           date: weekDate,
@@ -97,79 +75,48 @@ export async function POST(request: Request) {
         }
       }
 
-      // 3. Verificar si el slot está ocupado
-      const existingClass = await prisma.class.findFirst({
-        where: {
-          scheduledDate: {
-            gte: startOfDay,
-            lte: endOfDay
-          },
-          status: {
-            notIn: ['CANCELLED']
-          }
-        }
-      })
+      // 3. Verificar slot ocupado (Clases)
+      const { data: existingClass } = await supabase
+        .from('Class')
+        .select('*')
+        .eq('date', dateStr)
+        .not('status', 'eq', 'CANCELLED')
+        .maybeSingle()
 
-      if (existingClass) {
-        const classStart = new Date(existingClass.scheduledDate)
-        const classHours = classStart.getHours()
-        const classMinutes = classStart.getMinutes()
-        const classStartTime = `${String(classHours).padStart(2, '0')}:${String(classMinutes).padStart(2, '0')}`
-        const classEndTime = addMinutes(classStartTime, existingClass.duration)
-        
-        if (timesOverlap(startTime, endTime, classStartTime, classEndTime)) {
-          const alternatives = await getAlternativeDates(
-            weekDate,
-            startTime,
-            endTime,
-            teacherId,
-            dayOfWeek
-          )
-
+      if (existingClass && existingClass.startTime && existingClass.endTime) {
+        if (timesOverlap(startTime, endTime, existingClass.startTime, existingClass.endTime)) {
+          const alternatives = await getAlternativeDates(weekDate, startTime, endTime, teacherId, dayOfWeek)
           return {
             weekNumber: index + 1,
             date: weekDate,
             available: false,
-            reason: 'Este horario ya está ocupado',
+            reason: 'Horario ocupado por otra clase',
             isHoliday: false,
             alternatives
           }
         }
       }
 
-      // 4. Verificar bookings pendientes
-      const existingBooking = await prisma.booking.findFirst({
-        where: {
-          date: {
-            gte: startOfDay,
-            lte: endOfDay
-          },
-          status: {
-            in: ['PENDING', 'CONFIRMED']
-          }
-        }
-      })
+      // 4. Verificar bookings
+      const { data: existingBooking } = await supabase
+        .from('Booking')
+        .select('*')
+        .eq('date', dateStr)
+        .in('status', ['PENDING', 'CONFIRMED'])
+        .maybeSingle()
 
       if (existingBooking && timesOverlap(startTime, endTime, existingBooking.startTime, existingBooking.endTime)) {
-        const alternatives = await getAlternativeDates(
-          weekDate,
-          startTime,
-          endTime,
-          teacherId,
-          dayOfWeek
-        )
-
+        const alternatives = await getAlternativeDates(weekDate, startTime, endTime, teacherId, dayOfWeek)
         return {
           weekNumber: index + 1,
           date: weekDate,
           available: false,
-          reason: 'Este horario ya está reservado',
+          reason: 'Horario reservado',
           isHoliday: false,
           alternatives
         }
       }
 
-      // Todo disponible
       return {
         weekNumber: index + 1,
         date: weekDate,
@@ -180,7 +127,6 @@ export async function POST(request: Request) {
       }
     }))
 
-    // Determinar disponibilidad general
     const allAvailable = weeklyStatus.every(week => week.available)
     const conflictWeeks = weeklyStatus.filter(week => !week.available)
 
@@ -197,10 +143,7 @@ export async function POST(request: Request) {
 
   } catch (error) {
     console.error('Error checking monthly availability:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
@@ -217,72 +160,45 @@ async function getAlternativeDates(
 ) {
   const alternatives = []
   const startOfWeek = new Date(originalDate)
-  startOfWeek.setDate(originalDate.getDate() - originalDate.getDay() + 1) // Monday
+  startOfWeek.setDate(originalDate.getDate() - originalDate.getDay() + 1) // Lunes
 
-  // Buscar en los 6 días de esa semana (excluyendo el original)
   for (let i = 0; i < 7; i++) {
     const checkDate = new Date(startOfWeek)
     checkDate.setDate(startOfWeek.getDate() + i)
-    
-    // Skip el día original
     if (checkDate.getDay() === excludeDayOfWeek) continue
 
-    const startOfDay = new Date(checkDate)
-    startOfDay.setHours(0, 0, 0, 0)
-    
-    const endOfDay = new Date(checkDate)
-    endOfDay.setHours(23, 59, 59, 999)
+    const dateStr = checkDate.toISOString().split('T')[0]
 
-    // Verificar disponibilidad
-    const availability = await prisma.availability.findFirst({
-      where: {
-        teacherId,
-        dayOfWeek: checkDate.getDay(),
-        isActive: true
-      }
-    })
+    // 1. Disponibilidad
+    const { data: availability } = await supabase
+      .from('Availability')
+      .select('id')
+      .match({ teacherId, dayOfWeek: checkDate.getDay(), isActive: true })
+      .maybeSingle()
 
     if (!availability) continue
 
-    // Verificar si no hay bloqueos
-    const exception = await prisma.availabilityException.findFirst({
-      where: {
-        teacherId,
-        date: {
-          gte: startOfDay,
-          lte: endOfDay
-        }
-      }
-    })
+    // 2. Excepción
+    const { data: exception } = await supabase
+      .from('AvailabilityException')
+      .select('id')
+      .match({ teacherId, date: dateStr })
+      .maybeSingle()
 
     if (exception) continue
 
-    // Verificar si el slot específico está libre
-    const occupied = await prisma.class.findFirst({
-      where: {
-        scheduledDate: {
-          gte: startOfDay,
-          lte: endOfDay
-        },
-        status: {
-          notIn: ['CANCELLED']
-        }
-      }
-    })
+    // 3. Ocupado
+    const { data: occupied } = await supabase
+      .from('Class')
+      .select('startTime, endTime, duration')
+      .eq('date', dateStr)
+      .not('status', 'eq', 'CANCELLED')
+      .maybeSingle()
 
-    if (occupied) {
-      const classStart = new Date(occupied.scheduledDate)
-      const classHours = classStart.getHours()
-      const classMinutes = classStart.getMinutes()
-      const classStartTime = `${String(classHours).padStart(2, '0')}:${String(classMinutes).padStart(2, '0')}`
-      const classEndTime = addMinutes(classStartTime, occupied.duration)
-      
-      if (timesOverlap(originalStartTime, originalEndTime, classStartTime, classEndTime)) {
-        continue
-      }
+    if (occupied && occupied.startTime && occupied.endTime) {
+      if (timesOverlap(originalStartTime, originalEndTime, occupied.startTime, occupied.endTime)) continue
     }
 
-    // Agregar como alternativa
     alternatives.push({
       date: checkDate,
       dayOfWeek: getDayName(checkDate.getDay()),
@@ -290,7 +206,6 @@ async function getAlternativeDates(
       endTime: originalEndTime
     })
 
-    // Máximo 3 alternativas
     if (alternatives.length >= 3) break
   }
 

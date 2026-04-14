@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { supabase } from '@/lib/supabase'
 
 export async function GET(request: Request) {
   try {
@@ -7,122 +7,74 @@ export async function GET(request: Request) {
     const dateParam = searchParams.get('date')
 
     if (!dateParam) {
-      return NextResponse.json(
-        { error: 'Date parameter is required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Date parameter is required' }, { status: 400 })
     }
 
     const requestedDate = new Date(dateParam)
     const dayOfWeek = requestedDate.getDay()
 
-    // Obtener profesor (asume que solo hay uno)
-    const teacher = await prisma.user.findFirst({
-      where: { role: 'TEACHER' },
-      include: { teacherProfile: true }
-    })
+    // Obtener profesor vía Supabase
+    const { data: teacher } = await supabase
+      .from('User')
+      .select('id, teacherProfile:TeacherProfile(id)')
+      .eq('role', 'TEACHER')
+      .limit(1)
+      .single()
 
     if (!teacher || !teacher.teacherProfile) {
-      return NextResponse.json(
-        { error: 'Teacher not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Teacher not found' }, { status: 404 })
     }
 
-    const teacherId = teacher.teacherProfile.id
+    const teacherId = (teacher.teacherProfile as any).id
 
-    // 1. Verificar si hay disponibilidad configurada para ese día
-    const availability = await prisma.availability.findFirst({
-      where: {
-        teacherId,
-        dayOfWeek,
-        isActive: true
-      }
-    })
+    // 1. Verificar disponibilidad configurada
+    const { data: availability } = await supabase
+      .from('Availability')
+      .select('*')
+      .match({ teacherId, dayOfWeek, isActive: true })
+      .single()
 
     if (!availability) {
-      return NextResponse.json({
-        available: false,
-        slots: [],
-        reason: 'No availability configured for this day'
-      })
+      return NextResponse.json({ available: false, slots: [], reason: 'No availability configured' })
     }
 
-    // 2. Verificar si hay bloqueo para esa fecha específica
-    const startOfDay = new Date(requestedDate)
-    startOfDay.setHours(0, 0, 0, 0)
-    
-    const endOfDay = new Date(requestedDate)
-    endOfDay.setHours(23, 59, 59, 999)
-
-    const exception = await prisma.availabilityException.findFirst({
-      where: {
-        teacherId,
-        date: {
-          gte: startOfDay,
-          lte: endOfDay
-        }
-      }
-    })
+    // 2. Verificar bloqueos/excepciones
+    const dateStr = requestedDate.toISOString().split('T')[0]
+    const { data: exception } = await supabase
+      .from('AvailabilityException')
+      .select('*')
+      .match({ teacherId, date: dateStr })
+      .maybeSingle()
 
     if (exception) {
-      return NextResponse.json({
-        available: false,
-        slots: [],
-        reason: exception.reason || 'Date blocked'
-      })
+      return NextResponse.json({ available: false, slots: [], reason: exception.reason || 'Date blocked' })
     }
 
-    // 3. Generar slots disponibles
-    const slots = generateTimeSlots(
-      availability.startTime,
-      availability.endTime,
-      availability.slotDuration
-    )
+    // 3. Generar slots
+    const slots = generateTimeSlots(availability.startTime, availability.endTime, availability.slotDuration)
 
-    // 4. Obtener clases ya agendadas para ese día
-    const bookedClasses = await prisma.class.findMany({
-      where: {
-        date: {
-          gte: startOfDay,
-          lte: endOfDay
-        },
-        status: {
-          notIn: ['CANCELLED']
-        }
-      }
-    })
+    // 4. Obtener clases agendadas
+    const { data: bookedClasses } = await supabase
+      .from('Class')
+      .select('startTime, endTime')
+      .eq('date', dateStr)
+      .not('status', 'eq', 'CANCELLED')
 
     // 5. Obtener bookings pendientes/confirmados
-    const existingBookings = await prisma.booking.findMany({
-      where: {
-        date: {
-          gte: startOfDay,
-          lte: endOfDay
-        },
-        status: {
-          in: ['PENDING', 'CONFIRMED']
-        }
-      }
-    })
+    const { data: existingBookings } = await supabase
+      .from('Booking')
+      .select('startTime, endTime')
+      .eq('date', dateStr)
+      .in('status', ['PENDING', 'CONFIRMED'])
 
     // 6. Filtrar slots ocupados
     const availableSlots = slots.filter(slot => {
-      // Verificar contra clases
-      const isBookedByClass = bookedClasses.some(bookedClass => {
-        // Usar startTime y endTime del nuevo formato
-        if (bookedClass.startTime && bookedClass.endTime) {
-          return timesOverlap(slot.startTime, slot.endTime, bookedClass.startTime, bookedClass.endTime)
-        }
-        // Si no tiene startTime/endTime, ignorar (no debería pasar)
-        return false
-      })
-
-      // Verificar contra bookings
-      const isBookedByBooking = existingBookings.some(booking => {
-        return timesOverlap(slot.startTime, slot.endTime, booking.startTime, booking.endTime)
-      })
-
+      const isBookedByClass = (bookedClasses || []).some(bc => 
+        bc.startTime && bc.endTime && timesOverlap(slot.startTime, slot.endTime, bc.startTime, bc.endTime)
+      )
+      const isBookedByBooking = (existingBookings || []).some(eb => 
+        timesOverlap(slot.startTime, slot.endTime, eb.startTime, eb.endTime)
+      )
       return !isBookedByClass && !isBookedByBooking
     })
 
@@ -137,10 +89,7 @@ export async function GET(request: Request) {
 
   } catch (error) {
     console.error('Error getting availability:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 

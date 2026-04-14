@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { supabase } from '@/lib/supabase'
 
 export async function GET(request: Request) {
   try {
@@ -11,17 +11,18 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Obtener teacherId
-    const teacher = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      include: { teacherProfile: true }
-    })
+    // Obtener teacherId vía Supabase
+    const { data: teacher } = await supabase
+      .from('User')
+      .select('id, teacherProfile:TeacherProfile(id)')
+      .eq('id', session.user.id)
+      .single()
 
     if (!teacher?.teacherProfile) {
       return NextResponse.json({ error: 'Teacher profile not found' }, { status: 404 })
     }
 
-    const teacherId = teacher.teacherProfile.id
+    const teacherId = (teacher.teacherProfile as any).id
 
     // Obtener parámetros de la query
     const { searchParams } = new URL(request.url)
@@ -30,51 +31,28 @@ export async function GET(request: Request) {
     // Calcular inicio y fin de semana
     const { startOfWeek, endOfWeek } = getWeekRange(weekParam)
 
-    console.log('DEBUG Calendar API:')
-    console.log('- Start of week:', startOfWeek)
-    console.log('- End of week:', endOfWeek)
+    // Obtener clases de la semana vía Supabase
+    const { data: classes, error: classesError } = await supabase
+      .from('Class')
+      .select(`
+        *,
+        booking:Booking(*, classType:ClassType(*)),
+        student:StudentProfile(*, user:User(*)),
+        classType:ClassType(*)
+      `)
+      .gte('date', startOfWeek.toISOString())
+      .lte('date', endOfWeek.toISOString())
+      .not('status', 'in', '("CANCELLED", "DELETED")')
+      // Filtrar por profesor a través de student o booking
+      // Nota: En Supabase JS, si no hay RLS, filtramos por relación
+      .or(`studentId.is.null, student profile.teacherId.eq.${teacherId}`)
+      .order('date', { ascending: true })
+      .order('startTime', { ascending: true })
 
-    // Obtener clases de la semana (públicas + estudiantes)
-    const classes = await prisma.class.findMany({
-      where: {
-        date: {
-          gte: startOfWeek,
-          lte: endOfWeek
-        },
-        status: {
-          notIn: ['CANCELLED', 'DELETED']
-        }
-      },
-      include: {
-        booking: {
-          include: {
-            classType: true
-          }
-        },
-        student: {
-          include: {
-            user: true
-          }
-        },
-        classType: true
-      },
-      orderBy: [
-        { date: 'asc' },
-        { startTime: 'asc' }
-      ]
-    })
+    if (classesError) throw classesError
 
-    console.log('- Classes found:', classes.length)
-    if (classes.length > 0) {
-      console.log('- First class:', {
-        date: classes[0].date,
-        startTime: classes[0].startTime,
-        studentName: classes[0].student?.user?.name || classes[0].booking?.name
-      })
-    }
-
-    // Formatear respuesta
-    const formattedClasses = classes.map(cls => {
+    // Formatear respuesta (mismo formato para retrocompatibilidad)
+    const formattedClasses = classes.map((cls: any) => {
       const isPublicBooking = !cls.studentId && cls.booking
       
       return {
@@ -85,37 +63,32 @@ export async function GET(request: Request) {
         duration: cls.duration,
         status: cls.status,
         
-        // Información del alumno o booking
         studentName: cls.student?.user?.name || cls.booking?.name || 'Sin asignar',
         studentEmail: cls.student?.user?.email || cls.booking?.email,
         studentPhone: cls.student?.user?.phone || cls.booking?.phone,
         studentId: cls.studentId,
         
-        // Información del booking
         bookingId: cls.booking?.id,
-        isPublicBooking, // Booking público sin aprobar
+        isPublicBooking,
         isMonthlyPlan: cls.booking?.isMonthlyPlan || false,
         
-        // Tipo de clase
         classType: cls.classType?.name || cls.booking?.classType?.name || 'Clase',
         classTypeIcon: cls.classType?.icon || cls.booking?.classType?.icon || '🎵',
         
-        // Estado de renovación
         needsRenewalReminder: cls.needsRenewalReminder,
         expiresAt: cls.expiresAt
       }
     })
 
-    // Obtener configuración de disponibilidad
-    const availability = await prisma.availability.findMany({
-      where: {
-        teacherId,
-        isActive: true
-      },
-      orderBy: {
-        dayOfWeek: 'asc'
-      }
-    })
+    // Obtener disponibilidad
+    const { data: availability, error: avError } = await supabase
+      .from('Availability')
+      .select('*')
+      .eq('teacherId', teacherId)
+      .eq('isActive', true)
+      .order('dayOfWeek', { ascending: true })
+
+    if (avError) throw avError
 
     return NextResponse.json({
       success: true,
@@ -132,10 +105,7 @@ export async function GET(request: Request) {
 
   } catch (error) {
     console.error('Error fetching calendar:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
