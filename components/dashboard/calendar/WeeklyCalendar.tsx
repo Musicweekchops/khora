@@ -113,52 +113,53 @@ export default function WeeklyCalendar({ initialWeek }: WeeklyCalendarProps) {
   today.setHours(0, 0, 0, 0)
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+    <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-neutral-100">
       {/* Header */}
-      <div className="p-6 border-b border-gray-200">
+      <div className="p-6 border-b border-neutral-100">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-4">
-            <h2 className="text-2xl font-semibold text-gray-900">Agenda Semanal</h2>
-            <div className="flex items-center gap-3">
+            <h2 className="text-lg font-bold text-neutral-900">Programación</h2>
+            <div className="flex items-center gap-3 bg-neutral-50 p-1 rounded-lg border border-neutral-100">
               <button
                 onClick={handlePreviousWeek}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                className="p-1.5 hover:bg-white hover:shadow-sm rounded-md transition-all text-neutral-500 hover:text-neutral-900"
               >
-                <ChevronLeft className="w-5 h-5" />
+                <ChevronLeft className="w-4 h-4" />
               </button>
-              <span className="text-sm font-medium text-gray-700 min-w-[200px] text-center">
+              <span className="text-xs font-bold text-neutral-600 min-w-[180px] text-center uppercase tracking-wider">
                 {formatWeekRange(weekDates)}
               </span>
               <button
                 onClick={handleNextWeek}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                className="p-1.5 hover:bg-white hover:shadow-sm rounded-md transition-all text-neutral-500 hover:text-neutral-900"
               >
-                <ChevronRight className="w-5 h-5" />
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           </div>
           
           <button
             onClick={() => setCurrentWeek(getCurrentWeek())}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+            className="px-4 py-2 bg-primary/10 text-primary rounded-lg hover:bg-primary hover:text-primary-foreground transition-all text-xs font-bold"
           >
-            Hoy
+            IR A HOY
           </button>
         </div>
       </div>
 
       {/* Calendar Grid */}
       {loading ? (
-        <div className="p-12 text-center text-gray-500">
-          Cargando calendario...
+        <div className="p-12 text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-neutral-400 text-sm font-medium">Cargando agenda...</p>
         </div>
       ) : (
-        <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: 'calc(100vh - 300px)' }}>
+        <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: 'calc(100vh - 350px)' }}>
           <div className="inline-block min-w-full">
             {/* Grid Container */}
-            <div className="grid grid-cols-[80px_repeat(6,1fr)] border-t border-gray-200 relative">
+            <div className="grid grid-cols-[80px_repeat(6,1fr)] border-t border-neutral-100 relative">
               {/* Time Column Header - STICKY TOP & LEFT */}
-              <div className="sticky top-0 left-0 z-30 border-r border-b border-gray-200 bg-gray-50" style={{ boxShadow: '2px 2px 4px rgba(0,0,0,0.05)' }} />
+              <div className="sticky top-0 left-0 z-30 border-r border-b border-neutral-100 bg-neutral-50" />
               
               {/* Day Headers - STICKY TOP */}
               {weekDays.map((day, index) => {
@@ -168,13 +169,12 @@ export default function WeeklyCalendar({ initialWeek }: WeeklyCalendarProps) {
                 return (
                   <div
                     key={day}
-                    className={`sticky top-0 z-20 p-4 border-r border-b border-gray-200 text-center ${
-                      isToday ? 'bg-blue-50' : 'bg-gray-50'
+                    className={`sticky top-0 z-20 p-4 border-r border-b border-neutral-100 text-center transition-colors ${
+                      isToday ? 'bg-primary/5' : 'bg-neutral-50'
                     }`}
-                    style={{ boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
                   >
-                    <div className="text-xs text-gray-600 uppercase mb-1">{day}</div>
-                    <div className={`text-xl font-semibold ${isToday ? 'text-blue-600' : 'text-gray-900'}`}>
+                    <div className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest mb-1">{day}</div>
+                    <div className={`text-xl font-black ${isToday ? 'text-primary' : 'text-neutral-900'}`}>
                       {date.getDate()}
                     </div>
                   </div>
@@ -208,7 +208,6 @@ export default function WeeklyCalendar({ initialWeek }: WeeklyCalendarProps) {
   )
 }
 
-// Time Slot Row Component
 function TimeSlotRow({
   time,
   weekDates,
@@ -223,7 +222,7 @@ function TimeSlotRow({
   return (
     <>
       {/* Time Label - STICKY LEFT */}
-      <div className="sticky left-0 z-10 p-4 border-r border-b border-gray-100 text-right text-sm text-gray-600 bg-gray-50">
+      <div className="sticky left-0 z-10 p-4 border-r border-b border-neutral-100 text-right text-xs font-bold text-neutral-400 bg-neutral-50/80 backdrop-blur-sm">
         {time}
       </div>
       
@@ -243,7 +242,7 @@ function TimeSlotRow({
         return (
           <div
             key={`${date.toISOString()}-${time}`}
-            className="relative border-r border-b border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors"
+            className="relative border-r border-b border-neutral-100 bg-white hover:bg-neutral-50/50 transition-colors group"
             style={{ minHeight: '80px' }}
           >
             {dayClasses.map(cls => (

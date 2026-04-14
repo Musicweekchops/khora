@@ -11,29 +11,19 @@ export default async function NuevoAlumnoPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                Agregar Nuevo Alumno
-              </h1>
-              <p className="text-sm text-gray-600 mt-1">
-                Registra un nuevo alumno en el sistema
-              </p>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <StudentForm mode="create" />
-        </div>
-      </main>
+    <div className="max-w-3xl mx-auto space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-neutral-900">
+          Agregar Nuevo Alumno
+        </h1>
+        <p className="text-sm text-neutral-500 mt-1">
+          Registra un nuevo alumno en el sistema
+        </p>
+      </div>
+      
+      <div className="bg-white rounded-xl shadow-sm p-6 border border-neutral-100">
+        <StudentForm mode="create" />
+      </div>
     </div>
   )
 }

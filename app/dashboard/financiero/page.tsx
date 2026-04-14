@@ -11,65 +11,19 @@ export default async function FinancieroPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                Dashboard Financiero
-              </h1>
-              <p className="text-sm text-gray-600 mt-1">
-                Control de ingresos y pagos
-              </p>
-            </div>
-          </div>
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-neutral-900">
+            Control Financiero
+          </h1>
+          <p className="text-sm text-neutral-500 mt-1 font-medium">
+            Gestión de ingresos, pagos y métricas de rentabilidad
+          </p>
         </div>
-      </header>
+      </div>
 
-      {/* Navigation */}
-      <nav className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex space-x-8">
-            <a
-              href="/dashboard"
-              className="px-3 py-4 text-sm font-medium text-gray-600 hover:text-gray-900 border-b-2 border-transparent hover:border-gray-300"
-            >
-              Dashboard
-            </a>
-            <a
-              href="/dashboard/alumnos"
-              className="px-3 py-4 text-sm font-medium text-gray-600 hover:text-gray-900 border-b-2 border-transparent hover:border-gray-300"
-            >
-              Alumnos
-            </a>
-            <a
-              href="/dashboard/clases"
-              className="px-3 py-4 text-sm font-medium text-gray-600 hover:text-gray-900 border-b-2 border-transparent hover:border-gray-300"
-            >
-              Clases
-            </a>
-            <a
-              href="/dashboard/crm"
-              className="px-3 py-4 text-sm font-medium text-gray-600 hover:text-gray-900 border-b-2 border-transparent hover:border-gray-300"
-            >
-              CRM
-            </a>
-            <a
-              href="/dashboard/financiero"
-              className="px-3 py-4 text-sm font-medium text-blue-600 border-b-2 border-blue-600"
-            >
-              Financiero
-            </a>
-          </div>
-        </div>
-      </nav>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <FinancialDashboard />
-      </main>
+      <FinancialDashboard />
     </div>
   )
 }

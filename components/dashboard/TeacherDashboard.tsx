@@ -1,11 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { signOut } from "next-auth/react"
 import Link from "next/link"
 import DashboardClasses from "@/components/dashboard/DashboardClasses"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import TeacherTaskBoard from "@/components/dashboard/tasks/TeacherTaskBoard"
 
 interface TeacherDashboardProps {
   user: {
@@ -57,154 +55,182 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
   }
 
   return (
-    <>
+    <div className="space-y-10">
       <div>
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          {loading ? (
-            <>
-              {[1,2,3,4].map(i => (
-                <div key={i} className="bg-white rounded-lg shadow-sm p-6">
-                  <div className="animate-pulse">
-                    <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
-                    <div className="h-8 bg-gray-200 rounded w-1/4"></div>
-                  </div>
-                </div>
-              ))}
-            </>
-          ) : (
-            <>
-              <StatCard
-                title="Alumnos Activos"
-                value={stats?.activeStudents.toString() || "0"}
-                subtitle="Este mes"
-                icon="👥"
-              />
-              <StatCard
-                title="Clases Hoy"
-                value={stats?.classesToday.toString() || "0"}
-                subtitle="Programadas"
-                icon="📅"
-              />
-              <StatCard
-                title="Bookings Pendientes"
-                value={stats?.pendingBookings.toString() || "0"}
-                subtitle="Por aprobar"
-                icon="🔔"
-                trend={stats && stats.pendingBookings > 0 ? "Ver CRM →" : undefined}
-              />
-              <StatCard
-                title="Ingresos del Mes"
-                value={stats ? formatCurrency(stats.monthlyRevenue) : "$0"}
-                subtitle={stats?.currentMonth || "Este mes"}
-                icon="📈"
-              />
-            </>
-          )}
-        </div>
+        <h1 className="text-3xl font-black text-neutral-900 tracking-tight">
+          Panel de Control
+        </h1>
+        <p className="text-neutral-500 font-medium mt-1">
+          Bienvenido de vuelta, {user.name}
+        </p>
+      </div>
 
-        {/* Clase Actual + Próximas Clases */}
-        <div className="mb-8">
-          <DashboardClasses />
-        </div>
-
-        {/* Quick Actions */}
-        <div className="mb-8">
-          <h2 className="text-lg font-semibold text-neutral-900 mb-4">
-            Acciones Rápidas
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <QuickActionCard
-              title="Agregar Alumno"
-              description="Registrar un nuevo alumno"
-              icon="➕"
-              href="/dashboard/alumnos/nuevo"
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {loading ? (
+          <>
+            {[1,2,3,4].map(i => (
+              <div key={i} className="bg-white/50 backdrop-blur-sm rounded-2xl border border-neutral-100 p-6 animate-pulse h-32" />
+            ))}
+          </>
+        ) : (
+          <>
+            <StatCard
+              title="Alumnos Activos"
+              value={stats?.activeStudents.toString() || "0"}
+              subtitle="Maestros registrados"
+              icon="👤"
+              color="primary"
             />
-            <QuickActionCard
-              title="Agendar Clase"
-              description="Programar una nueva clase"
+            <StatCard
+              title="Clases Hoy"
+              value={stats?.classesToday.toString() || "0"}
+              subtitle="Programadas"
               icon="📅"
-              href="/dashboard/clases/nueva"
+              color="sky"
             />
-            <QuickActionCard
-              title="Registrar Pago"
-              description="Marcar un pago recibido"
-              icon="💵"
-              href="/dashboard/pagos/nuevo"
+            <StatCard
+              title="Bookings Pendientes"
+              value={stats?.pendingBookings.toString() || "0"}
+              subtitle="Por aprobar"
+              icon="🔔"
+              trend={stats && stats.pendingBookings > 0 ? "Revisar CRM" : undefined}
+              color="amber"
             />
+            <StatCard
+              title="Ingresos del Mes"
+              value={stats ? formatCurrency(stats.monthlyRevenue) : "$0"}
+              subtitle={stats?.currentMonth || "Este mes"}
+              icon="💰"
+              color="emerald"
+            />
+          </>
+        )}
+      </div>
+
+      {/* Clase Actual + Próximas Clases */}
+      <DashboardClasses />
+
+      {/* Quick Actions */}
+      <div className="space-y-4">
+        <h2 className="text-xl font-bold text-neutral-900 flex items-center gap-2">
+          <span className="w-2 h-6 bg-primary rounded-full" />
+          Acciones Rápidas
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <QuickActionCard
+            title="Nuevo Alumno"
+            description="Registrar ficha técnica y contacto"
+            icon="✨"
+            href="/dashboard/alumnos/nuevo"
+            highlight
+          />
+          <QuickActionCard
+            title="Agendar Clase"
+            description="Programar sesión individual o prueba"
+            icon="📅"
+            href="/dashboard/clases/nueva"
+          />
+          <QuickActionCard
+            title="Pagos"
+            description="Gestionar finanzas y recibos"
+            icon="💸"
+            href="/dashboard/pagos"
+          />
+        </div>
+      </div>
+
+      {/* Productivity Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2">
+          <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden h-full">
+            <div className="p-6 border-b border-neutral-100 flex justify-between items-center bg-neutral-50/30">
+              <h2 className="text-lg font-black text-neutral-900 uppercase tracking-widest text-xs flex items-center gap-2">
+                <span className="w-2 h-4 bg-primary rounded-full" />
+                Planificación Semanal
+              </h2>
+              <Link href="/dashboard/agenda" className="text-primary text-[10px] font-black uppercase tracking-widest hover:underline">
+                Calendario Completo →
+              </Link>
+            </div>
+            <div className="p-12 text-center h-[350px] flex flex-col items-center justify-center">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-neutral-100 text-2xl mb-4 grayscale opacity-50">
+                🗓️
+              </div>
+              <p className="text-neutral-900 font-bold">No hay clases pendientes fuera de hoy</p>
+              <p className="text-neutral-500 text-sm mt-1 mb-6 max-w-xs mx-auto font-medium">
+                Tu semana está organizada. ¡Aprovecha para planificar contenido!
+              </p>
+            </div>
           </div>
         </div>
 
-        {/* Próximas Clases */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <span>🗓️</span>
-              Próximas Clases de la Semana
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-center py-12 text-neutral-500">
-              <p className="text-base mb-2">No hay clases programadas</p>
-              <p className="text-sm text-neutral-400 mb-4">
-                Las clases programadas aparecerán aquí
-              </p>
-              <Link href="/dashboard/clases/nueva">
-                <Button variant="primary">
-                  Agendar Primera Clase
-                </Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="h-full">
+          <TeacherTaskBoard />
+        </div>
       </div>
-    </>
+    </div>
   )
 }
 
-function StatCard({ title, value, subtitle, icon, trend }: {
+function StatCard({ title, value, subtitle, icon, trend, color }: {
   title: string
   value: string
   subtitle: string
   icon: string
   trend?: string
+  color: 'primary' | 'sky' | 'amber' | 'emerald'
 }) {
+  const colorMap = {
+    primary: "text-primary bg-primary/5 border-primary/10",
+    sky: "text-sky-600 bg-sky-50 border-sky-100",
+    amber: "text-amber-600 bg-amber-50 border-amber-100",
+    emerald: "text-emerald-600 bg-emerald-50 border-emerald-100"
+  }
+
   return (
-    <Card className="hover:shadow-md transition-shadow">
-      <CardContent className="p-6">
-        <div className="flex items-center justify-between mb-4">
-          <span className="text-3xl">{icon}</span>
-          {trend && (
-            <span className="text-xs font-medium px-2 py-1 rounded-full bg-success-50 text-success-600">
-              {trend}
-            </span>
-          )}
+    <div className="bg-white rounded-3xl p-6 border border-neutral-100 shadow-sm hover:shadow-md transition-all group">
+      <div className="flex items-center justify-between mb-4">
+        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-bold border transition-transform group-hover:scale-110 ${colorMap[color]}`}>
+          {icon}
         </div>
-        <h3 className="text-sm font-medium text-neutral-600 mb-1">{title}</h3>
-        <p className="text-2xl font-semibold text-neutral-900 mb-1">{value}</p>
-        <p className="text-xs text-neutral-500">{subtitle}</p>
-      </CardContent>
-    </Card>
+        {trend && (
+          <span className="text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full bg-destructive text-white animate-pulse shadow-lg shadow-destructive/20">
+            {trend}
+          </span>
+        )}
+      </div>
+      <h3 className="text-xs font-black text-neutral-400 uppercase tracking-widest mb-1">{title}</h3>
+      <p className="text-3xl font-black text-neutral-900 tracking-tighter">{value}</p>
+      <p className="text-[10px] text-neutral-500 font-bold mt-1 uppercase opacity-60 font-mono italic">{subtitle}</p>
+    </div>
   )
 }
 
-function QuickActionCard({ title, description, icon, href }: {
+function QuickActionCard({ title, description, icon, href, highlight }: {
   title: string
   description: string
   icon: string
   href: string
+  highlight?: boolean
 }) {
   return (
     <Link href={href} className="group">
-      <Card className="h-full transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 border-neutral-200 hover:border-primary-200">
-        <CardContent className="p-6">
-          <div className="text-4xl mb-4">{icon}</div>
-          <h3 className="text-lg font-semibold text-neutral-900 mb-2 group-hover:text-primary-600 transition-colors">
-            {title}
-          </h3>
-          <p className="text-sm text-neutral-600">{description}</p>
-        </CardContent>
-      </Card>
+      <div className={`h-full p-8 rounded-3xl border transition-all duration-500 ${
+        highlight 
+          ? 'bg-neutral-900 text-white border-neutral-900 shadow-2xl shadow-neutral-900/20 hover:bg-primary hover:border-primary hover:-translate-y-2' 
+          : 'bg-white border-neutral-100 hover:border-primary/30 hover:shadow-xl hover:-translate-y-2'
+      }`}>
+        <div className={`text-3xl mb-6 transition-all duration-500 group-hover:scale-125 group-hover:rotate-6 flex`}>
+          {icon}
+        </div>
+        <h3 className={`text-xl font-black mb-2 tracking-tight ${highlight ? 'text-white' : 'text-neutral-900'}`}>
+          {title}
+        </h3>
+        <p className={`text-sm ${highlight ? 'text-white/60' : 'text-neutral-500'} font-medium leading-relaxed`}>
+          {description}
+        </p>
+      </div>
     </Link>
   )
 }

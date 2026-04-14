@@ -164,63 +164,67 @@ export default function DashboardClasses() {
   const isInProgress = data?.isInProgress || false
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6" style={{ padding: '0 15px' }}>
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 px-1">
       {/* CLASE ACTUAL - IZQUIERDA */}
-      <div>
+      <div className="h-full">
         {!currentClass ? (
-          <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-            <p className="text-gray-500 text-lg mb-4">📅 No hay clases programadas para hoy</p>
+          <div className="bg-neutral-50 border-2 border-dashed border-neutral-200 rounded-2xl p-10 text-center flex flex-col items-center justify-center h-full min-h-[300px]">
+            <div className="w-16 h-16 bg-neutral-100 rounded-full flex items-center justify-center text-2xl mb-4 grayscale opacity-50">
+              📅
+            </div>
+            <p className="text-neutral-900 font-bold text-lg">No hay clases activas</p>
+            <p className="text-neutral-500 text-sm mt-1 mb-6">Tu agenda está despejada por el momento.</p>
             <Link
-              href="/dashboard/clases/nueva"
-              className="inline-block px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              href="/dashboard/agenda"
+              className="inline-block px-8 py-2.5 bg-primary text-white rounded-xl hover:bg-primary/90 transition-all font-bold text-sm shadow-sm"
             >
-              Agendar Clase
+              Ver Calendario Semanal
             </Link>
           </div>
         ) : (
-          <div className={`rounded-lg shadow-lg p-6 ${
+          <div className={`rounded-2xl shadow-xl overflow-hidden border p-8 h-full transition-all duration-500 ${
             isInProgress 
-              ? 'bg-gradient-to-r from-green-500 to-green-600 text-white' 
-              : 'bg-gradient-to-r from-blue-500 to-blue-600 text-white'
+              ? 'bg-emerald-600 border-emerald-500 text-white' 
+              : 'bg-primary border-primary/50 text-white'
           }`}>
             {/* Header */}
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold flex items-center space-x-2">
-                <span>{isInProgress ? '🎯' : '📅'}</span>
-                <span>{isInProgress ? 'CLASE EN CURSO' : 'PRÓXIMA CLASE HOY'}</span>
-              </h2>
-              {isInProgress && (
-                <span className="px-3 py-1 bg-white text-green-600 text-sm font-bold rounded-full animate-pulse">
-                  EN VIVO
+            <div className="flex justify-between items-center mb-8">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-70 mb-1">
+                  {isInProgress ? 'En curso' : 'Siguiente Sesión'}
                 </span>
-              )}
-            </div>
-
-            {/* Hora */}
-            <div className="mb-4">
-              <p className="text-3xl font-bold">
-                ⏰ {currentClass.startTime} - {currentClass.endTime}
-              </p>
-              {!isInProgress && (
-                <p className="text-lg opacity-90 mt-1">
-                  {getTimeUntilClass(currentClass.date, currentClass.startTime)}
-                </p>
+                <h2 className="text-2xl font-black flex items-center gap-3">
+                  <span>{isInProgress ? '🎯' : '🕒'}</span>
+                  <span>{currentClass.startTime} - {currentClass.endTime}</span>
+                </h2>
+              </div>
+              {isInProgress && (
+                <div className="px-4 py-1 bg-white/20 backdrop-blur-md text-white text-[10px] font-black rounded-full animate-pulse border border-white/30">
+                  SESIÓN EN VIVO
+                </div>
               )}
             </div>
 
             {/* Información del Alumno */}
-            <div className="bg-white bg-opacity-20 rounded-lg p-4 mb-4">
-              <p className="text-2xl font-bold mb-2">
-                👤 {currentClass.student.user.name}
-              </p>
-              <div className="flex items-center space-x-4 text-sm opacity-90">
-                <span>
-                  {currentClass.modalidad === 'online' ? '📹 Online' : '🎓 Presencial'}
+            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 mb-8 border border-white/10 group hover:bg-white/15 transition-all">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-14 h-14 bg-white/10 rounded-full flex items-center justify-center text-xl font-bold border border-white/20">
+                  {currentClass.student.user.name.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <p className="text-xl font-black">{currentClass.student.user.name}</p>
+                  <p className="text-xs font-bold opacity-70 uppercase tracking-wider">
+                    {currentClass.modalidad === 'online' ? '📹 Videollamada Online' : '🎓 Clase Presencial'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-4 text-xs font-bold">
+                <span className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                  {currentClass.duration} Minutos
                 </span>
-                <span>•</span>
-                <span>{currentClass.duration} minutos</span>
-                <span>•</span>
-                <span className="px-2 py-1 bg-white bg-opacity-30 rounded">
+                <span className="opacity-40">|</span>
+                <span className="px-2 py-0.5 bg-white/20 rounded uppercase tracking-tighter text-[10px]">
                   {currentClass.status === 'SCHEDULED' ? 'Programada' : 
                    currentClass.status === 'CONFIRMED' ? 'Confirmada' : 
                    currentClass.status}
@@ -229,115 +233,98 @@ export default function DashboardClasses() {
             </div>
 
             {/* Acciones Rápidas */}
-            <div className="space-y-2">
-              <div className="flex space-x-2">
-                {currentClass.status === 'SCHEDULED' && (
-                  <button
-                    onClick={() => updateClassStatus(currentClass.id, 'CONFIRMED')}
-                    disabled={updating}
-                    className="flex-1 px-4 py-3 bg-white text-green-600 rounded-lg hover:bg-gray-100 font-medium disabled:opacity-50 transition-colors"
-                  >
-                    ✓ Confirmar Asistencia
-                  </button>
-                )}
-                
-                {(currentClass.status === 'CONFIRMED' || isInProgress) && (
-                  <button
-                    onClick={() => updateClassStatus(currentClass.id, 'COMPLETED')}
-                    disabled={updating}
-                    className="flex-1 px-4 py-3 bg-white text-blue-600 rounded-lg hover:bg-gray-100 font-medium disabled:opacity-50 transition-colors"
-                  >
-                    ✓ Marcar Completada
-                  </button>
-                )}
-
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {currentClass.status === 'SCHEDULED' && (
                 <button
-                  onClick={() => updateClassStatus(currentClass.id, 'NO_SHOW')}
+                  onClick={() => updateClassStatus(currentClass.id, 'CONFIRMED')}
                   disabled={updating}
-                  className="px-4 py-3 bg-white bg-opacity-20 text-white rounded-lg hover:bg-opacity-30 font-medium disabled:opacity-50 transition-colors"
+                  className="px-4 py-3 bg-white text-primary rounded-xl hover:bg-neutral-50 font-black text-sm disabled:opacity-50 transition-all shadow-lg"
                 >
-                  ✗ No Asistió
+                  ✓ Confirmar Asistencia
                 </button>
-              </div>
+              )}
+              
+              {(currentClass.status === 'CONFIRMED' || isInProgress) && (
+                <button
+                  onClick={() => updateClassStatus(currentClass.id, 'COMPLETED')}
+                  disabled={updating}
+                  className="px-4 py-3 bg-white text-emerald-600 rounded-xl hover:bg-neutral-50 font-black text-sm disabled:opacity-50 transition-all shadow-lg"
+                >
+                  ✓ Finalizar Clase
+                </button>
+              )}
 
-              <div className="flex space-x-2">
-                <Link
-                  href={`/dashboard/clases/${currentClass.id}`}
-                  className="flex-1 px-4 py-3 bg-white bg-opacity-20 text-white rounded-lg hover:bg-opacity-30 font-medium text-center transition-colors"
-                >
-                  📝 Agregar Nota
-                </Link>
-                
-                <Link
-                  href={`/dashboard/clases/${currentClass.id}`}
-                  className="flex-1 px-4 py-3 bg-white bg-opacity-20 text-white rounded-lg hover:bg-opacity-30 font-medium text-center transition-colors"
-                >
-                  📋 Ver Detalle
-                </Link>
-              </div>
+              <button
+                onClick={() => updateClassStatus(currentClass.id, 'NO_SHOW')}
+                disabled={updating}
+                className="px-4 py-3 bg-white/10 text-white border border-white/20 rounded-xl hover:bg-white/20 font-bold text-sm disabled:opacity-50 transition-all"
+              >
+                ✕ No Asistió
+              </button>
+              
+              <Link
+                href={`/dashboard/clases/${currentClass.id}`}
+                className="px-4 py-3 bg-white/10 text-white border border-white/20 rounded-xl hover:bg-white/20 font-bold text-sm text-center transition-all flex items-center justify-center gap-2"
+              >
+                📋 Expandir Detalles
+              </Link>
             </div>
-
-            {/* Info Adicional */}
-            {currentClass.tasks.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-white border-opacity-20">
-                <p className="text-sm opacity-90">
-                  ✏️ {currentClass.tasks.length} tarea{currentClass.tasks.length !== 1 ? 's' : ''} pendiente{currentClass.tasks.length !== 1 ? 's' : ''}
-                </p>
-              </div>
-            )}
           </div>
         )}
       </div>
 
       {/* PRÓXIMAS CLASES - DERECHA */}
-      <div>
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-gray-900">📋 Próximas Clases</h2>
+      <div className="h-full">
+        <div className="bg-white rounded-2xl shadow-sm border border-neutral-100 p-8 h-full">
+          <div className="flex justify-between items-center mb-8">
+            <h2 className="text-xl font-bold text-neutral-900 flex items-center gap-2">
+              <span className="w-2 h-6 bg-primary rounded-full" />
+              Próximas Clases
+            </h2>
             <Link
               href="/dashboard/agenda"
-              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+              className="text-xs font-black text-primary hover:underline tracking-widest uppercase"
             >
-              Ver Agenda →
+              VER TODO →
             </Link>
           </div>
 
           {upcomingClasses.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <p>No hay clases próximas programadas</p>
-              <Link
-                href="/dashboard/clases/nueva"
-                className="inline-block mt-4 text-blue-600 hover:text-blue-700 font-medium"
-              >
-                Agendar Clase
-              </Link>
+            <div className="text-center py-12 flex flex-col items-center justify-center h-full">
+              <div className="w-12 h-12 bg-neutral-50 rounded-full flex items-center justify-center text-xl mb-4 grayscale opacity-30">
+                📭
+              </div>
+              <p className="text-neutral-400 font-medium text-sm">No hay clases próximas</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {upcomingClasses.map((clase) => (
                 <Link
                   key={clase.id}
                   href={`/dashboard/clases/${clase.id}`}
-                  className="block border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:shadow-md transition-all"
+                  className="block group"
                 >
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <p className="font-bold text-gray-900">{clase.student.user.name}</p>
-                      <p className="text-sm text-gray-600 mt-1">
-                        {formatDate(clase.date)} • {clase.startTime}
-                      </p>
-                      <div className="flex items-center space-x-2 mt-2 text-xs text-gray-500">
-                        <span>{clase.modalidad === 'online' ? '📹' : '🎓'}</span>
-                        <span>{clase.duration} min</span>
+                  <div className="flex justify-between items-center p-4 rounded-xl border border-neutral-100 group-hover:border-primary/20 group-hover:shadow-md transition-all bg-neutral-50/30 group-hover:bg-white">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-full bg-neutral-100 flex items-center justify-center text-xs font-bold text-neutral-500 group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                        {clase.student.user.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="font-bold text-neutral-900 group-hover:text-primary transition-colors text-sm">
+                          {clase.student.user.name}
+                        </p>
+                        <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest mt-0.5">
+                          {formatDate(clase.date)} • {clase.startTime}
+                        </p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <span className="inline-block px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
-                        {clase.status === 'SCHEDULED' ? 'Programada' : clase.status}
-                      </span>
-                      <p className="text-xs text-gray-500 mt-2">
+                      <div className="text-[10px] font-black text-neutral-500 uppercase tracking-tighter mb-1">
                         {getTimeUntilClass(clase.date, clase.startTime)}
-                      </p>
+                      </div>
+                      <span className="inline-block px-2 py-0.5 bg-neutral-100 text-neutral-500 text-[10px] font-bold rounded group-hover:bg-primary/20 group-hover:text-primary transition-colors uppercase">
+                        {clase.status}
+                      </span>
                     </div>
                   </div>
                 </Link>

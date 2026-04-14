@@ -96,238 +96,242 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Información Básica */}
-      <div>
-        <h3 className="text-lg font-medium text-gray-900 mb-4">
-          Información Básica
-        </h3>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Nombre Completo *
-            </label>
-            <input
-              type="text"
-              required
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Juan Pérez"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Email *
-            </label>
-            <input
-              type="email"
-              required
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="juan@email.com"
-              disabled={mode === "edit"}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Teléfono
-            </label>
-            <input
-              type="tel"
-              value={formData.phone}
-              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="+56912345678"
-            />
-          </div>
-
-          {mode === "create" && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Contraseña Inicial
-              </label>
-              <input
-                type="password"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Dejar vacío para auto-generar"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Si no se proporciona, se generará automáticamente
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Estado y Origen */}
-      <div>
-        <h3 className="text-lg font-medium text-gray-900 mb-4">
-          Estado y Origen
-        </h3>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Estado *
-            </label>
-            <select
-              required
-              value={formData.status}
-              onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="PROSPECT">Prospecto</option>
-              <option value="TRIAL">Clase de Prueba</option>
-              <option value="ACTIVE">Activo</option>
-              <option value="PAUSED">Pausado</option>
-              <option value="INACTIVE">Inactivo</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Fuente de Lead
-            </label>
-            <select
-              value={formData.leadSource}
-              onChange={(e) => setFormData({ ...formData, leadSource: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="">Seleccionar...</option>
-              <option value="INSTAGRAM">Instagram</option>
-              <option value="FACEBOOK">Facebook</option>
-              <option value="GOOGLE">Google</option>
-              <option value="REFERRAL">Referido</option>
-              <option value="WEBSITE">Sitio Web</option>
-              <option value="OTHER">Otro</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Preferencias de Clase */}
-      <div>
-        <h3 className="text-lg font-medium text-gray-900 mb-4">
-          Preferencias de Clase
-        </h3>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Modalidad
-            </label>
-            <select
-              value={formData.modalidad}
-              onChange={(e) => setFormData({ ...formData, modalidad: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="online">Online</option>
-              <option value="presencial">Presencial</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Día Preferido
-            </label>
-            <select
-              value={formData.preferredDay}
-              onChange={(e) => setFormData({ ...formData, preferredDay: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="">Seleccionar...</option>
-              <option value="Monday">Lunes</option>
-              <option value="Tuesday">Martes</option>
-              <option value="Wednesday">Miércoles</option>
-              <option value="Thursday">Jueves</option>
-              <option value="Friday">Viernes</option>
-              <option value="Saturday">Sábado</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Hora Preferida
-            </label>
-            <input
-              type="time"
-              value={formData.preferredTime}
-              onChange={(e) => setFormData({ ...formData, preferredTime: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Contacto de Emergencia */}
-      <div>
-        <h3 className="text-lg font-medium text-gray-900 mb-4">
-          Contacto de Emergencia (Opcional)
-        </h3>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Nombre
-            </label>
-            <input
-              type="text"
-              value={formData.emergencyContact}
-              onChange={(e) => setFormData({ ...formData, emergencyContact: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="María Pérez"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Teléfono
-            </label>
-            <input
-              type="tel"
-              value={formData.emergencyPhone}
-              onChange={(e) => setFormData({ ...formData, emergencyPhone: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="+56987654321"
-            />
-          </div>
-        </div>
-      </div>
-
+    <form onSubmit={handleSubmit} className="space-y-12 pb-20">
       {/* Error Message */}
       {error && (
-        <div className="bg-red-50 text-red-600 p-4 rounded-lg">
-          {error}
+        <div className="bg-destructive/10 text-destructive p-4 rounded-2xl border border-destructive/20 text-sm font-bold flex items-center gap-3 animate-shake">
+          <span>⚠️</span> {error}
         </div>
       )}
 
-      {/* Botones */}
-      <div className="flex justify-end space-x-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+        {/* Lado Izquierdo: Datos Personales */}
+        <div className="space-y-8">
+          <div>
+            <h3 className="text-xl font-black text-neutral-900 mb-6 flex items-center gap-3">
+              <span className="w-2 h-6 bg-primary rounded-full" />
+              Identidad del Alumno
+            </h3>
+            
+            <div className="space-y-6">
+              <FormField label="Nombre Completo *" icon="👤">
+                <input
+                  type="text"
+                  required
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-5 py-3 border border-neutral-200 bg-white rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all outline-none font-bold text-neutral-900 placeholder:text-neutral-300"
+                  placeholder="Ej: Rodrigo Tapia"
+                />
+              </FormField>
+
+              <FormField label="Correo Electrónico *" icon="✉️">
+                <input
+                  type="email"
+                  required
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="w-full px-5 py-3 border border-neutral-200 bg-white rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all outline-none font-bold text-neutral-900 placeholder:text-neutral-300 disabled:opacity-50"
+                  placeholder="nombre@ejemplo.com"
+                  disabled={mode === "edit"}
+                />
+              </FormField>
+
+              <FormField label="Teléfono / WhatsApp" icon="📞">
+                <input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  className="w-full px-5 py-3 border border-neutral-200 bg-white rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all outline-none font-bold text-neutral-900 placeholder:text-neutral-300"
+                  placeholder="+56 9 ..."
+                />
+              </FormField>
+
+              {mode === "create" && (
+                <FormField label="Contraseña Inicial" icon="🔒" subtitle="Dejar vacío para auto-generar">
+                  <input
+                    type="password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    className="w-full px-5 py-3 border border-neutral-200 bg-white rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all outline-none font-bold text-neutral-900 placeholder:text-neutral-300"
+                    placeholder="••••••••"
+                  />
+                </FormField>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-xl font-black text-neutral-900 mb-6 flex items-center gap-3">
+              <span className="w-2 h-6 bg-amber-400 rounded-full" />
+              Estado y Origen
+            </h3>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <FormField label="Estado Académico" icon="📈">
+                <select
+                  required
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                  className="w-full px-5 py-3 border border-neutral-200 bg-white rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all outline-none font-bold text-neutral-900 appearance-none"
+                >
+                  <option value="PROSPECT">Prospecto</option>
+                  <option value="TRIAL">Clase de Prueba</option>
+                  <option value="ACTIVE">Activo</option>
+                  <option value="PAUSED">Pausado</option>
+                  <option value="INACTIVE">Inactivo</option>
+                </select>
+              </FormField>
+
+              <FormField label="Fuente de Captación" icon="🔗">
+                <select
+                  value={formData.leadSource}
+                  onChange={(e) => setFormData({ ...formData, leadSource: e.target.value })}
+                  className="w-full px-5 py-3 border border-neutral-200 bg-white rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all outline-none font-bold text-neutral-900 appearance-none"
+                >
+                  <option value="">Seleccionar...</option>
+                  <option value="INSTAGRAM">Instagram</option>
+                  <option value="FACEBOOK">Facebook</option>
+                  <option value="GOOGLE">Google Ads</option>
+                  <option value="REFERRAL">Referido</option>
+                  <option value="WEBSITE">Web Directo</option>
+                  <option value="OTHER">Otro</option>
+                </select>
+              </FormField>
+            </div>
+          </div>
+        </div>
+
+        {/* Lado Derecho: Preferencias y Emergencia */}
+        <div className="space-y-8">
+          <div>
+            <h3 className="text-xl font-black text-neutral-900 mb-6 flex items-center gap-3">
+              <span className="w-2 h-6 bg-emerald-500 rounded-full" />
+              Personalización de Clases
+            </h3>
+            
+            <div className="space-y-6">
+              <FormField label="Modalidad de Estudio" icon="🎓">
+                <div className="grid grid-cols-2 gap-3 p-1.5 bg-neutral-100 rounded-2xl">
+                  {['online', 'presencial'].map((mod) => (
+                    <button
+                      key={mod}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, modalidad: mod })}
+                      className={`py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                        formData.modalidad === mod
+                          ? "bg-white text-primary shadow-sm"
+                          : "text-neutral-400 hover:text-neutral-600"
+                      }`}
+                    >
+                      {mod === 'online' ? '📹 Virtual' : '🏠 Sede'}
+                    </button>
+                  ))}
+                </div>
+              </FormField>
+
+              <div className="grid grid-cols-2 gap-6">
+                <FormField label="Día Preferido" icon="🗓️">
+                  <select
+                    value={formData.preferredDay}
+                    onChange={(e) => setFormData({ ...formData, preferredDay: e.target.value })}
+                    className="w-full px-5 py-3 border border-neutral-200 bg-white rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all outline-none font-bold text-neutral-900 appearance-none"
+                  >
+                    <option value="">Cualquiera</option>
+                    <option value="Monday">Lunes</option>
+                    <option value="Tuesday">Martes</option>
+                    <option value="Wednesday">Miércoles</option>
+                    <option value="Thursday">Jueves</option>
+                    <option value="Friday">Viernes</option>
+                    <option value="Saturday">Sábado</option>
+                  </select>
+                </FormField>
+
+                <FormField label="Hora Estimada" icon="⏰">
+                  <input
+                    type="time"
+                    value={formData.preferredTime}
+                    onChange={(e) => setFormData({ ...formData, preferredTime: e.target.value })}
+                    className="w-full px-5 py-3 border border-neutral-200 bg-white rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all outline-none font-bold text-neutral-900"
+                  />
+                </FormField>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-neutral-50 rounded-3xl p-8 border border-neutral-100 space-y-6">
+            <h3 className="text-lg font-black text-neutral-900 flex items-center gap-3">
+              🚨 Contacto de Emergencia
+            </h3>
+            
+            <div className="space-y-4">
+              <FormField label="Nombre de Contacto" icon="👤">
+                <input
+                  type="text"
+                  value={formData.emergencyContact}
+                  onChange={(e) => setFormData({ ...formData, emergencyContact: e.target.value })}
+                  className="w-full px-5 py-3 border border-neutral-200 bg-white rounded-2xl focus:ring-4 shadow-sm transition-all outline-none font-bold text-neutral-900"
+                  placeholder="Ej: Familiar / Amigo"
+                />
+              </FormField>
+
+              <FormField label="Teléfono de Emergencia" icon="📞">
+                <input
+                  type="tel"
+                  value={formData.emergencyPhone}
+                  onChange={(e) => setFormData({ ...formData, emergencyPhone: e.target.value })}
+                  className="w-full px-5 py-3 border border-neutral-200 bg-white rounded-2xl focus:ring-4 shadow-sm transition-all outline-none font-bold text-neutral-900"
+                  placeholder="+56 9 ..."
+                />
+              </FormField>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Botones de Acción */}
+      <div className="sticky bottom-8 z-50 flex justify-end items-center gap-4 bg-white/50 backdrop-blur-xl p-4 rounded-3xl border border-white/20 shadow-2xl">
         <button
           type="button"
           onClick={() => router.back()}
-          className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+          className="px-8 py-3 bg-neutral-100 text-neutral-600 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-neutral-200 transition-all active:scale-95"
         >
-          Cancelar
+          Descartar
         </button>
         <button
           type="submit"
           disabled={loading}
-          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          className="px-10 py-3 bg-neutral-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-primary transition-all shadow-xl shadow-neutral-900/10 disabled:opacity-50 active:scale-95 flex items-center gap-3"
         >
-          {loading 
-            ? (mode === "create" ? "Creando..." : "Guardando...") 
-            : (mode === "create" ? "Crear Alumno" : "Guardar Cambios")
-          }
+          {loading ? (
+            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          ) : '✓'}
+          <span>{mode === "create" ? "Crear Alumno" : "Guardar Cambios"}</span>
         </button>
       </div>
     </form>
+  )
+}
+
+function FormField({ label, icon, subtitle, children }: {
+  label: string
+  icon: string
+  subtitle?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest flex items-center gap-2 px-1">
+          <span>{icon}</span> {label}
+        </label>
+        {subtitle && (
+          <span className="text-[10px] font-bold text-neutral-300 italic">
+            {subtitle}
+          </span>
+        )}
+      </div>
+      {children}
+    </div>
   )
 }

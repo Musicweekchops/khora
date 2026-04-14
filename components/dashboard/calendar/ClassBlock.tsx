@@ -18,51 +18,58 @@ interface ClassBlockProps {
 export default function ClassBlock({ classData, onClick }: ClassBlockProps) {
   const { startTime, endTime, studentName, classType, classTypeIcon, isPublicBooking, isMonthlyPlan, needsRenewalReminder } = classData
 
-  // Determinar color según tipo
-  const getColorClass = () => {
+  const getColorStyles = () => {
     if (isPublicBooking) {
-      return 'bg-gradient-to-br from-red-400 to-red-600 border-l-4 border-red-700'
+      return 'bg-destructive/10 border-l-4 border-destructive text-destructive'
     }
     
     if (classType.toLowerCase().includes('prueba')) {
-      return 'bg-gradient-to-br from-yellow-300 to-yellow-500 border-l-4 border-yellow-600 text-gray-900'
+      return 'bg-amber-50 border-l-4 border-amber-400 text-amber-800 shadow-sm'
     }
     
     if (isMonthlyPlan) {
-      return 'bg-gradient-to-br from-green-400 to-green-600 border-l-4 border-green-700'
+      return 'bg-emerald-50 border-l-4 border-emerald-500 text-emerald-800'
     }
     
-    return 'bg-gradient-to-br from-blue-400 to-blue-600 border-l-4 border-blue-700'
+    return 'bg-primary/10 border-l-4 border-primary text-primary-foreground'
+  }
+
+  const getTextColor = () => {
+    if (isPublicBooking) return 'text-destructive'
+    if (classType.toLowerCase().includes('prueba')) return 'text-amber-900'
+    if (isMonthlyPlan) return 'text-emerald-900'
+    return 'text-primary'
   }
 
   return (
     <div
       onClick={onClick}
-      className={`absolute left-1 right-1 top-1 rounded-lg p-2 cursor-pointer transition-all hover:scale-105 hover:shadow-lg ${getColorClass()} text-white shadow-md`}
-      style={{ minHeight: '70px' }}
+      className={`absolute left-1 right-1 top-1 rounded-lg p-2.5 cursor-pointer transition-all hover:scale-[1.02] hover:shadow-md border border-white/20 select-none ${getColorStyles()}`}
+      style={{ minHeight: '75px' }}
     >
       {/* Renewal Warning Badge */}
       {needsRenewalReminder && (
-        <div className="absolute -top-1 -right-1 w-5 h-5 bg-yellow-400 rounded-full flex items-center justify-center text-xs">
+        <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-amber-400 rounded-full flex items-center justify-center text-[10px] shadow-sm animate-bounce">
           🔔
         </div>
       )}
       
       {/* Public Booking Badge */}
       {isPublicBooking && (
-        <div className="absolute -top-1 -left-1 w-6 h-6 bg-red-700 rounded-full flex items-center justify-center text-xs font-bold">
+        <div className="absolute -top-1.5 -left-1.5 w-5 h-5 bg-destructive rounded-full flex items-center justify-center text-white text-[10px] font-black shadow-sm ring-2 ring-white">
           !
         </div>
       )}
       
-      <div className="flex flex-col h-full">
-        <div className="font-semibold text-sm truncate">
-          {classTypeIcon} {studentName}
+      <div className="flex flex-col h-full gap-0.5">
+        <div className={`font-bold text-xs truncate ${getTextColor()}`}>
+          {studentName}
         </div>
-        <div className="text-xs opacity-90 mt-0.5">
-          {startTime} - {endTime}
+        <div className="text-[10px] font-bold opacity-70 flex items-center gap-1">
+          <span>{classTypeIcon}</span>
+          <span>{startTime} - {endTime}</span>
         </div>
-        <div className="text-xs opacity-80 mt-auto">
+        <div className="text-[9px] font-black uppercase tracking-wider opacity-60 mt-auto truncate">
           {classType}
         </div>
       </div>
