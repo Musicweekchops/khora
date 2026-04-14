@@ -20,14 +20,14 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        // Primary (Blue - Acción principal)
-        default: "bg-primary-500 text-white hover:bg-primary-600 focus-visible:ring-primary-500 shadow-sm",
+        // Primary (Acción principal)
+        default: "bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:ring-primary shadow-sm",
         
         // Primary con más énfasis
-        primary: "bg-primary-500 text-white hover:bg-primary-600 focus-visible:ring-primary-500 shadow-md hover:shadow-lg",
+        primary: "bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:ring-primary shadow-md hover:shadow-lg",
         
         // Destructive (Red - Acciones peligrosas)
-        destructive: "bg-destructive-500 text-white hover:bg-destructive-600 focus-visible:ring-destructive-500 shadow-sm",
+        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90 focus-visible:ring-destructive shadow-sm",
         
         // Outline (Borde, sin relleno)
         outline: "border-2 border-neutral-300 bg-transparent hover:bg-neutral-50 text-neutral-900 focus-visible:ring-neutral-500",
@@ -39,10 +39,10 @@ const buttonVariants = cva(
         ghost: "hover:bg-neutral-100 text-neutral-900 focus-visible:ring-neutral-500",
         
         // Link (Como texto, sin fondo)
-        link: "text-primary-500 underline-offset-4 hover:underline focus-visible:ring-primary-500",
+        link: "text-primary underline-offset-4 hover:underline focus-visible:ring-primary",
         
         // Success (Verde)
-        success: "bg-success-500 text-white hover:bg-success-600 focus-visible:ring-success-500 shadow-sm",
+        success: "bg-emerald-500 text-white hover:bg-emerald-600 focus-visible:ring-emerald-500 shadow-sm",
       },
       size: {
         sm: "h-9 px-3 text-sm",

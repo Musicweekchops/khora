@@ -12,12 +12,12 @@ export default async function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <>
       {session.user.role === "TEACHER" ? (
         <TeacherDashboard user={session.user} />
       ) : (
         <StudentDashboard user={session.user} />
       )}
-    </div>
+    </>
   )
 }

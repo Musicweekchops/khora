@@ -58,75 +58,7 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
 
   return (
     <>
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-neutral-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-semibold text-neutral-900">
-                🥁 Drum School
-              </h1>
-              <p className="text-sm text-neutral-600 mt-1">
-                Hola, {user.name}
-              </p>
-            </div>
-            <Button
-              variant="ghost"
-              size="md"
-              onClick={() => signOut({ callbackUrl: "/login" })}
-            >
-              Cerrar Sesión
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      {/* Navigation */}
-      <nav className="bg-white border-b border-neutral-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex space-x-1">
-            <Link
-              href="/dashboard"
-              className="px-4 py-3 text-sm font-medium text-primary-500 border-b-2 border-primary-500 transition-colors"
-            >
-              Dashboard
-            </Link>
-            <Link
-              href="/dashboard/alumnos"
-              className="px-4 py-3 text-sm font-medium text-neutral-600 hover:text-neutral-900 border-b-2 border-transparent hover:border-neutral-300 transition-colors"
-            >
-              Alumnos
-            </Link>
-            <Link
-              href="/dashboard/agenda"
-              className="px-4 py-3 text-sm font-medium text-neutral-600 hover:text-neutral-900 border-b-2 border-transparent hover:border-neutral-300 transition-colors"
-            >
-              📅 Agenda
-            </Link>
-            <Link
-              href="/dashboard/clases"
-              className="px-4 py-3 text-sm font-medium text-neutral-600 hover:text-neutral-900 border-b-2 border-transparent hover:border-neutral-300 transition-colors"
-            >
-              Clases
-            </Link>
-            <Link
-              href="/dashboard/crm"
-              className="px-4 py-3 text-sm font-medium text-neutral-600 hover:text-neutral-900 border-b-2 border-transparent hover:border-neutral-300 transition-colors"
-            >
-              CRM
-            </Link>
-            <Link
-              href="/dashboard/financiero"
-              className="px-4 py-3 text-sm font-medium text-neutral-600 hover:text-neutral-900 border-b-2 border-transparent hover:border-neutral-300 transition-colors"
-            >
-              Financiero
-            </Link>
-          </div>
-        </div>
-      </nav>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div>
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           {loading ? (
@@ -225,7 +157,7 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
             </div>
           </CardContent>
         </Card>
-      </main>
+      </div>
     </>
   )
 }
