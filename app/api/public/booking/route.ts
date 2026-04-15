@@ -232,6 +232,7 @@ async function createSingleBooking(params: any) {
     booking: {
       id: booking.id,
       name, email, phone,
+      totalPrice: booking.totalPrice,
       classes: [{
         id: classRecord.id,
         date: classRecord.date,

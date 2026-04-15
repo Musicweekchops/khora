@@ -18,6 +18,7 @@ interface BookingData {
   email: string
   phone: string
   isMonthlyPlan?: boolean
+  totalPrice?: number
   classes?: Array<{
     id: string
     date: Date | string
