@@ -1,6 +1,6 @@
 import { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
-import { supabase } from "./supabase"
+import { supabaseAdmin } from "./supabase"
 import bcrypt from "bcryptjs"
 
 export const authOptions: NextAuthOptions = {
@@ -17,7 +17,7 @@ export const authOptions: NextAuthOptions = {
         }
 
         // Migración a Supabase: Seleccionar usuario con perfiles
-        const { data: user, error } = await supabase
+        const { data: user, error } = await supabaseAdmin
           .from('User')
           .select('*, teacherProfile:TeacherProfile(*), studentProfile:StudentProfile(*)')
           .eq('email', credentials.email)
