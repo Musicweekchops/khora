@@ -11,6 +11,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -38,65 +39,180 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            🥁 Drum School
-          </h1>
-          <p className="text-gray-600">Sistema de Gestión de Clases</p>
-        </div>
+    <div
+      className="min-h-screen flex items-center justify-center relative overflow-hidden"
+      style={{
+        background: "linear-gradient(135deg, #0a0a0f 0%, #12131f 50%, #0d1117 100%)",
+      }}
+    >
+      {/* Ambient glow elements */}
+      <div
+        className="absolute top-0 left-0 w-96 h-96 rounded-full pointer-events-none"
+        style={{
+          background: "radial-gradient(circle, rgba(139,92,246,0.12) 0%, transparent 70%)",
+          transform: "translate(-30%, -30%)",
+        }}
+      />
+      <div
+        className="absolute bottom-0 right-0 w-96 h-96 rounded-full pointer-events-none"
+        style={{
+          background: "radial-gradient(circle, rgba(59,130,246,0.10) 0%, transparent 70%)",
+          transform: "translate(30%, 30%)",
+        }}
+      />
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="tu@email.com"
-            />
-          </div>
+      {/* Subtle rhythm lines */}
+      <div className="absolute inset-0 pointer-events-none opacity-5" style={{
+        backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 40px, rgba(255,255,255,0.08) 40px, rgba(255,255,255,0.08) 41px)",
+      }} />
 
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-              Contraseña
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="••••••••"
-            />
-          </div>
-
-          {error && (
-            <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm">
-              {error}
+      <div className="relative z-10 w-full max-w-md px-4">
+        {/* Card */}
+        <div
+          className="rounded-2xl p-8"
+          style={{
+            background: "rgba(255,255,255,0.04)",
+            border: "1px solid rgba(255,255,255,0.09)",
+            backdropFilter: "blur(24px)",
+            boxShadow: "0 32px 64px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04)",
+          }}
+        >
+          {/* Logo + Title */}
+          <div className="text-center mb-8">
+            <div
+              className="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center text-3xl"
+              style={{
+                background: "linear-gradient(135deg, rgba(139,92,246,0.3) 0%, rgba(59,130,246,0.3) 100%)",
+                border: "1px solid rgba(139,92,246,0.4)",
+                boxShadow: "0 0 24px rgba(139,92,246,0.2)",
+              }}
+            >
+              🥁
             </div>
-          )}
+            <h1 className="text-2xl font-bold mb-1" style={{ color: "rgba(255,255,255,0.95)" }}>
+              Khora
+            </h1>
+            <p className="text-sm" style={{ color: "rgba(255,255,255,0.4)" }}>
+              Ingresa a tu cuenta
+            </p>
+          </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-          >
-            {loading ? "Iniciando sesión..." : "Iniciar Sesión"}
-          </button>
-        </form>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Email */}
+            <div>
+              <label className="block text-xs font-medium mb-2" style={{ color: "rgba(255,255,255,0.5)" }}>
+                EMAIL
+              </label>
+              <input
+                type="email"
+                id="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                placeholder="tu@email.com"
+                className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all"
+                style={{
+                  background: "rgba(255,255,255,0.06)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  color: "rgba(255,255,255,0.9)",
+                  caretColor: "#8b5cf6",
+                }}
+                onFocus={(e) => {
+                  e.target.style.border = "1px solid rgba(139,92,246,0.6)"
+                  e.target.style.boxShadow = "0 0 0 3px rgba(139,92,246,0.1)"
+                }}
+                onBlur={(e) => {
+                  e.target.style.border = "1px solid rgba(255,255,255,0.1)"
+                  e.target.style.boxShadow = "none"
+                }}
+              />
+            </div>
 
-        <div className="mt-6 text-center">
-          <p className="text-sm text-gray-600">
+            {/* Password */}
+            <div>
+              <label className="block text-xs font-medium mb-2" style={{ color: "rgba(255,255,255,0.5)" }}>
+                CONTRASEÑA
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  id="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  placeholder="••••••••"
+                  className="w-full px-4 py-3 pr-12 rounded-xl text-sm outline-none transition-all"
+                  style={{
+                    background: "rgba(255,255,255,0.06)",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    color: "rgba(255,255,255,0.9)",
+                    caretColor: "#8b5cf6",
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.border = "1px solid rgba(139,92,246,0.6)"
+                    e.target.style.boxShadow = "0 0 0 3px rgba(139,92,246,0.1)"
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.border = "1px solid rgba(255,255,255,0.1)"
+                    e.target.style.boxShadow = "none"
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-sm"
+                  style={{ color: "rgba(255,255,255,0.3)" }}
+                >
+                  {showPassword ? "👁" : "👁‍🗨"}
+                </button>
+              </div>
+            </div>
+
+            {/* Error */}
+            {error && (
+              <div
+                className="px-4 py-3 rounded-xl text-sm"
+                style={{
+                  background: "rgba(239,68,68,0.1)",
+                  border: "1px solid rgba(239,68,68,0.25)",
+                  color: "rgba(252,165,165,0.9)",
+                }}
+              >
+                {error}
+              </div>
+            )}
+
+            {/* Submit */}
+            <button
+              type="submit"
+              id="login-submit"
+              disabled={loading}
+              className="w-full py-3 rounded-xl font-semibold text-sm transition-all mt-2"
+              style={{
+                background: loading
+                  ? "rgba(139,92,246,0.3)"
+                  : "linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)",
+                color: "white",
+                boxShadow: loading ? "none" : "0 8px 24px rgba(124,58,237,0.35)",
+              }}
+            >
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Iniciando sesión...
+                </span>
+              ) : "Iniciar Sesión"}
+            </button>
+          </form>
+
+          {/* Footer */}
+          <p className="text-center mt-6 text-sm" style={{ color: "rgba(255,255,255,0.3)" }}>
             ¿No tienes cuenta?{" "}
-            <Link href="/register" className="text-blue-600 hover:text-blue-700 font-medium">
+            <Link
+              href="/register"
+              className="font-medium transition-colors"
+              style={{ color: "rgba(167,139,250,0.9)" }}
+            >
               Regístrate aquí
             </Link>
           </p>
