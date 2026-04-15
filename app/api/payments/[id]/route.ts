@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/db"
+import { supabase, supabaseAdmin } from "@/lib/supabase"
 
 // GET /api/payments/[id] - Obtener un pago específico
 export async function GET(
@@ -12,62 +12,30 @@ export async function GET(
     const session = await getServerSession(authOptions)
 
     if (!session || session.user.role !== "TEACHER") {
-      return NextResponse.json(
-        { error: "No autorizado" },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 })
     }
 
     const { id: paymentId } = await params
 
-    // Obtener el pago
-    const payment = await prisma.payment.findUnique({
-      where: { id: paymentId },
-      include: {
-        student: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                phone: true
-              }
-            },
-            teacher: {
-              include: {
-                user: true
-              }
-            }
-          }
-        },
-        plan: true
-      }
-    })
+    const { data: payment, error } = await supabase
+      .from('Payment')
+      .select('*, student:StudentProfile(*, user:User(id, name, email, phone), teacher:TeacherProfile(id, userId))')
+      .eq('id', paymentId)
+      .single()
 
-    if (!payment) {
-      return NextResponse.json(
-        { error: "Pago no encontrado" },
-        { status: 404 }
-      )
+    if (error || !payment) {
+      return NextResponse.json({ error: "Pago no encontrado" }, { status: 404 })
     }
 
-    // Verificar que el pago pertenece al profesor logueado
-    if (payment.student.teacher.userId !== session.user.id) {
-      return NextResponse.json(
-        { error: "No autorizado para ver este pago" },
-        { status: 403 }
-      )
+    if ((payment.student as any).teacher.userId !== session.user.id) {
+      return NextResponse.json({ error: "No autorizado para ver este pago" }, { status: 403 })
     }
 
     return NextResponse.json(payment)
 
   } catch (error) {
     console.error("Error al obtener pago:", error)
-    return NextResponse.json(
-      { error: "Error al obtener pago" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Error al obtener pago" }, { status: 500 })
   }
 }
 
@@ -80,96 +48,57 @@ export async function PUT(
     const session = await getServerSession(authOptions)
 
     if (!session || session.user.role !== "TEACHER") {
-      return NextResponse.json(
-        { error: "No autorizado" },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 })
     }
 
     const { id: paymentId } = await params
     const body = await request.json()
 
-    // Verificar que el pago existe y pertenece al profesor
-    const existingPayment = await prisma.payment.findUnique({
-      where: { id: paymentId },
-      include: {
-        student: {
-          include: {
-            teacher: true
-          }
-        }
-      }
-    })
+    // Verificar propiedad
+    const { data: existingPayment } = await supabase
+      .from('Payment')
+      .select('*, student:StudentProfile(*, teacher:TeacherProfile(*))')
+      .eq('id', paymentId)
+      .single()
 
     if (!existingPayment) {
-      return NextResponse.json(
-        { error: "Pago no encontrado" },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: "Pago no encontrado" }, { status: 404 })
     }
 
-    if (existingPayment.student.teacher.userId !== session.user.id) {
-      return NextResponse.json(
-        { error: "No autorizado para editar este pago" },
-        { status: 403 }
-      )
+    if ((existingPayment.student as any).teacher.userId !== session.user.id) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 403 })
     }
 
-    // Si cambia de PENDING a PAID, actualizar LTV
-    const wasUnpaid = existingPayment.status !== "PAID"
-    const nowPaid = body.status === "PAID"
+    const wasPaid = existingPayment.status === "PAID" || existingPayment.status === "COMPLETED"
+    const isNowPaid = body.status === "PAID" || body.status === "COMPLETED"
 
-    // Actualizar el pago
-    const updatedPayment = await prisma.payment.update({
-      where: { id: paymentId },
-      data: {
+    // Actualizar pago
+    const { data: updatedPayment, error: uError } = await supabaseAdmin
+      .from('Payment')
+      .update({
         amount: body.amount ? parseFloat(body.amount) : undefined,
         description: body.description,
         method: body.method,
         status: body.status,
-        paidAt: body.status === "PAID" && !existingPayment.paidAt ? new Date() : body.paidAt ? new Date(body.paidAt) : undefined,
-        dueDate: body.dueDate ? new Date(body.dueDate) : undefined,
-        referenceNumber: body.referenceNumber,
-        notes: body.notes
-      },
-      include: {
-        student: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true
-              }
-            }
-          }
-        }
-      }
-    })
-
-    // Actualizar LTV si es necesario
-    if (wasUnpaid && nowPaid) {
-      await prisma.studentProfile.update({
-        where: { id: existingPayment.studentId },
-        data: {
-          lifetimeValue: {
-            increment: existingPayment.amount
-          }
-        }
+        date: body.date ? body.date : undefined
       })
+      .eq('id', paymentId)
+      .select()
+      .single()
+
+    if (uError) throw uError
+
+    // LTV adjustment
+    if (!wasPaid && isNowPaid) {
+      const { data: profile } = await supabaseAdmin.from('StudentProfile').select('lifetimeValue').eq('id', existingPayment.studentId).single()
+      await supabaseAdmin.from('StudentProfile').update({ lifetimeValue: (profile?.lifetimeValue || 0) + existingPayment.amount }).eq('id', existingPayment.studentId)
     }
 
-    return NextResponse.json({
-      message: "Pago actualizado exitosamente",
-      payment: updatedPayment
-    })
+    return NextResponse.json({ message: "Pago actualizado", payment: updatedPayment })
 
   } catch (error) {
     console.error("Error al actualizar pago:", error)
-    return NextResponse.json(
-      { error: "Error al actualizar pago" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Internal error" }, { status: 500 })
   }
 }
 
@@ -182,66 +111,37 @@ export async function DELETE(
     const session = await getServerSession(authOptions)
 
     if (!session || session.user.role !== "TEACHER") {
-      return NextResponse.json(
-        { error: "No autorizado" },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 })
     }
 
     const { id: paymentId } = await params
 
-    // Verificar que el pago existe y pertenece al profesor
-    const existingPayment = await prisma.payment.findUnique({
-      where: { id: paymentId },
-      include: {
-        student: {
-          include: {
-            teacher: true
-          }
-        }
-      }
-    })
+    const { data: existingPayment } = await supabase
+      .from('Payment')
+      .select('*, student:StudentProfile(*, teacher:TeacherProfile(*))')
+      .eq('id', paymentId)
+      .single()
 
     if (!existingPayment) {
-      return NextResponse.json(
-        { error: "Pago no encontrado" },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: "Pago no encontrado" }, { status: 404 })
     }
 
-    if (existingPayment.student.teacher.userId !== session.user.id) {
-      return NextResponse.json(
-        { error: "No autorizado para eliminar este pago" },
-        { status: 403 }
-      )
+    if ((existingPayment.student as any).teacher.userId !== session.user.id) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 403 })
     }
 
-    // Si estaba pagado, restar del LTV
-    if (existingPayment.status === "PAID") {
-      await prisma.studentProfile.update({
-        where: { id: existingPayment.studentId },
-        data: {
-          lifetimeValue: {
-            decrement: existingPayment.amount
-          }
-        }
-      })
+    // Adjust LTV if it was paid
+    if (existingPayment.status === "PAID" || existingPayment.status === "COMPLETED") {
+      const { data: profile } = await supabaseAdmin.from('StudentProfile').select('lifetimeValue').eq('id', existingPayment.studentId).single()
+      await supabaseAdmin.from('StudentProfile').update({ lifetimeValue: Math.max(0, (profile?.lifetimeValue || 0) - existingPayment.amount) }).eq('id', existingPayment.studentId)
     }
 
-    // Eliminar el pago
-    await prisma.payment.delete({
-      where: { id: paymentId }
-    })
+    await supabaseAdmin.from('Payment').delete().eq('id', paymentId)
 
-    return NextResponse.json({
-      message: "Pago eliminado exitosamente"
-    })
+    return NextResponse.json({ message: "Pago eliminado exitosamente" })
 
   } catch (error) {
     console.error("Error al eliminar pago:", error)
-    return NextResponse.json(
-      { error: "Error al eliminar pago" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Internal error" }, { status: 500 })
   }
 }

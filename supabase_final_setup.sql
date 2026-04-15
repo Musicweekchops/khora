@@ -158,6 +158,16 @@ CREATE TABLE IF NOT EXISTS "MonthlyLimits" (
     UNIQUE("email", "phone", "month")
 );
 
+CREATE TABLE IF NOT EXISTS "ClassNote" (
+    "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    "classId" UUID REFERENCES "Class"(id) ON DELETE CASCADE,
+    "studentId" UUID REFERENCES "StudentProfile"(id) ON DELETE CASCADE,
+    "content" TEXT NOT NULL,
+    "topics" TEXT, -- JSON string or comma separated
+    "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+    "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- 3. RLS (Row Level Security) - Basic Setup
 -- NOTE: Standard usage for this internal app relies on Admin SDK for many mutations,
 -- but we enable RLS to be safe.
@@ -170,8 +180,13 @@ ALTER TABLE "Payment" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Task" ENABLE ROW LEVEL SECURITY;
 
 -- 4. INDICES
+DROP INDEX IF EXISTS idx_booking_email;
 CREATE INDEX idx_booking_email ON "Booking"("email");
+
+DROP INDEX IF EXISTS idx_class_date;
 CREATE INDEX idx_class_date ON "Class"("date");
+
+DROP INDEX IF EXISTS idx_student_teacher;
 CREATE INDEX idx_student_teacher ON "StudentProfile"("teacherId");
 
 -- 5. TRIGGER FOR updatedAt (Optional but recommended)
@@ -183,5 +198,6 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS update_user_modtime ON "User";
 CREATE TRIGGER update_user_modtime BEFORE UPDATE ON "User" FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 -- Add for other tables as needed
