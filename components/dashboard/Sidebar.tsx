@@ -39,15 +39,26 @@ export default function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname()
 
   return (
-    <div className="flex flex-col h-full bg-sidebar-background text-sidebar-foreground border-r border-white/10 w-64 fixed left-0 top-0 z-50 overflow-hidden">
+    <div
+      className="flex flex-col h-full text-sidebar-foreground border-r w-64 fixed left-0 top-0 z-50 overflow-hidden"
+      style={{
+        background: "#0c0c12",
+        borderRight: "1px solid rgba(255,255,255,0.06)",
+      }}
+    >
       {/* Logo */}
       <div className="p-6 flex items-center gap-3">
-        <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary/20">
-          <Drum size={24} />
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-lg"
+          style={{
+            background: "linear-gradient(135deg, rgba(139,92,246,0.8), rgba(79,70,229,0.8))",
+            boxShadow: "0 0 20px rgba(139,92,246,0.3)",
+          }}
+        >
+          <Drum size={20} />
         </div>
         <div>
           <h1 className="text-xl font-bold tracking-tight text-white">Khora</h1>
-          <p className="text-[10px] uppercase tracking-widest text-neutral-400 font-semibold">Drum School</p>
+          <p className="text-[10px] uppercase tracking-widest font-semibold" style={{ color: "rgba(255,255,255,0.3)" }}>Gestión de clases</p>
         </div>
       </div>
 
