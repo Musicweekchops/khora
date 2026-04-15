@@ -42,8 +42,8 @@ export default function Sidebar({ user }: SidebarProps) {
     <div
       className="flex flex-col h-full text-sidebar-foreground border-r w-64 fixed left-0 top-0 z-50 overflow-hidden"
       style={{
-        background: "#0c0c12",
-        borderRight: "1px solid rgba(255,255,255,0.06)",
+        background: "#1a1a2e",
+        borderRight: "1px solid rgba(255,255,255,0.08)",
       }}
     >
       {/* Logo */}
