@@ -1,0 +1,22 @@
+-- MIGRATION TO ADD MISSING COLUMNS FOR DASHBOARD FUNCTIONALITY
+
+-- 1. Update StudentProfile
+ALTER TABLE "StudentProfile" 
+ADD COLUMN IF NOT EXISTS "leadSource" TEXT,
+ADD COLUMN IF NOT EXISTS "modalidad" TEXT,
+ADD COLUMN IF NOT EXISTS "preferredDay" TEXT,
+ADD COLUMN IF NOT EXISTS "preferredTime" TEXT,
+ADD COLUMN IF NOT EXISTS "emergencyContact" TEXT,
+ADD COLUMN IF NOT EXISTS "emergencyPhone" TEXT,
+ADD COLUMN IF NOT EXISTS "lifetimeValue" FLOAT DEFAULT 0;
+
+-- 2. Update Class
+ALTER TABLE "Class"
+ADD COLUMN IF NOT EXISTS "modalidad" TEXT,
+ADD COLUMN IF NOT EXISTS "isTrialClass" BOOLEAN DEFAULT false,
+ADD COLUMN IF NOT EXISTS "classNumber" INTEGER,
+ADD COLUMN IF NOT EXISTS "totalInPlan" INTEGER;
+
+-- 3. Update User (if missing fields used in auth or profile)
+ALTER TABLE "User"
+ADD COLUMN IF NOT EXISTS "phone" TEXT;
