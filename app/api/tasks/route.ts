@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { supabase } from "@/lib/supabase"
+import { supabase, supabaseAdmin } from "@/lib/supabase"
 
 // GET /api/tasks - Obtener tareas (del profesor o filtradas por alumno)
 export async function GET(request: NextRequest) {
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
 
     if (session.user.role === "TEACHER") {
       // Profesor: obtener el perfil y filtrar por sus alumnos
-      const { data: teacherProfile } = await supabase
+      const { data: teacherProfile } = await supabaseAdmin
         .from('TeacherProfile')
         .select('id')
         .eq('userId', session.user.id)
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Obtener perfil del profesor
-    const { data: teacherProfile } = await supabase
+    const { data: teacherProfile } = await supabaseAdmin
       .from('TeacherProfile')
       .select('id')
       .eq('userId', session.user.id)

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { supabase } from "@/lib/supabase"
+import { supabase, supabaseAdmin } from "@/lib/supabase"
 
 // GET /api/payments - Obtener pagos
 export async function GET(request: NextRequest) {
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get("status")
 
     // Obtener el perfil del profesor vía Supabase
-    const { data: teacherProfile } = await supabase
+    const { data: teacherProfile } = await supabaseAdmin
       .from('TeacherProfile')
       .select('id')
       .eq('userId', session.user.id)
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verificar que el alumno pertenece al profesor
-    const { data: teacherProfile } = await supabase
+    const { data: teacherProfile } = await supabaseAdmin
       .from('TeacherProfile')
       .select('id')
       .eq('userId', session.user.id)

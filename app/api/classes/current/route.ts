@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { supabase } from "@/lib/supabase"
+import { supabase, supabaseAdmin } from "@/lib/supabase"
 
 // GET /api/classes/current - Obtener clase actual o próxima del día
 export async function GET(request: NextRequest) {
@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Obtener el perfil del profesor vía Supabase
-    const { data: teacherProfile } = await supabase
+    const { data: teacherProfile } = await supabaseAdmin
       .from('TeacherProfile')
       .select('id')
       .eq('userId', session.user.id)

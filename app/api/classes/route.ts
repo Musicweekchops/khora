@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { supabase } from "@/lib/supabase"
+import { supabase, supabaseAdmin } from "@/lib/supabase"
 
 // GET /api/classes - Obtener todas las clases del profesor
 export async function GET(request: NextRequest) {
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get("endDate")
 
     // Obtener el perfil del profesor vía Supabase
-    const { data: teacherProfile } = await supabase
+    const { data: teacherProfile } = await supabaseAdmin
       .from('TeacherProfile')
       .select('id')
       .eq('userId', session.user.id)
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Obtener perfil del profesor
-    const { data: teacherProfile } = await supabase
+    const { data: teacherProfile } = await supabaseAdmin
       .from('TeacherProfile')
       .select('id')
       .eq('userId', session.user.id)
