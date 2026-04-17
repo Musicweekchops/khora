@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { signOut } from "next-auth/react"
+import { useAuth } from "@/lib/context/AuthContext"
 import { 
   LayoutDashboard, 
   Users, 
@@ -37,6 +37,7 @@ const navItems = [
 
 export default function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname()
+  const { signOut } = useAuth()
 
   return (
     <div
@@ -123,7 +124,7 @@ export default function Sidebar({ user }: SidebarProps) {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => signOut({ callbackUrl: "/login" })}
+              onClick={() => signOut()}
               className="w-full text-neutral-400 hover:text-destructive hover:bg-destructive/10 justify-start gap-2 h-9 rounded-lg"
             >
               <LogOut size={14} />

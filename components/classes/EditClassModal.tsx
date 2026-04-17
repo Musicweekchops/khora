@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { X } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 interface EditClassModalProps {
   classData: {
@@ -55,25 +56,21 @@ export default function EditClassModal({ classData, onClose, onSave }: EditClass
       const endDate = new Date(scheduledDate.getTime() + formData.duration * 60000)
       const endTime = `${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}`
 
-      const response = await fetch(`/api/classes/${classData.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
+      const { error: updateError } = await supabase
+        .from('Class')
+        .update({
           scheduledDate: scheduledDate.toISOString(),
-          date: scheduledDate,
+          date: scheduledDate.toISOString(),
           startTime: formData.startTime,
           endTime: endTime,
           duration: formData.duration,
           modalidad: formData.modalidad,
           status: classData.status
         })
-      })
+        .eq('id', classData.id)
 
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Error al actualizar clase')
+      if (updateError) {
+        throw new Error(updateError.message || 'Error al actualizar clase')
       }
 
       onSave()
