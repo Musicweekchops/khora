@@ -1,22 +1,21 @@
-import { getServerSession } from "next-auth"
-import { redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
+"use client"
+
 import TeacherDashboard from "@/components/dashboard/TeacherDashboard"
 import StudentDashboard from "@/components/dashboard/StudentDashboard"
+import { useAuth } from "@/lib/context/AuthContext"
 
-export default async function DashboardPage() {
-  const session = await getServerSession(authOptions)
+export default function DashboardPage() {
+  const { profile, loading } = useAuth()
 
-  if (!session) {
-    redirect("/login")
-  }
+  if (loading) return null
+  if (!profile) return null
 
   return (
     <>
-      {session.user.role === "TEACHER" ? (
-        <TeacherDashboard user={session.user} />
+      {profile.role === "TEACHER" ? (
+        <TeacherDashboard user={profile} />
       ) : (
-        <StudentDashboard user={session.user} />
+        <StudentDashboard user={profile} />
       )}
     </>
   )

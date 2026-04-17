@@ -4,6 +4,8 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import DashboardClasses from "@/components/dashboard/DashboardClasses"
 import TeacherTaskBoard from "@/components/dashboard/tasks/TeacherTaskBoard"
+import { useAuth } from "@/lib/context/AuthContext"
+import { supabase } from "@/lib/supabase"
 
 interface TeacherDashboardProps {
   user: {
@@ -11,6 +13,7 @@ interface TeacherDashboardProps {
     name: string
     email: string
     role: string
+    teacherProfileId?: string
   }
 }
 
@@ -29,18 +32,72 @@ export default function TeacherDashboard({ user }: TeacherDashboardProps) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetchStats()
-  }, [])
+    if (user.teacherProfileId) {
+      fetchStats(user.teacherProfileId)
+    }
+  }, [user.teacherProfileId])
 
-  const fetchStats = async () => {
+  const fetchStats = async (teacherId: string) => {
     try {
-      const response = await fetch('/api/dashboard/stats')
-      if (response.ok) {
-        const data = await response.json()
-        setStats(data)
-      }
+      const now = new Date()
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
+      const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString()
+
+      // 1. Alumnos Activos (con clases este mes)
+      const { data: activeClasses } = await supabase
+        .from('Class')
+        .select('studentId')
+        .eq('teacherId', teacherId)
+        .gte('date', startOfMonth)
+        .not('studentId', 'is', null)
+
+      const uniqueStudents = new Set(activeClasses?.map(c => c.studentId))
+      const activeCount = uniqueStudents.size
+
+      // 2. Clases Hoy
+      const { count: classesTodayCount } = await supabase
+        .from('Class')
+        .select('id', { count: 'exact', head: true })
+        .eq('teacherId', teacherId)
+        .gte('date', startOfToday)
+        .lt('date', endOfToday)
+        .neq('status', 'CANCELLED')
+
+      // 3. Bookings Pendientes (asumimos compartidos o filtrados por clase del profesor)
+      const { count: pendingBookingsCount } = await supabase
+        .from('Booking')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'CONFIRMED')
+
+      // 4. Ingresos del Mes (Bookings confirmados)
+      const { data: revenueData } = await supabase
+        .from('Booking')
+        .select('totalPrice')
+        .eq('status', 'CONFIRMED')
+        .gte('createdAt', startOfMonth)
+
+      const revenue = revenueData?.reduce((acc, curr) => acc + (curr.totalPrice || 0), 0) || 0
+
+      // 5. Pagos Pendientes
+      const { data: paymentData, count: pendingPayments } = await supabase
+        .from('Payment')
+        .select('amount', { count: 'exact' })
+        .eq('status', 'PENDING')
+      
+      const pendingPaymentsAmount = paymentData?.reduce((acc, curr) => acc + (curr.amount || 0), 0) || 0
+
+      setStats({
+        activeStudents: activeCount,
+        classesToday: classesTodayCount || 0,
+        pendingBookings: pendingBookingsCount || 0,
+        monthlyRevenue: revenue,
+        pendingPayments: pendingPayments || 0,
+        pendingPaymentsAmount,
+        currentMonth: new Date(startOfMonth).toLocaleDateString('es-CL', { month: 'long', year: 'numeric' })
+      })
     } catch (error) {
-      console.error('Error fetching stats:', error)
+      console.error('Error fetching dashboard stats:', error)
     } finally {
       setLoading(false)
     }

@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import { useAuth } from "@/lib/context/AuthContext"
+import { supabase } from "@/lib/supabase"
 
 interface Student {
   id: string
@@ -17,21 +19,45 @@ interface Student {
 }
 
 export default function StudentsList() {
+  const { profile } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState("ALL") // ALL, ACTIVE, INACTIVE, TRIAL
+  const [filter, setFilter] = useState("ALL")
 
   useEffect(() => {
-    fetchStudents()
-  }, [])
+    if (profile?.teacherProfileId) {
+      fetchStudents(profile.teacherProfileId)
+    }
+  }, [profile?.teacherProfileId])
 
-  const fetchStudents = async () => {
+  const fetchStudents = async (teacherId: string) => {
     try {
-      const response = await fetch("/api/students")
-      if (response.ok) {
-        const data = await response.json()
-        setStudents(data)
-      }
+      const { data, error } = await supabase
+        .from('StudentProfile')
+        .select(`
+          *,
+          user:User(id, email, name, phone),
+          payments:Payment(id, status)
+        `)
+        .eq('teacherId', teacherId)
+        .order('createdAt', { ascending: false })
+
+      if (error) throw error
+
+      const formattedStudents = (data || []).map(student => ({
+        id: student.id,
+        name: (student.user as any)?.name || "Sin nombre",
+        email: (student.user as any)?.email || "",
+        phone: (student.user as any)?.phone || student.phone,
+        status: student.status,
+        modalidad: student.modalidad,
+        totalClassesTaken: student.totalClasses || 0,
+        lifetimeValue: student.lifetimeValue || 0,
+        hasPendingPayments: (student.payments as any[] || []).some(p => p.status === 'PENDING'),
+        lastClassDate: student.lastClassDate
+      }))
+
+      setStudents(formattedStudents)
     } catch (error) {
       console.error("Error al cargar alumnos:", error)
     } finally {

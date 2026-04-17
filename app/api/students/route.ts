@@ -180,8 +180,11 @@ export async function POST(request: NextRequest) {
       }
     }, { status: 201 })
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error al crear alumno:", error)
-    return NextResponse.json({ error: "Error al crear alumno" }, { status: 500 })
+    return NextResponse.json({ 
+      error: "Error al crear alumno", 
+      details: error.message || error.details || String(error)
+    }, { status: 500 })
   }
 }

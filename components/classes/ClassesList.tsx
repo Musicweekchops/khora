@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import { useAuth } from "@/lib/context/AuthContext"
+import { supabase } from "@/lib/supabase"
 
 interface Class {
   id: string
@@ -22,22 +24,35 @@ interface Class {
 }
 
 export default function ClassesList() {
+  const { profile } = useAuth()
   const [classes, setClasses] = useState<Class[]>([])
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<"list" | "week">("list")
   const [statusFilter, setStatusFilter] = useState("ALL")
 
   useEffect(() => {
-    fetchClasses()
-  }, [])
+    if (profile?.teacherProfileId) {
+      fetchClasses(profile.teacherProfileId)
+    }
+  }, [profile?.teacherProfileId])
 
-  const fetchClasses = async () => {
+  const fetchClasses = async (teacherId: string) => {
     try {
-      const response = await fetch("/api/classes")
-      if (response.ok) {
-        const data = await response.json()
-        setClasses(data)
-      }
+      const { data, error } = await supabase
+        .from('Class')
+        .select(`
+          *,
+          student:StudentProfile(
+            id,
+            user:User(name, email)
+          )
+        `)
+        .eq('teacherId', teacherId)
+        .order('date', { ascending: true })
+        .order('startTime', { ascending: true })
+
+      if (error) throw error
+      setClasses((data || []) as any[])
     } catch (error) {
       console.error("Error al cargar clases:", error)
     } finally {

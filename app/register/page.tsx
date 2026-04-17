@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { supabase } from "@/lib/supabase"
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -34,21 +35,19 @@ export default function RegisterPage() {
     setLoading(true)
 
     try {
-      const response = await fetch("/api/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: formData.name,
-          email: formData.email,
-          password: formData.password,
-          role: formData.role,
-        }),
+      const { data, error: authError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          data: {
+            name: formData.name,
+            role: formData.role,
+          }
+        }
       })
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        setError(data.error || "Error al crear la cuenta")
+      if (authError) {
+        setError(authError.message || "Error al crear la cuenta")
         return
       }
 

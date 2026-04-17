@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useAuth } from "@/lib/context/AuthContext"
+import { supabase } from "@/lib/supabase"
 
 interface Student {
   id: string
@@ -15,6 +17,7 @@ interface PaymentFormProps {
 
 export default function PaymentForm({ preselectedStudentId }: PaymentFormProps) {
   const router = useRouter()
+  const { profile } = useAuth()
   const [loading, setLoading] = useState(false)
   const [students, setStudents] = useState<Student[]>([])
   const [error, setError] = useState("")
@@ -31,8 +34,10 @@ export default function PaymentForm({ preselectedStudentId }: PaymentFormProps) 
   })
 
   useEffect(() => {
-    fetchStudents()
-  }, [])
+    if (profile?.teacherProfileId) {
+      fetchStudents(profile.teacherProfileId)
+    }
+  }, [profile?.teacherProfileId])
 
   useEffect(() => {
     if (preselectedStudentId) {
@@ -40,18 +45,22 @@ export default function PaymentForm({ preselectedStudentId }: PaymentFormProps) 
     }
   }, [preselectedStudentId])
 
-  const fetchStudents = async () => {
+  const fetchStudents = async (teacherId: string) => {
     try {
-      const response = await fetch("/api/students")
-      if (response.ok) {
-        const data = await response.json()
-        const formattedStudents = data.map((s: any) => ({
-          id: s.id,
-          name: s.name,
-          email: s.email
-        }))
-        setStudents(formattedStudents)
-      }
+      const { data, error } = await supabase
+        .from('StudentProfile')
+        .select('id, user:User(name, email)')
+        .eq('teacherId', teacherId)
+        .in('status', ['ACTIVE', 'TRIAL'])
+
+      if (error) throw error
+
+      const formattedStudents = (data || []).map((s: any) => ({
+        id: s.id,
+        name: s.user?.name || "Sin nombre",
+        email: s.user?.email || ""
+      }))
+      setStudents(formattedStudents)
     } catch (error) {
       console.error("Error al cargar alumnos:", error)
     }
@@ -63,30 +72,46 @@ export default function PaymentForm({ preselectedStudentId }: PaymentFormProps) 
     setLoading(true)
 
     try {
-      const response = await fetch("/api/payments", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          ...formData,
-          amount: parseFloat(formData.amount)
+      const amountFloat = parseFloat(formData.amount)
+      
+      const { data: payment, error: createError } = await supabase
+        .from('Payment')
+        .insert({
+          studentId: formData.studentId,
+          amount: amountFloat,
+          description: formData.description,
+          method: formData.method,
+          status: formData.status,
+          paidAt: formData.paidAt ? new Date(formData.paidAt).toISOString() : formData.status === "PAID" ? new Date().toISOString() : null,
+          dueDate: formData.dueDate ? new Date(formData.dueDate).toISOString() : null,
+          referenceNumber: formData.referenceNumber,
+          notes: formData.notes,
+          isAutomatic: false
         })
-      })
+        .select()
+        .single()
 
-      const data = await response.json()
+      if (createError) throw createError
 
-      if (!response.ok) {
-        setError(data.error || "Error al registrar el pago")
-        return
+      // Si el pago está pagado, actualizar el LTV del alumno
+      if (formData.status === "PAID") {
+        const { data: student } = await supabase
+          .from('StudentProfile')
+          .select('lifetimeValue')
+          .eq('id', formData.studentId)
+          .single()
+
+        await supabase
+          .from('StudentProfile')
+          .update({
+            lifetimeValue: (student?.lifetimeValue || 0) + amountFloat
+          })
+          .eq('id', formData.studentId)
       }
 
-      // Redirigir a la ficha del alumno
       router.push(`/dashboard/alumnos/${formData.studentId}`)
-      router.refresh()
-
-    } catch (error) {
-      setError("Error al registrar el pago")
+    } catch (error: any) {
+      setError(error.message || "Error al registrar el pago")
     } finally {
       setLoading(false)
     }

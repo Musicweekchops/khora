@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useAuth } from '@/lib/context/AuthContext'
+import { supabase } from '@/lib/supabase'
 
 interface ClassData {
   id: string
@@ -20,11 +22,6 @@ interface ClassData {
       phone: string
     }
   }
-  tasks: Array<{
-    id: string
-    title: string
-    completed: boolean
-  }>
 }
 
 interface DashboardClassesData {
@@ -35,49 +32,90 @@ interface DashboardClassesData {
 
 export default function DashboardClasses() {
   const router = useRouter()
+  const { profile } = useAuth()
   const [data, setData] = useState<DashboardClassesData | null>(null)
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
 
   useEffect(() => {
-    fetchData()
+    if (profile?.teacherProfileId) {
+      fetchData(profile.teacherProfileId)
 
-    // Actualizar cada 30 segundos
-    const interval = setInterval(() => {
-      fetchData()
-    }, 30000)
+      const interval = setInterval(() => {
+        fetchData(profile.teacherProfileId)
+      }, 30000)
 
-    return () => clearInterval(interval)
-  }, [])
+      return () => clearInterval(interval)
+    }
+  }, [profile?.teacherProfileId])
 
-  const fetchData = async () => {
+  const fetchData = async (teacherId: string) => {
     try {
-      const response = await fetch('/api/classes/current')
-      if (response.ok) {
-        const result = await response.json()
+      const now = new Date()
+      const nowIso = now.toISOString()
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
+      const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString()
+
+      // 1. Obtener la clase actual o próxima del día
+      const { data: dayClasses } = await supabase
+        .from('Class')
+        .select(`
+          *,
+          student:StudentProfile(
+            id,
+            user:User(name, email, phone)
+          )
+        `)
+        .eq('teacherId', teacherId)
+        .gte('date', startOfToday)
+        .lt('date', endOfToday)
+        .order('startTime', { ascending: true })
+
+      let currentClass: ClassData | null = null
+      let isInProgress = false
+
+      if (dayClasses && dayClasses.length > 0) {
+        const currentTime = now.getHours() * 60 + now.getMinutes()
         
-        // También obtener próximas clases
-        const upcomingResponse = await fetch('/api/classes?status=SCHEDULED')
-        let upcomingClasses: ClassData[] = []
-        
-        if (upcomingResponse.ok) {
-          const allClasses = await upcomingResponse.json()
-          const now = new Date()
+        for (const c of dayClasses) {
+          const [startH, startM] = c.startTime.split(':').map(Number)
+          const [endH, endM] = (c.endTime || '').split(':').map(Number) || [startH + 1, startM]
+          const startTotal = startH * 60 + startM
+          const endTotal = endH * 60 + endM
+
+          if (currentTime >= startTotal - 15 && currentTime <= endTotal) {
+            currentClass = c as any
+            isInProgress = currentTime >= startTotal
+            break
+          }
           
-          upcomingClasses = allClasses
-            .filter((c: ClassData) => new Date(c.date) > now)
-            .sort((a: ClassData, b: ClassData) => 
-              new Date(a.date).getTime() - new Date(b.date).getTime()
-            )
-            .slice(0, 5) // Próximas 5 clases
+          if (currentTime < startTotal && !currentClass) {
+            currentClass = c as any
+          }
         }
-        
-        setData({
-          currentClass: result.currentClass,
-          upcomingClasses,
-          isInProgress: result.isInProgress || false
-        })
       }
+
+      // 2. Obtener próximas clases (desde mañana en adelante)
+      const { data: upcoming } = await supabase
+        .from('Class')
+        .select(`
+          *,
+          student:StudentProfile(
+            id,
+            user:User(name, email, phone)
+          )
+        `)
+        .eq('teacherId', teacherId)
+        .gt('date', endOfToday)
+        .eq('status', 'SCHEDULED')
+        .order('date', { ascending: true })
+        .limit(5)
+
+      setData({
+        currentClass,
+        upcomingClasses: (upcoming || []) as any[],
+        isInProgress
+      })
     } catch (error) {
       console.error('Error al cargar clases:', error)
     } finally {
@@ -88,20 +126,20 @@ export default function DashboardClasses() {
   const updateClassStatus = async (classId: string, newStatus: string) => {
     setUpdating(true)
     try {
-      const response = await fetch(`/api/classes/${classId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ 
+      const { error } = await supabase
+        .from('Class')
+        .update({ 
           status: newStatus,
-          attendanceMarked: true
+          // Nota: attendanceStatus o attendanceMarked dependerá de tu lógica de DB
+          attendanceStatus: newStatus === 'CONFIRMED' ? 'PRESENT' : 
+                           newStatus === 'NO_SHOW' ? 'ABSENT' : null
         })
-      })
+        .eq('id', classId)
 
-      if (response.ok) {
-        await fetchData()
-        router.refresh()
+      if (!error) {
+        if (profile?.teacherProfileId) {
+          await fetchData(profile.teacherProfileId)
+        }
       }
     } catch (error) {
       console.error('Error al actualizar estado:', error)

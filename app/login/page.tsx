@@ -1,9 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { supabase } from "@/lib/supabase"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -19,17 +19,15 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const result = await signIn("credentials", {
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
-        redirect: false,
       })
 
-      if (result?.error) {
+      if (authError) {
         setError("Email o contraseña incorrectos")
       } else {
         router.push("/dashboard")
-        router.refresh()
       }
     } catch (error) {
       setError("Error al iniciar sesión")

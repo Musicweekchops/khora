@@ -1,14 +1,13 @@
-import { getServerSession } from "next-auth"
-import { redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
+"use client"
+
 import StudentsList from "@/components/students/StudentsList"
+import { useAuth } from "@/lib/context/AuthContext"
 
-export default async function AlumnosPage() {
-  const session = await getServerSession(authOptions)
+export default function AlumnosPage() {
+  const { profile, loading } = useAuth()
 
-  if (!session || session.user.role !== "TEACHER") {
-    redirect("/login")
-  }
+  if (loading) return null
+  if (!profile || profile.role !== "TEACHER") return null
 
   return (
     <div className="space-y-6">

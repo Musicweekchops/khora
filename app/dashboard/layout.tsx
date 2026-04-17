@@ -1,23 +1,38 @@
-import { getServerSession } from "next-auth"
-import { redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
-import Sidebar from "@/components/dashboard/Sidebar"
+"use client"
 
-export default async function DashboardLayout({
+import Sidebar from "@/components/dashboard/Sidebar"
+import { useAuth } from "@/lib/context/AuthContext"
+import { useRouter } from "next/navigation"
+import { useEffect } from "react"
+
+export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const session = await getServerSession(authOptions)
+  const { user, profile, loading } = useAuth()
+  const router = useRouter()
 
-  if (!session || !session.user) {
-    redirect("/login")
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push("/login")
+    }
+  }, [user, loading, router])
+
+  if (loading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-[#F1F4F8]">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+      </div>
+    )
   }
+
+  if (!user || !profile) return null
 
   return (
     <div className="flex min-h-screen bg-[#F1F4F8]">
       {/* Sidebar */}
-      <Sidebar user={session.user} />
+      <Sidebar user={{ name: profile.name, role: profile.role }} />
 
       {/* Main Content */}
       <main className="flex-1 ml-64 min-h-screen">

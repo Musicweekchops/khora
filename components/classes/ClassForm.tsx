@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useAuth } from "@/lib/context/AuthContext"
+import { supabase } from "@/lib/supabase"
 
 interface Student {
   id: string
@@ -12,6 +14,7 @@ interface Student {
 
 export default function ClassForm() {
   const router = useRouter()
+  const { profile } = useAuth()
   const [loading, setLoading] = useState(false)
   const [students, setStudents] = useState<Student[]>([])
   const [error, setError] = useState("")
@@ -25,22 +28,28 @@ export default function ClassForm() {
   })
 
   useEffect(() => {
-    fetchStudents()
-  }, [])
+    if (profile?.teacherProfileId) {
+      fetchStudents(profile.teacherProfileId)
+    }
+  }, [profile?.teacherProfileId])
 
-  const fetchStudents = async () => {
+  const fetchStudents = async (teacherId: string) => {
     try {
-      const response = await fetch("/api/students")
-      if (response.ok) {
-        const data = await response.json()
-        const formattedStudents = data.map((s: any) => ({
-          id: s.id,
-          name: s.name,
-          email: s.email,
-          modalidad: s.modalidad
-        }))
-        setStudents(formattedStudents)
-      }
+      const { data, error } = await supabase
+        .from('StudentProfile')
+        .select('id, modalidad, user:User(name, email)')
+        .eq('teacherId', teacherId)
+        .in('status', ['ACTIVE', 'TRIAL'])
+
+      if (error) throw error
+
+      const formattedStudents = (data || []).map((s: any) => ({
+        id: s.id,
+        name: s.user?.name || "Sin nombre",
+        email: s.user?.email || "",
+        modalidad: s.modalidad
+      }))
+      setStudents(formattedStudents)
     } catch (error) {
       console.error("Error al cargar alumnos:", error)
     }
@@ -61,36 +70,30 @@ export default function ClassForm() {
     setLoading(true)
 
     try {
-      // Combinar fecha y hora
-      const scheduledDateTime = new Date(`${formData.scheduledDate}T${formData.scheduledTime}`)
-
-      const response = await fetch("/api/classes", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          studentId: formData.studentId,
-          scheduledDate: scheduledDateTime.toISOString(),
-          duration: formData.duration,
-          modalidad: formData.modalidad,
-          isTrialClass: formData.isTrialClass
-        })
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        setError(data.error || "Error al crear la clase")
-        return
+      if (!profile?.teacherProfileId) {
+        throw new Error("Teacher profile not found")
       }
 
-      // Redirigir a la lista de clases
-      router.push("/dashboard/clases")
-      router.refresh()
+      const { data, error: classError } = await supabase
+        .from('Class')
+        .insert({
+          studentId: formData.studentId,
+          teacherId: profile.teacherProfileId,
+          date: formData.scheduledDate,
+          startTime: formData.scheduledTime,
+          duration: formData.duration,
+          modalidad: formData.modalidad,
+          isTrialClass: formData.isTrialClass,
+          status: 'SCHEDULED'
+        })
+        .select()
+        .single()
 
-    } catch (error) {
-      setError("Error al crear la clase")
+      if (classError) throw classError
+
+      router.push("/dashboard/clases")
+    } catch (error: any) {
+      setError(error.message || "Error al crear la clase")
     } finally {
       setLoading(false)
     }
