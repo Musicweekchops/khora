@@ -1,25 +1,20 @@
-import { getServerSession } from "next-auth"
-import { redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
+"use client"
+
+import { useSearchParams } from "next/navigation"
+import { useAuth } from "@/lib/context/AuthContext"
 import PaymentForm from "@/components/payments/PaymentForm"
 
-export default async function NuevoPagoPage({
-  searchParams
-}: {
-  searchParams: Promise<{ studentId?: string }>
-}) {
-  const session = await getServerSession(authOptions)
+export default function NuevoPagoPage() {
+  const searchParams = useSearchParams()
+  const { profile, loading } = useAuth()
+  
+  const studentId = searchParams.get("studentId") || undefined
 
-  if (!session || session.user.role !== "TEACHER") {
-    redirect("/login")
-  }
-
-  const params = await searchParams
-  const preselectedStudentId = params.studentId
+  if (loading) return null
+  if (!profile || profile.role !== "TEACHER") return null
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
@@ -35,10 +30,9 @@ export default async function NuevoPagoPage({
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="bg-white rounded-lg shadow-sm p-6">
-          <PaymentForm preselectedStudentId={preselectedStudentId} />
+          <PaymentForm preselectedStudentId={studentId} />
         </div>
       </main>
     </div>

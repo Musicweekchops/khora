@@ -1,14 +1,13 @@
-import { getServerSession } from "next-auth"
-import { redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
+"use client"
+
+import { useAuth } from "@/lib/context/AuthContext"
 import FinancialDashboard from "@/components/financial/FinancialDashboard"
 
-export default async function FinancieroPage() {
-  const session = await getServerSession(authOptions)
+export default function FinancieroPage() {
+  const { profile, loading } = useAuth()
 
-  if (!session || session.user.role !== "TEACHER") {
-    redirect("/login")
-  }
+  if (loading) return null
+  if (!profile || profile.role !== "TEACHER") return null
 
   return (
     <div className="space-y-6">

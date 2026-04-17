@@ -1,21 +1,15 @@
-import { getServerSession } from "next-auth"
-import { redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
+"use client"
+
+import { useParams } from "next/navigation"
+import { useAuth } from "@/lib/context/AuthContext"
 import StudentDetail from "@/components/students/StudentDetail"
 
-export default async function AlumnoDetailPage({
-  params
-}: {
-  params: Promise<{ id: string }>
-}) {
-  const session = await getServerSession(authOptions)
+export default function AlumnoDetailPage() {
+  const { id } = useParams()
+  const { profile, loading } = useAuth()
 
-  if (!session || session.user.role !== "TEACHER") {
-    redirect("/login")
-  }
-
-  // Await params in Next.js 15
-  const { id } = await params
+  if (loading) return null
+  if (!profile || profile.role !== "TEACHER") return null
 
   return (
     <div className="space-y-6">
@@ -28,7 +22,7 @@ export default async function AlumnoDetailPage({
         </a>
       </div>
       
-      <StudentDetail studentId={id} />
+      <StudentDetail studentId={id as string} />
     </div>
   )
 }

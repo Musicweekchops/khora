@@ -1,18 +1,16 @@
-import { getServerSession } from "next-auth"
-import { redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
+"use client"
+
+import { useAuth } from "@/lib/context/AuthContext"
 import ClassForm from "@/components/classes/ClassForm"
 
-export default async function NuevaClasePage() {
-  const session = await getServerSession(authOptions)
+export default function NuevaClasePage() {
+  const { profile, loading } = useAuth()
 
-  if (!session || session.user.role !== "TEACHER") {
-    redirect("/login")
-  }
+  if (loading) return null
+  if (!profile || profile.role !== "TEACHER") return null
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
@@ -28,7 +26,6 @@ export default async function NuevaClasePage() {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="bg-white rounded-lg shadow-sm p-6">
           <ClassForm />

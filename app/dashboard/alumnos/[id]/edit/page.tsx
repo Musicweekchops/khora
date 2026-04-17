@@ -1,25 +1,18 @@
-import { getServerSession } from "next-auth"
-import { redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
+"use client"
+
+import { useParams } from "next/navigation"
+import { useAuth } from "@/lib/context/AuthContext"
 import StudentForm from "@/components/students/StudentForm"
 
-export default async function EditarAlumnoPage({
-  params
-}: {
-  params: Promise<{ id: string }>
-}) {
-  const session = await getServerSession(authOptions)
+export default function EditarAlumnoPage() {
+  const { id } = useParams()
+  const { profile, loading } = useAuth()
 
-  if (!session || session.user.role !== "TEACHER") {
-    redirect("/login")
-  }
-
-  // Await params in Next.js 15
-  const { id } = await params
+  if (loading) return null
+  if (!profile || profile.role !== "TEACHER") return null
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
@@ -43,10 +36,9 @@ export default async function EditarAlumnoPage({
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="bg-white rounded-lg shadow-sm p-6">
-          <StudentForm mode="edit" studentId={id} />
+          <StudentForm mode="edit" studentId={id as string} />
         </div>
       </main>
     </div>

@@ -1,14 +1,13 @@
-import { getServerSession } from "next-auth"
-import { redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
+"use client"
+
+import { useAuth } from "@/lib/context/AuthContext"
 import StudentForm from "@/components/students/StudentForm"
 
-export default async function NuevoAlumnoPage() {
-  const session = await getServerSession(authOptions)
+export default function NuevoAlumnoPage() {
+  const { profile, loading } = useAuth()
 
-  if (!session || session.user.role !== "TEACHER") {
-    redirect("/login")
-  }
+  if (loading) return null
+  if (!profile || profile.role !== "TEACHER") return null
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">

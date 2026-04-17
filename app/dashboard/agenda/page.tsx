@@ -1,16 +1,13 @@
-import { getServerSession } from 'next-auth'
-import { redirect } from 'next/navigation'
-import { authOptions } from '@/lib/auth'
-import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
-import WeeklyCalendar from '@/components/dashboard/calendar/WeeklyCalendar'
+"use client"
 
-export default async function AgendaPage() {
-  const session = await getServerSession(authOptions)
+import { useAuth } from "@/lib/context/AuthContext"
+import WeeklyCalendar from "@/components/dashboard/calendar/WeeklyCalendar"
 
-  if (!session || session.user.role !== 'TEACHER') {
-    redirect('/login')
-  }
+export default function AgendaPage() {
+  const { profile, loading } = useAuth()
+
+  if (loading) return null
+  if (!profile || profile.role !== "TEACHER") return null
 
   return (
     <div className="space-y-6">
@@ -23,7 +20,6 @@ export default async function AgendaPage() {
         </p>
       </div>
 
-      {/* Legend */}
       <div className="flex flex-wrap gap-4 text-[11px] font-bold uppercase tracking-wider text-neutral-400 bg-white/50 backdrop-blur-sm p-3 rounded-lg border border-neutral-100 shadow-sm inline-flex">
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded-full bg-primary" />
