@@ -1,7 +1,8 @@
-'use client'
+"use client"
 
 import { useState, useEffect } from 'react'
 import { Music, Drum, Package, Check, Star } from 'lucide-react'
+import { supabase } from "@/lib/supabase"
 
 interface ClassType {
   id: string
@@ -22,16 +23,23 @@ export default function ClassTypeSelection({ onClassTypeSelected }: ClassTypeSel
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/public/class-types')
-      .then(res => res.json())
-      .then(data => {
-        setClassTypes(data.classTypes)
-        setLoading(false)
-      })
-      .catch(err => {
+    const fetchClassTypes = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('ClassType')
+          .select('*')
+          .eq('active', true)
+
+        if (error) throw error
+        setClassTypes(data || [])
+      } catch (err) {
         console.error('Error loading class types:', err)
+      } finally {
         setLoading(false)
-      })
+      }
+    }
+
+    fetchClassTypes()
   }, [])
 
   if (loading) {

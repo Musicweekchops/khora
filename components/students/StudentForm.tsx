@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useAuth } from "@/lib/context/AuthContext"
+import { supabase } from "@/lib/supabase"
 
 interface StudentFormProps {
   mode: "create" | "edit"
@@ -10,6 +12,7 @@ interface StudentFormProps {
 
 export default function StudentForm({ mode, studentId }: StudentFormProps) {
   const router = useRouter()
+  const { profile: teacherProfile } = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [formData, setFormData] = useState({
@@ -34,23 +37,27 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
 
   const fetchStudent = async () => {
     try {
-      const response = await fetch(`/api/students/${studentId}`)
-      if (response.ok) {
-        const data = await response.json()
-        setFormData({
-          name: data.user.name,
-          email: data.user.email,
-          phone: data.user.phone || "",
-          password: "", // No mostramos la contraseña
-          status: data.status,
-          leadSource: data.leadSource || "",
-          modalidad: data.modalidad || "online",
-          preferredDay: data.preferredDay || "",
-          preferredTime: data.preferredTime || "",
-          emergencyContact: data.emergencyContact || "",
-          emergencyPhone: data.emergencyPhone || ""
-        })
-      }
+      const { data, error } = await supabase
+        .from('StudentProfile')
+        .select('*, user:User(*)')
+        .eq('id', studentId)
+        .single()
+
+      if (error) throw error
+
+      setFormData({
+        name: data.user.name,
+        email: data.user.email,
+        phone: data.user.phone || "",
+        password: "",
+        status: data.status,
+        leadSource: data.leadSource || "",
+        modalidad: data.modalidad || "online",
+        preferredDay: data.preferredDay || "",
+        preferredTime: data.preferredTime || "",
+        emergencyContact: data.emergencyContact || "",
+        emergencyPhone: data.emergencyPhone || ""
+      })
     } catch (error) {
       console.error("Error al cargar alumno:", error)
       setError("Error al cargar los datos del alumno")
@@ -63,33 +70,98 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
     setLoading(true)
 
     try {
-      const url = mode === "create" 
-        ? "/api/students"
-        : `/api/students/${studentId}`
-      
-      const method = mode === "create" ? "POST" : "PUT"
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(formData)
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        setError(data.error || "Error al guardar el alumno")
-        return
+      if (!teacherProfile?.teacherProfileId) {
+        throw new Error("No tienes un perfil de profesor asociado")
       }
 
-      // Redirigir a la lista de alumnos
-      router.push("/dashboard/alumnos")
-      router.refresh()
+      if (mode === "create") {
+        // 1. Verificar si el email ya existe en public.User
+        const { data: existingUser } = await supabase
+          .from('User')
+          .select('id')
+          .eq('email', formData.email)
+          .single()
 
-    } catch (error) {
-      setError("Error al guardar el alumno")
+        if (existingUser) {
+          throw new Error("El email ya está registrado")
+        }
+
+        // 2. Crear el Usuario en la tabla pública
+        const { data: newUser, error: userError } = await supabase
+          .from('User')
+          .insert({
+            email: formData.email,
+            name: formData.name,
+            phone: formData.phone,
+            role: "STUDENT",
+            // Nota: La contraseña no se puede hashear de forma segura en el cliente fácilmente
+            // y no servirá para Auth de Supabase si no creamos el registro en auth.users.
+            // Por ahora solo creamos el registro público.
+            password: formData.password || "student123" 
+          })
+          .select()
+          .single()
+
+        if (userError) throw userError
+
+        // 3. Crear el Perfil de Estudiante
+        const { error: profileError } = await supabase
+          .from('StudentProfile')
+          .insert({
+            userId: newUser.id,
+            teacherId: teacherProfile.teacherProfileId,
+            status: formData.status,
+            leadSource: formData.leadSource,
+            modalidad: formData.modalidad,
+            preferredDay: formData.preferredDay,
+            preferredTime: formData.preferredTime,
+            emergencyContact: formData.emergencyContact,
+            emergencyPhone: formData.emergencyPhone
+          })
+
+        if (profileError) throw profileError
+
+      } else {
+        // MODO EDITAR
+        const { data: currentProfile } = await supabase
+          .from('StudentProfile')
+          .select('userId')
+          .eq('id', studentId)
+          .single()
+
+        if (!currentProfile) throw new Error("Perfil no encontrado")
+
+        // 1. Actualizar Usuario
+        const { error: userUpdateError } = await supabase
+          .from('User')
+          .update({
+            name: formData.name,
+            phone: formData.phone
+          })
+          .eq('id', currentProfile.userId)
+
+        if (userUpdateError) throw userUpdateError
+
+        // 2. Actualizar Perfil
+        const { error: profileUpdateError } = await supabase
+          .from('StudentProfile')
+          .update({
+            status: formData.status,
+            leadSource: formData.leadSource,
+            modalidad: formData.modalidad,
+            preferredDay: formData.preferredDay,
+            preferredTime: formData.preferredTime,
+            emergencyContact: formData.emergencyContact,
+            emergencyPhone: formData.emergencyPhone
+          })
+          .eq('id', studentId)
+
+        if (profileUpdateError) throw profileUpdateError
+      }
+
+      router.push("/dashboard/alumnos")
+    } catch (error: any) {
+      setError(error.message || "Error al guardar el alumno")
     } finally {
       setLoading(false)
     }

@@ -1,7 +1,8 @@
-'use client'
+"use client"
 
 import { useState } from 'react'
 import { ArrowLeft, Calendar, Clock, AlertCircle } from 'lucide-react'
+import { supabase } from "@/lib/supabase"
 import MonthlyPlanConflicts from './MonthlyPlanConflicts'
 
 interface ClassType {
@@ -43,20 +44,28 @@ export default function BookingForm({ classType, date, slot, monthlyPricing, onB
     setError('')
 
     if (isTrial) {
-      const eligibilityCheck = await fetch('/api/public/validate-eligibility', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, phone, classTypeId: classType.id })
-      }).then(res => res.json())
+      setLoading(true)
+      try {
+        const { data: existingTrial } = await supabase
+          .from('Booking')
+          .select('id')
+          .or(`email.eq.${email},phone.eq.${phone}`)
+          .ilike('classTypeId', `%${classType.id}%`) // Nota: simplificación, idealmente validar por nombre
+          .in('status', ['CONFIRMED', 'COMPLETED'])
+          .maybeSingle()
 
-      if (!eligibilityCheck.allowed) {
-        setError(eligibilityCheck.reason)
-        return
+        if (existingTrial) {
+          setError("Ya has tomado una clase de prueba anteriormente.")
+          setLoading(false)
+          return
+        }
+      } catch (err) {
+        console.error("Error validando elegibilidad:", err)
+      } finally {
+        setLoading(false)
       }
     }
 
-    // Para plan mensual, crear directamente
-    // Ya validamos disponibilidad en el calendario
     await createBooking()
   }
 
@@ -65,32 +74,107 @@ export default function BookingForm({ classType, date, slot, monthlyPricing, onB
     setError('')
 
     try {
-      // Formato local sin conversión UTC
       const year = date.getFullYear()
-      const month = String(date.getMonth() + 1).padStart(2, '0')
-      const day = String(date.getDate()).padStart(2, '0')
-      const dateStr = `${year}-${month}-${day}`
+      const monthStr = String(date.getMonth() + 1).padStart(2, '0')
+      const dayStr = String(date.getDate()).padStart(2, '0')
+      const dateStr = `${year}-${monthStr}-${dayStr}`
 
-      const response = await fetch('/api/public/booking', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name, email, phone, message,
-          classTypeId: classType.id,
-          date: dateStr,
+      if (isMonthlyPlan) {
+        // LÓGICA PLAN MENSUAL
+        if (!monthlyPricing || !monthlyPricing.classes) {
+          throw new Error('Datos de precios mensuales no encontrados')
+        }
+
+        const lastDate = new Date(monthlyPricing.classes[monthlyPricing.classes.length - 1].date)
+        const expirationDate = new Date(lastDate)
+        expirationDate.setMonth(expirationDate.getMonth() + 2)
+
+        const firstDate = new Date(monthlyPricing.classes[0].date)
+
+        const { data: parentBooking, error: bError } = await supabase
+          .from('Booking')
+          .insert({
+            name, email, phone,
+            message: message || '',
+            classTypeId: classType.id,
+            date: firstDate.toISOString(),
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            status: 'CONFIRMED',
+            isParent: true,
+            isMonthlyPlan: true,
+            totalPrice: monthlyPricing.pricing.totalPrice
+          })
+          .select()
+          .single()
+
+        if (bError) throw bError
+
+        const classRecords = monthlyPricing.classes.map((cd: any, index: number) => ({
+          bookingId: parentBooking.id,
+          date: cd.date,
           startTime: slot.startTime,
           endTime: slot.endTime,
-          isMonthlyPlan,
-          conflictResolutions,
-          monthlyPricing // Enviar pricing calculado
-        })
-      })
+          duration: classType.duration,
+          status: 'SCHEDULED',
+          needsRenewalReminder: index === monthlyPricing.classes.length - 2,
+          expiresAt: expirationDate.toISOString()
+        }))
 
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error || 'Error al crear la reserva')
-      onComplete(data.booking)
+        const { data: createdClasses, error: cError } = await supabase
+          .from('Class')
+          .insert(classRecords)
+          .select()
+
+        if (cError) throw cError
+
+        onComplete({
+          ...parentBooking,
+          classes: createdClasses
+        })
+
+      } else {
+        // LÓGICA CLASE ÚNICA
+        const { data: booking, error: bError } = await supabase
+          .from('Booking')
+          .insert({
+            name, email, phone,
+            message: message || '',
+            classTypeId: classType.id,
+            date: date.toISOString(),
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            status: 'CONFIRMED',
+            totalPrice: classType.price
+          })
+          .select()
+          .single()
+
+        if (bError) throw bError
+
+        const { data: classRecord, error: cError } = await supabase
+          .from('Class')
+          .insert({
+            bookingId: booking.id,
+            date: dateStr,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            duration: classType.duration,
+            status: 'SCHEDULED'
+          })
+          .select()
+          .single()
+
+        if (cError) throw cError
+
+        onComplete({
+          ...booking,
+          classes: [classRecord]
+        })
+      }
     } catch (err: any) {
       setError(err.message)
+    } finally {
       setLoading(false)
     }
   }

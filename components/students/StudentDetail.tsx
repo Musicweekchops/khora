@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { useAuth } from "@/lib/context/AuthContext"
+import { supabase } from "@/lib/supabase"
 
 interface StudentDetailProps {
   studentId: string
@@ -10,21 +12,49 @@ interface StudentDetailProps {
 
 export default function StudentDetail({ studentId }: StudentDetailProps) {
   const router = useRouter()
+  const { profile: userProfile } = useAuth()
   const [student, setStudent] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
-    fetchStudent()
+    if (studentId) {
+      fetchStudent()
+    }
   }, [studentId])
 
   const fetchStudent = async () => {
     try {
-      const response = await fetch(`/api/students/${studentId}`)
-      if (response.ok) {
-        const data = await response.json()
-        setStudent(data)
+      const { data, error } = await supabase
+        .from('StudentProfile')
+        .select(`
+          *,
+          user:User(*),
+          classes:Class(*),
+          payments:Payment(*)
+        `)
+        .eq('id', studentId)
+        .single()
+
+      if (error) throw error
+      
+      // Formatear datos para el componente
+      const formattedData = {
+        ...data,
+        totalClassesTaken: data.classes?.filter((c: any) => c.status === 'COMPLETED').length || 0,
+        totalMonthsActive: data.createdAt ? Math.max(1, Math.ceil((new Date().getTime() - new Date(data.createdAt).getTime()) / (1000 * 60 * 60 * 24 * 30))) : 0,
+        lastClassDate: data.classes?.filter((c: any) => c.status === 'COMPLETED').sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]?.date || null,
+        reschedulesThisMonth: data.classes?.filter((c: any) => {
+          const d = new Date(c.date)
+          const now = new Date()
+          return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear() && c.status === 'RESCHEDULED'
+        }).length || 0,
+        classes: data.classes?.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()) || [],
+        payments: data.payments?.sort((a: any, b: any) => new Date(b.paidAt || b.date).getTime() - new Date(a.paidAt || a.date).getTime()) || [],
+        tasks: [] // Tareas se manejarán por separado si es necesario
       }
+
+      setStudent(formattedData)
     } catch (error) {
       console.error("Error al cargar alumno:", error)
     } finally {
@@ -39,14 +69,14 @@ export default function StudentDetail({ studentId }: StudentDetailProps) {
 
     setDeleting(true)
     try {
-      const response = await fetch(`/api/students/${studentId}`, {
-        method: "DELETE"
-      })
+      const { error } = await supabase
+        .from('StudentProfile')
+        .update({ status: 'INACTIVE' })
+        .eq('id', studentId)
 
-      if (response.ok) {
-        router.push("/dashboard/alumnos")
-        router.refresh()
-      }
+      if (error) throw error
+
+      router.push("/dashboard/alumnos")
     } catch (error) {
       console.error("Error al desactivar alumno:", error)
       alert("Error al desactivar el alumno")

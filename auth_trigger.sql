@@ -32,14 +32,14 @@ ALTER TABLE public."User" ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Users can read own record" ON public."User";
 CREATE POLICY "Users can read own record" ON public."User"
-  FOR SELECT USING (auth.uid() = id);
+  FOR SELECT USING (auth.uid()::text = id::text);
 
 DROP POLICY IF EXISTS "Teachers can read all profiles" ON public."User";
 CREATE POLICY "Teachers can read all profiles" ON public."User"
   FOR SELECT USING (
     EXISTS (
       SELECT 1 FROM public."User" 
-      WHERE id = auth.uid() AND role = 'TEACHER'
+      WHERE id::text = auth.uid()::text AND role = 'TEACHER'
     )
   );
 
@@ -48,7 +48,7 @@ ALTER TABLE public."TeacherProfile" ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Teachers can read own profile" ON public."TeacherProfile";
 CREATE POLICY "Teachers can read own profile" ON public."TeacherProfile"
-  FOR SELECT USING (userId = auth.uid());
+  FOR SELECT USING ("userId"::text = auth.uid()::text);
 
 -- 5. StudentProfile Policies
 ALTER TABLE public."StudentProfile" ENABLE ROW LEVEL SECURITY;
@@ -56,8 +56,8 @@ ALTER TABLE public."StudentProfile" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Teachers can read their students" ON public."StudentProfile";
 CREATE POLICY "Teachers can read their students" ON public."StudentProfile"
   FOR SELECT USING (
-    teacherId IN (
-      SELECT id FROM public."TeacherProfile" WHERE userId = auth.uid()
+    "teacherId" IN (
+      SELECT id FROM public."TeacherProfile" WHERE "userId"::text = auth.uid()::text
     )
   );
 
@@ -67,10 +67,10 @@ ALTER TABLE public."Payment" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Teachers can read their students payments" ON public."Payment";
 CREATE POLICY "Teachers can read their students payments" ON public."Payment"
   FOR SELECT USING (
-    studentId IN (
+    "studentId" IN (
       SELECT sp.id FROM public."StudentProfile" sp
       JOIN public."TeacherProfile" tp ON sp."teacherId" = tp.id
-      WHERE tp."userId" = auth.uid()
+      WHERE tp."userId"::text = auth.uid()::text
     )
   );
 
@@ -80,8 +80,8 @@ ALTER TABLE public."Class" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Teachers can read their own classes" ON public."Class";
 CREATE POLICY "Teachers can read their own classes" ON public."Class"
   FOR SELECT USING (
-    teacherId IN (
-      SELECT id FROM public."TeacherProfile" WHERE userId = auth.uid()
+    "teacherId" IN (
+      SELECT id FROM public."TeacherProfile" WHERE "userId"::text = auth.uid()::text
     )
   );
 

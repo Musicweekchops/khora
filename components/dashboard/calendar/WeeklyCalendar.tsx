@@ -1,7 +1,9 @@
-'use client'
+"use client"
 
 import { useState, useEffect } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { useAuth } from "@/lib/context/AuthContext"
+import { supabase } from "@/lib/supabase"
 import ClassBlock from './ClassBlock'
 import ClassModal from './ClassModal'
 
@@ -30,6 +32,7 @@ interface WeeklyCalendarProps {
 }
 
 export default function WeeklyCalendar({ initialWeek }: WeeklyCalendarProps) {
+  const { profile: teacherProfile } = useAuth()
   const [currentWeek, setCurrentWeek] = useState(initialWeek || getCurrentWeek())
   const [classes, setClasses] = useState<ClassData[]>([])
   const [loading, setLoading] = useState(true)
@@ -37,27 +40,78 @@ export default function WeeklyCalendar({ initialWeek }: WeeklyCalendarProps) {
   const [showModal, setShowModal] = useState(false)
 
   // Horarios del día (09:00 - 21:00)
-  const timeSlots = generateTimeSlots('09:00', '22:00', 60) // Hasta 22:00 para incluir slot de 21:00
+  const timeSlots = generateTimeSlots('09:00', '22:00', 60) 
   
   // Días de la semana (Lunes - Sábado)
   const weekDays = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB']
 
   useEffect(() => {
-    fetchClasses()
-  }, [currentWeek])
+    if (teacherProfile?.teacherProfileId) {
+      fetchClasses()
+    }
+  }, [currentWeek, teacherProfile?.teacherProfileId])
 
   const fetchClasses = async () => {
+    if (!teacherProfile?.teacherProfileId) return
     setLoading(true)
+
     try {
-      const res = await fetch(`/api/dashboard/calendar?week=${currentWeek}`)
-      const data = await res.json()
-      
-      if (data.success) {
-        setClasses(data.classes.map((c: any) => ({
-          ...c,
-          date: new Date(c.date)
-        })))
-      }
+      const [year, weekNum] = currentWeek.split('-W').map(Number)
+      const startDate = getDateOfISOWeek(weekNum, year)
+      const endDate = new Date(startDate)
+      endDate.setDate(startDate.getDate() + 6)
+      endDate.setHours(23, 59, 59, 999)
+
+      const { data, error } = await supabase
+        .from('Class')
+        .select(`
+          *,
+          student:StudentProfile(
+            id,
+            user:User(name, email, phone)
+          )
+        `)
+        .eq('teacherId', teacherProfile.teacherProfileId)
+        .gte('scheduledDate', startDate.toISOString())
+        .lte('scheduledDate', endDate.toISOString())
+
+      if (error) throw error
+
+      const formattedClasses = (data || []).map((c: any) => {
+        const scheduledDate = new Date(c.scheduledDate)
+        const startTime = scheduledDate.toLocaleTimeString("es-CL", { 
+          hour: "2-digit", 
+          minute: "2-digit",
+          hour12: false
+        })
+        const endTimeDate = new Date(scheduledDate.getTime() + (c.duration || 60) * 60000)
+        const endTime = endTimeDate.toLocaleTimeString("es-CL", { 
+          hour: "2-digit", 
+          minute: "2-digit",
+          hour12: false
+        })
+
+        return {
+          id: c.id,
+          date: scheduledDate,
+          startTime,
+          endTime,
+          duration: c.duration,
+          status: c.status,
+          studentName: c.student?.user?.name || 'Alumno Desconocido',
+          studentEmail: c.student?.user?.email,
+          studentPhone: c.student?.user?.phone,
+          studentId: c.student?.id,
+          bookingId: c.bookingId,
+          isPublicBooking: !!c.bookingId,
+          isMonthlyPlan: c.isMonthly || false,
+          classType: c.classType || 'Personalizada',
+          classTypeIcon: c.icon || '🎸',
+          needsRenewalReminder: false, // Lógica pendiente si es necesaria
+        }
+      })
+
+      setClasses(formattedClasses)
     } catch (error) {
       console.error('Error fetching classes:', error)
     } finally {

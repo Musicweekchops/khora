@@ -1,7 +1,8 @@
-'use client'
+"use client"
 
 import { useState, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, Calendar, Clock, ArrowLeft } from 'lucide-react'
+import { supabase } from "@/lib/supabase"
 
 interface Slot {
   startTime: string
@@ -52,45 +53,205 @@ export default function BookingCalendar({ classType, onDateTimeSelected, onBack 
 
   useEffect(() => {
     if (selectedDate) {
-      setLoading(true)
-      // Formato local sin conversión UTC
+      loadAvailabilityAndPricing()
+    }
+  }, [selectedDate, isMonthlyPlan])
+
+  const loadAvailabilityAndPricing = async () => {
+    if (!selectedDate) return
+    setLoading(true)
+
+    try {
       const year = selectedDate.getFullYear()
       const month = String(selectedDate.getMonth() + 1).padStart(2, '0')
       const day = String(selectedDate.getDate()).padStart(2, '0')
       const dateStr = `${year}-${month}-${day}`
+      const dayOfWeek = selectedDate.getDay()
+
+      // 1. Obtener disponibilidad del profesor
+      const { data: teacher } = await supabase
+        .from('User')
+        .select('id, TeacherProfile(id)')
+        .eq('role', 'TEACHER')
+        .limit(1)
+        .single()
+
+      if (!teacher || !teacher.TeacherProfile) throw new Error('Profesor no encontrado')
+      const teacherId = (teacher.TeacherProfile as any)[0]?.id || (teacher.TeacherProfile as any).id
+
+      const { data: availConfig } = await supabase
+        .from('Availability')
+        .select('*')
+        .match({ teacherId, dayOfWeek, isActive: true })
+        .single()
+
+      if (!availConfig) {
+        setAvailability({ available: false, date: dateStr, dayOfWeek: getDayNameFull(dayOfWeek), slots: [], totalSlots: 0, availableSlots: 0, reason: 'No hay disponibilidad configurada' })
+        setLoading(false)
+        return
+      }
+
+      // 2. Verificar excepciones
+      const { data: exception } = await supabase
+        .from('AvailabilityException')
+        .select('*')
+        .match({ teacherId, date: dateStr })
+        .maybeSingle()
+
+      if (exception) {
+        setAvailability({ available: false, date: dateStr, dayOfWeek: getDayNameFull(dayOfWeek), slots: [], totalSlots: 0, availableSlots: 0, reason: exception.reason || 'Fecha bloqueada' })
+        setLoading(false)
+        return
+      }
+
+      // 3. Generar y filtrar slots
+      const slots = generateTimeSlotsInternal(availConfig.startTime, availConfig.endTime, classType.duration || availConfig.slotDuration)
       
-      // Cargar disponibilidad
-      fetch(`/api/public/availability?date=${dateStr}`)
-        .then(res => res.json())
-        .then(data => {
-          setAvailability(data)
-          
-          // Si es Plan Mensual, calcular precio dinámico
-          if (isMonthlyPlan) {
-            return fetch('/api/public/calculate-monthly-price', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                date: dateStr,
-                dayOfWeek: selectedDate.getDay()
-              })
-            })
-          }
-          return null
-        })
-        .then(res => res ? res.json() : null)
-        .then(pricingData => {
-          if (pricingData) {
-            setMonthlyPricing(pricingData)
-          }
-          setLoading(false)
-        })
-        .catch(err => {
-          console.error('Error loading data:', err)
-          setLoading(false)
-        })
+      const { data: bookedClasses } = await supabase
+        .from('Class')
+        .select('startTime, endTime')
+        .eq('date', dateStr)
+        .not('status', 'eq', 'CANCELLED')
+
+      const { data: existingBookings } = await supabase
+        .from('Booking')
+        .select('startTime, endTime')
+        .eq('date', dateStr)
+        .in('status', ['PENDING', 'CONFIRMED'])
+
+      const availableSlots = slots.filter(slot => {
+        const isBookedClass = (bookedClasses || []).some(bc => timesOverlap(slot.startTime, slot.endTime, bc.startTime, bc.endTime))
+        const isBookedBooking = (existingBookings || []).some(eb => timesOverlap(slot.startTime, slot.endTime, eb.startTime, eb.endTime))
+        return !isBookedClass && !isBookedBooking
+      })
+
+      setAvailability({
+        available: true,
+        date: dateStr,
+        dayOfWeek: getDayNameFull(dayOfWeek),
+        slots: availableSlots,
+        totalSlots: slots.length,
+        availableSlots: availableSlots.length
+      })
+
+      // 4. Calcular precio mensual si aplica
+      if (isMonthlyPlan) {
+        const pricing = calculateMonthlyPriceInternal(selectedDate, dayOfWeek)
+        setMonthlyPricing(pricing)
+      }
+
+    } catch (err) {
+      console.error('Error loading data:', err)
+    } finally {
+      setLoading(false)
     }
-  }, [selectedDate, isMonthlyPlan])
+  }
+
+  // Funciones lógicas internas (portadas de las rutas API)
+  const generateTimeSlotsInternal = (startTime: string, endTime: string, duration: number) => {
+    const slots = []
+    let current = startTime
+    const t2m = (t: string) => {
+      const [h, m] = t.split(':').map(Number)
+      return h * 60 + m
+    }
+    const addMins = (t: string, m: number) => {
+      const tot = t2m(t) + m
+      return `${String(Math.floor(tot/60)).padStart(2,'0')}:${String(tot%60).padStart(2,'0')}`
+    }
+
+    while (t2m(current) < t2m(endTime)) {
+      const slotEnd = addMins(current, duration)
+      if (t2m(slotEnd) <= t2m(endTime)) {
+        slots.push({ startTime: current, endTime: slotEnd, duration })
+      }
+      current = slotEnd
+    }
+    return slots
+  }
+
+  const timesOverlap = (s1: string, e1: string, s2: string, e2: string) => {
+    const t2m = (t: string) => {
+      const [h, m] = t.split(':').map(Number)
+      return h * 60 + m
+    }
+    return t2m(s1) < t2m(e2) && t2m(s2) < t2m(e1)
+  }
+
+  const calculateMonthlyPriceInternal = (selectedDate: Date, dayOfWeek: number) => {
+    const year = selectedDate.getFullYear()
+    const month = selectedDate.getMonth()
+    
+    const countOccurrences = (y: number, m: number, dw: number) => {
+      let count = 0
+      const d = new Date(y, m, 1)
+      while (d.getMonth() === m) {
+        if (d.getDay() === dw) count++
+        d.setDate(d.getDate() + 1)
+      }
+      return count
+    }
+
+    const countRemaining = (sd: Date, dw: number) => {
+      let count = 0
+      const m = sd.getMonth()
+      const d = new Date(sd)
+      while (d.getMonth() === m) {
+        if (d.getDay() === dw && d >= sd) count++
+        d.setDate(d.getDate() + 1)
+      }
+      return count
+    }
+
+    const genDates = (sd: Date, dw: number, tm: number, ty?: number) => {
+      const dates: Date[] = []
+      const y = ty || sd.getFullYear()
+      const d = new Date(sd)
+      while (d.getMonth() === tm && d.getFullYear() === y) {
+        if (d.getDay() === dw && d >= sd) dates.push(new Date(d))
+        d.setDate(d.getDate() + 1)
+      }
+      return dates
+    }
+
+    const totalWeeks = countOccurrences(year, month, dayOfWeek)
+    const remainingWeeks = countRemaining(selectedDate, dayOfWeek)
+    const currentMonthClasses = genDates(selectedDate, dayOfWeek, month)
+
+    if (remainingWeeks <= 1) {
+      const nextMonth = month + 1 > 11 ? 0 : month + 1
+      const nextYear = month + 1 > 11 ? year + 1 : year
+      const firstNext = new Date(nextYear, nextMonth, 1)
+      while (firstNext.getDay() !== dayOfWeek) firstNext.setDate(firstNext.getDate() + 1)
+      const nextMonthClasses = genDates(firstNext, dayOfWeek, nextMonth, nextYear)
+
+      return {
+        pricing: {
+          type: 'special',
+          totalPrice: 175000,
+          currentMonthPrice: 35000,
+          nextMonthPrice: 140000,
+          breakdown: {
+            currentMonth: { classes: currentMonthClasses.length, price: 35000 },
+            nextMonth: { classes: nextMonthClasses.length, price: 140000 }
+          }
+        },
+        classes: [...currentMonthClasses, ...nextMonthClasses]
+      }
+    } else {
+      const price = Math.round((140000 * remainingWeeks) / totalWeeks)
+      return {
+        pricing: {
+          type: 'proportional',
+          totalPrice: price,
+          breakdown: {
+            currentMonth: { classes: currentMonthClasses.length, price, calculation: `$140k * (${remainingWeeks}/${totalWeeks})` }
+          }
+        },
+        classes: currentMonthClasses
+      }
+    }
+  }
 
   if (currentWeek.length === 0) {
     return (

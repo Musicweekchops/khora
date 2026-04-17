@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useAuth } from "@/lib/context/AuthContext"
+import { supabase } from "@/lib/supabase"
 
 interface ClassData {
   id: string
@@ -36,28 +38,74 @@ interface CurrentClassResponse {
 
 export default function CurrentClass() {
   const router = useRouter()
+  const { profile: teacherProfile } = useAuth()
   const [data, setData] = useState<CurrentClassResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
 
   useEffect(() => {
-    fetchCurrentClass()
-
-    // Actualizar cada 30 segundos
-    const interval = setInterval(() => {
+    if (teacherProfile?.teacherProfileId) {
       fetchCurrentClass()
-    }, 30000)
 
-    return () => clearInterval(interval)
-  }, [])
+      const interval = setInterval(() => {
+        fetchCurrentClass()
+      }, 30000)
+
+      return () => clearInterval(interval)
+    }
+  }, [teacherProfile?.teacherProfileId])
 
   const fetchCurrentClass = async () => {
+    if (!teacherProfile?.teacherProfileId) return
+
     try {
-      const response = await fetch("/api/classes/current")
-      if (response.ok) {
-        const result = await response.json()
-        setData(result)
+      const now = new Date()
+      const startOfDay = new Date(now.setHours(0, 0, 0, 0)).toISOString()
+      const endOfDay = new Date(now.setHours(23, 59, 59, 999)).toISOString()
+
+      // Obtener clases de hoy para este profesor
+      const { data: classes, error } = await supabase
+        .from('Class')
+        .select(`
+          *,
+          student:StudentProfile(
+            id,
+            user:User(name, email, phone)
+          ),
+          notes:ClassNote(id, content),
+          tasks:Task(*)
+        `)
+        .eq('teacherId', teacherProfile.teacherProfileId)
+        .gte('scheduledDate', startOfDay)
+        .lte('scheduledDate', endOfDay)
+        .order('scheduledDate', { ascending: true })
+
+      if (error) throw error
+
+      const currentTime = new Date()
+      let currentClass: any = null
+      let nextClass: any = null
+      let isInProgress = false
+
+      for (const cls of classes || []) {
+        const startTime = new Date(cls.scheduledDate)
+        const endTime = new Date(startTime.getTime() + cls.duration * 60000)
+
+        if (currentTime >= startTime && currentTime <= endTime) {
+          currentClass = cls
+          isInProgress = true
+          break
+        } else if (currentTime < startTime && !nextClass) {
+          nextClass = cls
+        }
       }
+
+      // Si no hay una en curso, mostrar la próxima
+      setData({
+        currentClass: currentClass || nextClass,
+        nextClass: currentClass ? nextClass : null,
+        isInProgress
+      })
     } catch (error) {
       console.error("Error al cargar clase actual:", error)
     } finally {
@@ -68,21 +116,17 @@ export default function CurrentClass() {
   const updateClassStatus = async (classId: string, newStatus: string) => {
     setUpdating(true)
     try {
-      const response = await fetch(`/api/classes/${classId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ 
+      const { error } = await supabase
+        .from('Class')
+        .update({ 
           status: newStatus,
           attendanceMarked: true
         })
-      })
+        .eq('id', classId)
 
-      if (response.ok) {
-        await fetchCurrentClass()
-        router.refresh()
-      }
+      if (error) throw error
+
+      await fetchCurrentClass()
     } catch (error) {
       console.error("Error al actualizar estado:", error)
     } finally {
