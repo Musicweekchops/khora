@@ -301,7 +301,7 @@ export default function DashboardClasses() {
               </button>
               
               <Link
-                href={`/dashboard/clases/${currentClass.id}`}
+                href={`/dashboard/clases/detalles?id=${currentClass.id}`}
                 className="px-4 py-3 bg-white/10 text-white border border-white/20 rounded-xl hover:bg-white/20 font-bold text-sm text-center transition-all flex items-center justify-center gap-2"
               >
                 📋 Expandir Detalles
@@ -339,7 +339,7 @@ export default function DashboardClasses() {
               {upcomingClasses.map((clase) => (
                 <Link
                   key={clase.id}
-                  href={`/dashboard/clases/${clase.id}`}
+                  href={`/dashboard/clases/detalles?id=${clase.id}`}
                   className="block group"
                 >
                   <div className="flex justify-between items-center p-4 rounded-xl border border-neutral-100 group-hover:border-primary/20 group-hover:shadow-md transition-all bg-neutral-50/30 group-hover:bg-white">

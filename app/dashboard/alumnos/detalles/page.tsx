@@ -1,11 +1,12 @@
 "use client"
 
-import { useParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { useAuth } from "@/lib/context/AuthContext"
 import StudentDetail from "@/components/students/StudentDetail"
 
 export default function AlumnoDetailPage() {
-  const { id } = useParams()
+  const searchParams = useSearchParams()
+  const id = searchParams.get('id')
   const { profile, loading } = useAuth()
 
   if (loading) return null

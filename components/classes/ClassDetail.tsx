@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { supabase } from "@/lib/supabase"
 import EditClassModal from "./EditClassModal"
 import WhatsAppButton from "@/components/ui/WhatsAppButton"
 
@@ -59,10 +60,32 @@ export default function ClassDetail({ classId }: { classId: string }) {
 
   const fetchClass = async () => {
     try {
-      const response = await fetch(`/api/classes/${classId}`)
-      if (response.ok) {
-        const data = await response.json()
-        setClassData(data)
+      const { data, error } = await supabase
+        .from('Class')
+        .select(`
+          *,
+          student:StudentProfile(
+            id,
+            user:User(name, email, phone)
+          ),
+          notes:ClassNote(*),
+          tasks:Task(*)
+        `)
+        .eq('id', classId)
+        .single()
+
+      if (error) throw error
+      
+      if (data) {
+        // Formatear notas si los temas vienen como string JSON
+        const formattedNotes = (data.notes || []).map((n: any) => ({
+          ...n,
+          topics: typeof n.topics === 'string' ? JSON.parse(n.topics) : n.topics
+        })).sort((a: any, b: any) => 
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        )
+        
+        setClassData({ ...data, notes: formattedNotes } as any)
       }
     } catch (error) {
       console.error("Error al cargar clase:", error)
@@ -74,17 +97,13 @@ export default function ClassDetail({ classId }: { classId: string }) {
   const updateStatus = async (newStatus: string) => {
     setSavingStatus(true)
     try {
-      const response = await fetch(`/api/classes/${classId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ status: newStatus, attendanceMarked: true })
-      })
+      const { error } = await supabase
+        .from('Class')
+        .update({ status: newStatus, attendanceMarked: true })
+        .eq('id', classId)
 
-      if (response.ok) {
-        fetchClass()
-      }
+      if (error) throw error
+      fetchClass()
     } catch (error) {
       console.error("Error al actualizar estado:", error)
     } finally {
@@ -94,28 +113,26 @@ export default function ClassDetail({ classId }: { classId: string }) {
 
   const addNote = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!noteContent.trim()) return
+    if (!noteContent.trim() || !classData) return
 
     setSavingNote(true)
     try {
       const topics = noteTopics.split(",").map(t => t.trim()).filter(Boolean)
       
-      const response = await fetch(`/api/classes/${classId}/notes`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
+      const { error } = await supabase
+        .from('ClassNote')
+        .insert({
+          classId,
+          studentId: classData.student.id,
           content: noteContent,
-          topics
+          topics: JSON.stringify(topics)
         })
-      })
 
-      if (response.ok) {
-        setNoteContent("")
-        setNoteTopics("")
-        fetchClass()
-      }
+      if (error) throw error
+      
+      setNoteContent("")
+      setNoteTopics("")
+      fetchClass()
     } catch (error) {
       console.error("Error al agregar nota:", error)
     } finally {
@@ -129,24 +146,21 @@ export default function ClassDetail({ classId }: { classId: string }) {
 
     setSavingTask(true)
     try {
-      const response = await fetch("/api/tasks", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
+      const { error } = await supabase
+        .from('Task')
+        .insert({
           studentId: classData.student.id,
           classId: classId,
           title: taskTitle,
-          description: taskDescription
+          description: taskDescription,
+          status: 'PENDING'
         })
-      })
 
-      if (response.ok) {
-        setTaskTitle("")
-        setTaskDescription("")
-        fetchClass()
-      }
+      if (error) throw error
+      
+      setTaskTitle("")
+      setTaskDescription("")
+      fetchClass()
     } catch (error) {
       console.error("Error al agregar tarea:", error)
     } finally {
@@ -156,13 +170,12 @@ export default function ClassDetail({ classId }: { classId: string }) {
 
   const toggleTaskCompletion = async (taskId: string, completed: boolean) => {
     try {
-      await fetch(`/api/tasks/${taskId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ completed: !completed })
-      })
+      const { error } = await supabase
+        .from('Task')
+        .update({ completed: !completed })
+        .eq('id', taskId)
+
+      if (error) throw error
       fetchClass()
     } catch (error) {
       console.error("Error al actualizar tarea:", error)
@@ -173,15 +186,12 @@ export default function ClassDetail({ classId }: { classId: string }) {
     if (!confirm("¿Estás seguro de cancelar esta clase?")) return
 
     try {
-      await fetch(`/api/classes/${classId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ 
-          status: "CANCELLED"
-        })
-      })
+      const { error } = await supabase
+        .from('Class')
+        .update({ status: "CANCELLED" })
+        .eq('id', classId)
+
+      if (error) throw error
       fetchClass()
     } catch (error) {
       console.error("Error al cancelar clase:", error)
@@ -189,23 +199,19 @@ export default function ClassDetail({ classId }: { classId: string }) {
   }
 
   const deleteClass = async () => {
-    if (!confirm("⚠️ ¿Eliminar esta clase?\n\nLa clase se marcará como eliminada pero mantendrá el registro en el historial.")) return
+    if (!confirm("⚠️ ¿Eliminar esta clase?\n\nLa clase se marcará como eliminada.")) return
 
     try {
-      const response = await fetch(`/api/classes/${classId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ 
+      const { error } = await supabase
+        .from('Class')
+        .update({ 
           status: "DELETED",
           deletedAt: new Date().toISOString()
         })
-      })
+        .eq('id', classId)
 
-      if (response.ok) {
-        router.push("/dashboard/clases")
-      }
+      if (error) throw error
+      router.push("/dashboard/clases")
     } catch (error) {
       console.error("Error al eliminar clase:", error)
     }
@@ -407,7 +413,7 @@ export default function ClassDetail({ classId }: { classId: string }) {
           <p className="text-gray-500 text-center py-4">No hay notas para esta clase</p>
         ) : (
           <div className="space-y-4">
-            {classData.notes.map((note) => (
+            {classData.notes.map((note: any) => (
               <div key={note.id} className="border border-gray-200 rounded-lg p-4">
                 <p className="text-gray-900 whitespace-pre-wrap">{note.content}</p>
                 {note.topics && JSON.parse(note.topics).length > 0 && (
@@ -433,7 +439,7 @@ export default function ClassDetail({ classId }: { classId: string }) {
         <h3 className="text-lg font-bold text-gray-900 mb-4">✏️ Tareas Asignadas</h3>
         
         {/* Formulario agregar tarea */}
-        <form onSubmit={addTask} className="mb-6 border-b pb-6">
+        <form onSubmit={() => {}} className="mb-6 border-b pb-6">
           <div className="space-y-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">

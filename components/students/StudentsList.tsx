@@ -230,13 +230,13 @@ export default function StudentsList() {
                     <td className="px-8 py-6 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end gap-3">
                         <Link
-                          href={`/dashboard/alumnos/${student.id}`}
+                          href={`/dashboard/alumnos/detalles?id=${student.id}`}
                           className="px-4 py-2 bg-neutral-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-primary transition-all shadow-md active:scale-95"
                         >
                           Ficha
                         </Link>
                         <Link
-                          href={`/dashboard/alumnos/${student.id}/edit`}
+                          href={`/dashboard/alumnos/editar?id=${student.id}`}
                           className="p-2 text-neutral-400 hover:text-primary transition-colors border border-neutral-100 rounded-xl hover:border-primary/20"
                         >
                           ⚙️
