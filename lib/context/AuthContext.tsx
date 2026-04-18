@@ -36,7 +36,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       .eq('id', userId)
       .single()
     
-    if (!error && data) {
+    if (error) {
+      console.error('[AuthContext] Error letal obteniendo el Perfil de public.User:', error)
+      setProfile(null)
+      return
+    }
+
+    if (data) {
       // Simplificar la estructura para que sea fácil de usar
       const formattedProfile = {
         ...data,
@@ -44,6 +50,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         studentProfileId: (data.studentProfile as any)?.[0]?.id || (data.studentProfile as any)?.id,
       }
       setProfile(formattedProfile)
+    } else {
+      console.warn('[AuthContext] Usuario sin perfil en la tabla User.')
+      setProfile(null)
     }
   }
 

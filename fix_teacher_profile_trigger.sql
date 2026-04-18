@@ -19,9 +19,10 @@ BEGIN
   -- Crucial Fix: Automatically create the TeacherProfile if the role is TEACHER
   -- Before the static migration, this was done by Next.js in /api/register.
   IF NEW.raw_user_meta_data->>'role' = 'TEACHER' THEN
-    INSERT INTO public."TeacherProfile" ("userId") 
-    VALUES (NEW.id) 
-    ON CONFLICT ("userId") DO NOTHING;
+    -- Check existence just to be safe
+    IF NOT EXISTS (SELECT 1 FROM public."TeacherProfile" WHERE "userId" = NEW.id) THEN
+      INSERT INTO public."TeacherProfile" ("userId") VALUES (NEW.id);
+    END IF;
   END IF;
 
   RETURN NEW;
