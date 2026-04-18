@@ -30,61 +30,81 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const pathname = usePathname()
 
   const fetchProfile = async (userId: string) => {
-    const { data, error } = await supabase
-      .from('User')
-      .select('*, teacherProfile:"TeacherProfile"(id), studentProfile:"StudentProfile"(id)')
-      .eq('id', userId)
-      .single()
-    
-    if (error) {
-      console.error('[AuthContext] Error letal obteniendo el Perfil de public.User:', error)
-      setProfile(null)
-      return
-    }
-
-    if (data) {
-      // Simplificar la estructura para que sea fácil de usar
-      const formattedProfile = {
-        ...data,
-        teacherProfileId: (data.teacherProfile as any)?.[0]?.id || (data.teacherProfile as any)?.id,
-        studentProfileId: (data.studentProfile as any)?.[0]?.id || (data.studentProfile as any)?.id,
+    try {
+      const { data, error } = await supabase
+        .from('User')
+        .select('*, teacherProfile:"TeacherProfile"(id), studentProfile:"StudentProfile"(id)')
+        .eq('id', userId)
+        .single()
+      
+      if (error) {
+        console.error('[AuthContext] Error letal obteniendo el Perfil de public.User:', error)
+        setProfile(null)
+        return
       }
-      setProfile(formattedProfile)
-    } else {
-      console.warn('[AuthContext] Usuario sin perfil en la tabla User.')
+
+      if (data) {
+        const formattedProfile = {
+          ...data,
+          teacherProfileId: Array.isArray(data.teacherProfile) ? data.teacherProfile[0]?.id : data.teacherProfile?.id,
+          studentProfileId: Array.isArray(data.studentProfile) ? data.studentProfile[0]?.id : data.studentProfile?.id,
+        }
+        setProfile(formattedProfile)
+      } else {
+        setProfile(null)
+      }
+    } catch (e) {
+      console.error('[AuthContext] FATAL EXCEPTION en fetchProfile:', e)
       setProfile(null)
     }
   }
 
   useEffect(() => {
+    let isMounted = true
+
+    // Salvavidas absoluto: Si después de 5 segundos loading sigue en true, forzarlo a false.
+    const safetyTimeout = setTimeout(() => {
+      if (isMounted) setLoading(false)
+    }, 5000)
+
     const getInitialSession = async () => {
       try {
-        const { data: { session: initialSession } } = await supabase.auth.getSession()
+        const { data: { session: initialSession }, error } = await supabase.auth.getSession()
+        if (error) throw error
+
+        if (!isMounted) return
         setSession(initialSession)
         setUser(initialSession?.user ?? null)
+        
         if (initialSession?.user) {
           await fetchProfile(initialSession.user.id)
         }
       } catch (error) {
         console.error('Error getting initial session:', error)
       } finally {
-        setLoading(false)
+        if (isMounted) setLoading(false)
       }
     }
 
     getInitialSession()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, currentSession) => {
-      setSession(currentSession)
-      setUser(currentSession?.user ?? null)
+      if (!isMounted) return
       
-      if (currentSession?.user) {
-        await fetchProfile(currentSession.user.id)
-      } else {
-        setProfile(null)
+      try {
+        setSession(currentSession)
+        setUser(currentSession?.user ?? null)
+        
+        if (currentSession?.user) {
+          await fetchProfile(currentSession.user.id)
+        } else {
+          setProfile(null)
+        }
+      } catch (err) {
+        console.error('Error en onAuthStateChange:', err)
+      } finally {
+        if (isMounted) setLoading(false)
       }
-
-      setLoading(false)
 
       if (_event === 'SIGNED_IN') {
         router.push('/dashboard')
@@ -96,6 +116,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     })
 
     return () => {
+      isMounted = false
+      clearTimeout(safetyTimeout)
       subscription.unsubscribe()
     }
   }, [router])
