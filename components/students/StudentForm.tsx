@@ -39,7 +39,7 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
     try {
       const { data, error } = await supabase
         .from('StudentProfile')
-        .select('*, user:User(*)')
+        .select('*, user:"User"(*)')
         .eq('id', studentId)
         .single()
 

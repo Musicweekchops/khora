@@ -36,8 +36,8 @@ export default function StudentsList() {
         .from('StudentProfile')
         .select(`
           *,
-          user:User(id, email, name, phone),
-          payments:Payment(id, status)
+          user:"User"(id, email, name, phone),
+          payments:"Payment"(id, status)
         `)
         .eq('teacherId', teacherId)
         .order('createdAt', { ascending: false })

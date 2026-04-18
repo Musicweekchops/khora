@@ -71,7 +71,7 @@ export default function BookingCalendar({ classType, onDateTimeSelected, onBack 
       // 1. Obtener disponibilidad del profesor
       const { data: teacher } = await supabase
         .from('User')
-        .select('id, TeacherProfile(id)')
+        .select('id, "TeacherProfile"(id)')
         .eq('role', 'TEACHER')
         .limit(1)
         .single()

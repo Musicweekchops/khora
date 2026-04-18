@@ -49,7 +49,7 @@ export default function PaymentForm({ preselectedStudentId }: PaymentFormProps) 
     try {
       const { data, error } = await supabase
         .from('StudentProfile')
-        .select('id, user:User(name, email)')
+        .select('id, user:"User"(name, email)')
         .eq('teacherId', teacherId)
         .in('status', ['ACTIVE', 'TRIAL'])
 

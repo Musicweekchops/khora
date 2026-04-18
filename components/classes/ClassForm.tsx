@@ -37,7 +37,7 @@ export default function ClassForm() {
     try {
       const { data, error } = await supabase
         .from('StudentProfile')
-        .select('id, modalidad, user:User(name, email)')
+        .select('id, modalidad, user:"User"(name, email)')
         .eq('teacherId', teacherId)
         .in('status', ['ACTIVE', 'TRIAL'])
 
