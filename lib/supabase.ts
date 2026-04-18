@@ -5,8 +5,4 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholde
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
-// Service client for server-side operations that bypass RLS (like initial user creation or migrations)
-export const supabaseAdmin = createClient(
-  supabaseUrl,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder_service_role_key'
-)
+// Service client has been removed since this is a pure Static SPA. No secure backend keys should be used here.

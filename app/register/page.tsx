@@ -51,7 +51,17 @@ export default function RegisterPage() {
         return
       }
 
-      router.push("/login?registered=true")
+      // If user is returned but session is null, it means Email Confirmation is enabled in Supabase!
+      if (data.user && !data.session) {
+        setError("¡Registro exitoso! Por favor revisa tu correo electrónico para confirmar tu cuenta.")
+        // Don't redirect immediately so they can read the message
+        setTimeout(() => {
+          router.push("/login")
+        }, 5000)
+        return
+      }
+
+      router.push("/dashboard")
     } catch (error) {
       setError("Error al crear la cuenta")
     } finally {
