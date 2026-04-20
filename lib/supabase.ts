@@ -5,10 +5,11 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholde
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    // Prevents lock contention between getSession and onAuthStateChange
-    lock: { enabled: false },
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
+    // No-op lock: bypasses Web Locks API to prevent contention errors
+    // The function signature matches what GoTrue expects internally
+    lock: (_name: string, _acquireTimeout: number, fn: () => Promise<any>) => fn(),
   },
 })
