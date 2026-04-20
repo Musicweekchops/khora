@@ -167,11 +167,14 @@ CREATE TABLE public."Payment" (
 -- =============================================================================
 
 -- Verificar rol TEACHER leyendo el JWT (NUNCA la tabla User → evita recursión)
+-- Revisa multiples paths donde Supabase puede colocar el rol
 CREATE OR REPLACE FUNCTION public.is_teacher()
 RETURNS BOOLEAN AS $$
 BEGIN
   RETURN COALESCE(
     (auth.jwt() -> 'user_metadata' ->> 'role') = 'TEACHER',
+    (auth.jwt() -> 'raw_user_meta_data' ->> 'role') = 'TEACHER',
+    (auth.jwt() -> 'app_metadata' ->> 'role') = 'TEACHER',
     false
   );
 END;
@@ -230,6 +233,7 @@ CREATE TRIGGER on_auth_user_deleted
   FOR EACH ROW EXECUTE FUNCTION public.handle_deleted_user();
 
 -- RPC: profesor crea estudiante directamente en auth.users
+-- SECURITY DEFINER = ejecuta con permisos del owner (postgres), no del caller
 CREATE OR REPLACE FUNCTION public.create_student_for_teacher(
   p_email TEXT,
   p_password TEXT,
@@ -239,21 +243,43 @@ CREATE OR REPLACE FUNCTION public.create_student_for_teacher(
 ) RETURNS UUID AS $$
 DECLARE
   v_uid UUID := gen_random_uuid();
+  v_encrypted TEXT;
 BEGIN
+  -- Validar que el email no exista
+  IF EXISTS (SELECT 1 FROM auth.users WHERE email = p_email) THEN
+    RAISE EXCEPTION 'El email % ya está registrado', p_email;
+  END IF;
+
+  -- Encriptar password
+  v_encrypted := crypt(p_password, gen_salt('bf'));
+
+  -- Insertar en auth.users (compatible con Supabase GoTrue v2+)
   INSERT INTO auth.users (
     instance_id, id, aud, role, email,
     encrypted_password, email_confirmed_at,
-    raw_user_meta_data, created_at, updated_at,
-    confirmation_token, recovery_token
+    raw_user_meta_data, raw_app_meta_data,
+    created_at, updated_at
   ) VALUES (
     '00000000-0000-0000-0000-000000000000',
     v_uid, 'authenticated', 'authenticated', p_email,
-    crypt(p_password, gen_salt('bf')), now(),
+    v_encrypted, now(),
     jsonb_build_object('name', p_name, 'role', 'STUDENT', 'teacher_id', p_teacher_id),
-    now(), now(), '', ''
+    jsonb_build_object('provider', 'email', 'providers', ARRAY['email']),
+    now(), now()
   );
 
-  -- Actualizar phone en public.User (el trigger ya lo creó)
+  -- Insertar identidad (requerido en Supabase GoTrue reciente)
+  INSERT INTO auth.identities (
+    id, user_id, provider_id, provider,
+    identity_data, last_sign_in_at, created_at, updated_at
+  ) VALUES (
+    gen_random_uuid(), v_uid, v_uid::text, 'email',
+    jsonb_build_object('sub', v_uid::text, 'email', p_email),
+    now(), now(), now()
+  );
+
+  -- El trigger on_auth_user_created crea User + StudentProfile automáticamente
+  -- Actualizamos phone si se proporcionó
   IF p_phone IS NOT NULL THEN
     UPDATE public."User" SET phone = p_phone WHERE id = v_uid;
   END IF;

@@ -56,45 +56,50 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
     setLoading(true)
 
     try {
-      if (!profile?.teacherProfileId) throw new Error("No tienes perfil de profesor")
+      if (!profile?.teacherProfileId) throw new Error("No tienes perfil de profesor. Cierra sesión y vuelve a entrar.")
 
       if (mode === "create") {
-        // Verificar email duplicado
-        const { data: existing } = await supabase
-          .from("User")
-          .select("id")
-          .eq("email", form.email)
-          .maybeSingle()
+        if (!form.name.trim()) throw new Error("El nombre es obligatorio")
+        if (!form.email.trim()) throw new Error("El email es obligatorio")
 
-        if (existing) throw new Error("El email ya está registrado")
-
-        // Crear estudiante vía RPC (inserta en auth.users → trigger crea User + StudentProfile)
+        // Crear estudiante vía RPC (la RPC valida email duplicado internamente)
         const { data: newUid, error: rpcErr } = await supabase.rpc("create_student_for_teacher", {
-          p_email: form.email,
+          p_email: form.email.trim().toLowerCase(),
           p_password: form.password || "student123",
-          p_name: form.name,
-          p_phone: form.phone || null,
+          p_name: form.name.trim(),
+          p_phone: form.phone.trim() || null,
           p_teacher_id: profile.teacherProfileId,
         })
 
         if (rpcErr) {
           console.error("[StudentForm] RPC error:", rpcErr)
+          // Traducir errores comunes
+          if (rpcErr.message.includes("ya está registrado") || rpcErr.message.includes("duplicate key")) {
+            throw new Error("Este email ya está registrado")
+          }
           throw new Error(rpcErr.message || "Error creando la cuenta del alumno")
         }
 
+        if (!newUid) throw new Error("No se recibió ID del nuevo alumno. Verifica la base de datos.")
+
+        // Pequeña espera para que el trigger complete
+        await new Promise(resolve => setTimeout(resolve, 500))
+
         // Actualizar campos extra del perfil
-        await supabase
+        const { error: updateErr } = await supabase
           .from("StudentProfile")
           .update({
             status: form.status,
-            lead_source: form.lead_source,
+            lead_source: form.lead_source || null,
             modalidad: form.modalidad,
-            preferred_day: form.preferred_day,
-            preferred_time: form.preferred_time,
-            emergency_contact: form.emergency_contact,
-            emergency_phone: form.emergency_phone,
+            preferred_day: form.preferred_day || null,
+            preferred_time: form.preferred_time || null,
+            emergency_contact: form.emergency_contact || null,
+            emergency_phone: form.emergency_phone || null,
           })
           .eq("user_id", newUid)
+
+        if (updateErr) console.warn("[StudentForm] Profile update warning:", updateErr.message)
 
       } else {
         // EDIT: obtener user_id del perfil
@@ -106,24 +111,25 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
 
         if (!sp) throw new Error("Perfil no encontrado")
 
-        await supabase.from("User").update({ name: form.name, phone: form.phone }).eq("id", sp.user_id)
+        await supabase.from("User").update({ name: form.name, phone: form.phone || null }).eq("id", sp.user_id)
 
         await supabase
           .from("StudentProfile")
           .update({
             status: form.status,
-            lead_source: form.lead_source,
+            lead_source: form.lead_source || null,
             modalidad: form.modalidad,
-            preferred_day: form.preferred_day,
-            preferred_time: form.preferred_time,
-            emergency_contact: form.emergency_contact,
-            emergency_phone: form.emergency_phone,
+            preferred_day: form.preferred_day || null,
+            preferred_time: form.preferred_time || null,
+            emergency_contact: form.emergency_contact || null,
+            emergency_phone: form.emergency_phone || null,
           })
           .eq("id", studentId)
       }
 
       router.push("/dashboard/alumnos")
     } catch (err: any) {
+      console.error("[StudentForm] Error:", err)
       setError(err.message || "Error al guardar")
     } finally {
       setLoading(false)
