@@ -221,10 +221,10 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
               <div className="pt-4 border-t border-neutral-50">
                 <h4 className="font-bold text-neutral-900 text-sm mb-3">Últimas Clases</h4>
                 {classes.slice(0, 3).map(c => (
-                  <div key={c.id} className="flex items-center justify-between py-2 text-sm">
-                    <span className="text-neutral-600">{new Date(c.date + "T12:00").toLocaleDateString("es-CL")}</span>
+                  <Link key={c.id} href={`/dashboard/clases/detalles?id=${c.id}`} className="flex items-center justify-between py-2 text-sm hover:bg-violet-50 -mx-2 px-2 rounded-lg transition-colors group">
+                    <span className="text-neutral-600 group-hover:text-violet-600 font-medium transition-colors">{new Date(c.date + "T12:00").toLocaleDateString("es-CL")}</span>
                     <span className={`text-xs font-bold uppercase ${c.status === "COMPLETED" ? "text-emerald-600" : "text-sky-600"}`}>{c.status === "COMPLETED" ? "Completada" : "Programada"}</span>
-                  </div>
+                  </Link>
                 ))}
                 {classes.length === 0 && <p className="text-neutral-400 text-sm">Sin clases registradas</p>}
               </div>
@@ -246,7 +246,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
                 </tr></thead>
                 <tbody>
                   {classes.map(c => (
-                    <tr key={c.id} className="border-b border-neutral-50 hover:bg-neutral-50/50">
+                    <tr key={c.id} className="border-b border-neutral-50 hover:bg-violet-50/30 cursor-pointer transition-colors" onClick={() => window.location.href = `/dashboard/clases/detalles?id=${c.id}`}>
                       <td className="px-6 py-4 font-bold text-neutral-900">{new Date(c.date + "T12:00").toLocaleDateString("es-CL", { weekday: "short", day: "numeric", month: "short" })}</td>
                       <td className="px-6 py-4 text-neutral-600">{formatTime(c.start_time)} – {formatTime(c.end_time)}</td>
                       <td className="px-6 py-4 text-neutral-500">{c.modalidad === "online" ? "📹 Virtual" : "🏠 Presencial"}</td>
@@ -255,6 +255,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
                           c.status === "COMPLETED" ? "bg-emerald-100 text-emerald-700" : c.status === "CANCELLED" ? "bg-red-100 text-red-600" : "bg-sky-100 text-sky-700"
                         }`}>{c.status === "COMPLETED" ? "Completada" : c.status === "CANCELLED" ? "Cancelada" : "Programada"}</span>
                       </td>
+                      <td className="px-2 text-neutral-300">→</td>
                     </tr>
                   ))}
                 </tbody>

@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useMemo } from "react"
+import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/context/AuthContext"
 import { formatTime } from "@/lib/utils"
@@ -194,18 +195,19 @@ export default function AgendaPage() {
                     }`}
                   >
                     {slotClasses.map(cls => (
-                      <div
-                        key={cls.id}
-                        className={`rounded-lg p-2 text-xs mb-1 border-l-3 ${
-                          cls.status === "COMPLETED"
-                            ? "bg-emerald-50 border-l-emerald-400 text-emerald-700"
-                            : "bg-violet-50 border-l-violet-400 text-violet-700"
-                        }`}
-                        style={{ borderLeftWidth: "3px" }}
-                      >
-                        <p className="font-black truncate">{cls.student_name}</p>
-                        <p className="opacity-60">{formatTime(cls.start_time)}</p>
-                      </div>
+                      <Link key={cls.id} href={`/dashboard/clases/detalles?id=${cls.id}`} onClick={e => e.stopPropagation()}>
+                        <div
+                          className={`rounded-lg p-2 text-xs mb-1 hover:shadow-md hover:scale-[1.02] transition-all cursor-pointer ${
+                            cls.status === "COMPLETED"
+                              ? "bg-emerald-50 border-l-emerald-400 text-emerald-700"
+                              : "bg-violet-50 border-l-violet-400 text-violet-700"
+                          }`}
+                          style={{ borderLeftWidth: "3px" }}
+                        >
+                          <p className="font-black truncate">{cls.student_name}</p>
+                          <p className="opacity-60">{formatTime(cls.start_time)}</p>
+                        </div>
+                      </Link>
                     ))}
                   </div>
                 )
