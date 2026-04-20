@@ -11,8 +11,8 @@ export default function RegisterPage() {
     name: "",
     email: "",
     password: "",
-    confirmPassword: "",
-    role: "TEACHER"
+    password: "",
+    confirmPassword: ""
   })
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
@@ -41,7 +41,7 @@ export default function RegisterPage() {
         options: {
           data: {
             name: formData.name,
-            role: formData.role,
+            role: "TEACHER",
           }
         }
       })
@@ -187,42 +187,7 @@ export default function RegisterPage() {
               />
             </div>
 
-            {/* Role selector */}
-            <div>
-              <label className="block text-xs font-medium mb-2" style={{ color: "rgba(255,255,255,0.5)" }}>
-                ROL
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { value: "TEACHER", label: "Profesor", icon: "🎓" },
-                  { value: "STUDENT", label: "Alumno", icon: "🎵" }
-                ].map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setFormData({ ...formData, role: option.value })}
-                    className="py-2.5 px-4 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2"
-                    style={{
-                      background: formData.role === option.value
-                        ? "linear-gradient(135deg, rgba(139,92,246,0.3), rgba(59,130,246,0.3))"
-                        : "rgba(255,255,255,0.05)",
-                      border: formData.role === option.value
-                        ? "1px solid rgba(139,92,246,0.5)"
-                        : "1px solid rgba(255,255,255,0.08)",
-                      color: formData.role === option.value
-                        ? "rgba(255,255,255,0.95)"
-                        : "rgba(255,255,255,0.4)",
-                      boxShadow: formData.role === option.value
-                        ? "0 0 16px rgba(139,92,246,0.15)"
-                        : "none",
-                    }}
-                  >
-                    <span>{option.icon}</span>
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+
 
             {/* Password */}
             <div>

@@ -86,30 +86,24 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
           throw new Error("El email ya está registrado")
         }
 
-        // 2. Crear el Usuario en la tabla pública
-        const { data: newUser, error: userError } = await supabase
-          .from('User')
-          .insert({
-            email: formData.email,
-            name: formData.name,
-            phone: formData.phone,
-            role: "STUDENT",
-            // Nota: La contraseña no se puede hashear de forma segura en el cliente fácilmente
-            // y no servirá para Auth de Supabase si no creamos el registro en auth.users.
-            // Por ahora solo creamos el registro público.
-            password: formData.password || "student123" 
-          })
-          .select()
-          .single()
+        // Llamar a RPC mágico que crea el usuario en auth.users activando los triggers seguros
+        const { data: newUserId, error: rpcError } = await supabase.rpc('create_student_account', {
+          new_email: formData.email,
+          new_password: formData.password || "student123",
+          new_name: formData.name,
+          new_phone: formData.phone || null,
+          tgt_teacher_id: teacherProfile.teacherProfileId
+        })
 
-        if (userError) throw userError
+        if (rpcError) {
+          console.error("Error en RPC create_student_account:", rpcError)
+          throw new Error("No se pudo crear la cuenta oficial del alumno en el sistema base de datos.")
+        }
 
-        // 3. Crear el Perfil de Estudiante
+        // 2. El Trigger acaba de crear el Perfil de Estudiante vacío, vamos a llenarlo con el resto de datos.
         const { error: profileError } = await supabase
           .from('StudentProfile')
-          .insert({
-            userId: newUser.id,
-            teacherId: teacherProfile.teacherProfileId,
+          .update({
             status: formData.status,
             leadSource: formData.leadSource,
             modalidad: formData.modalidad,
@@ -118,6 +112,7 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
             emergencyContact: formData.emergencyContact,
             emergencyPhone: formData.emergencyPhone
           })
+          .eq('userId', newUserId)
 
         if (profileError) throw profileError
 
