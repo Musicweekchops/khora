@@ -15,24 +15,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (loading) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-[#F1F4F8]">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      <div className="flex h-screen w-full items-center justify-center bg-[#fafafa]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-8 h-8 rounded-lg bg-neutral-900 flex items-center justify-center animate-pulse">
+            <span className="text-white text-sm font-bold">K</span>
+          </div>
+          <div className="flex gap-1">
+            <div className="w-1.5 h-1.5 rounded-full bg-neutral-300 animate-bounce" style={{ animationDelay: "0ms" }} />
+            <div className="w-1.5 h-1.5 rounded-full bg-neutral-300 animate-bounce" style={{ animationDelay: "150ms" }} />
+            <div className="w-1.5 h-1.5 rounded-full bg-neutral-300 animate-bounce" style={{ animationDelay: "300ms" }} />
+          </div>
+        </div>
       </div>
     )
   }
 
   if (!user || !profile) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-[#F1F4F8] p-10 text-center">
-        <div className="bg-white p-8 rounded-3xl shadow-xl border border-neutral-100 max-w-md w-full">
-          <div className="w-16 h-16 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center text-3xl mx-auto mb-6">⏳</div>
-          <h2 className="text-2xl font-black text-neutral-900 mb-2">Cargando Perfil…</h2>
-          <p className="text-neutral-500 font-medium mb-6 text-sm">
-            El sistema está sincronizando tu cuenta. Si este mensaje persiste por más de 10 segundos, cierra sesión e intenta de nuevo.
+      <div className="flex h-screen w-full items-center justify-center bg-[#fafafa] p-8">
+        <div className="kh-card p-8 max-w-sm w-full text-center">
+          <div className="w-12 h-12 bg-amber-50 text-amber-500 rounded-xl flex items-center justify-center text-xl mx-auto mb-5">⏳</div>
+          <h2 className="kh-title text-lg mb-2">Sincronizando perfil</h2>
+          <p className="text-sm text-neutral-500 mb-6 leading-relaxed">
+            Si este mensaje persiste por más de 10 segundos, cierra sesión e intenta de nuevo.
           </p>
           <button
             onClick={async () => { await signOut(); router.push("/login") }}
-            className="w-full px-6 py-3 bg-neutral-900 text-white rounded-xl font-bold shadow-lg hover:bg-primary transition-colors"
+            className="kh-btn-primary w-full py-2.5"
           >
             Cerrar Sesión
           </button>
@@ -42,10 +51,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="flex min-h-screen bg-[#F1F4F8]">
+    <div className="flex min-h-screen bg-[#fafafa]">
       <Sidebar user={{ name: profile.name, role: profile.role }} />
-      <main className="flex-1 ml-64 min-h-screen">
-        <div className="p-8 max-w-[1600px] mx-auto">{children}</div>
+      <main className="flex-1 ml-[240px] min-h-screen">
+        <div className="p-8 max-w-[1400px] mx-auto page-enter">
+          {children}
+        </div>
       </main>
     </div>
   )

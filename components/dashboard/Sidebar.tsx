@@ -3,15 +3,56 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/lib/context/AuthContext"
-import { cn } from "@/lib/utils"
+
+/* ── SVG Icon system (lightweight, no dependencies) ── */
+const Icons = {
+  dashboard: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
+    </svg>
+  ),
+  students: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 00-3-3.87" /><path d="M16 3.13a4 4 0 010 7.75" />
+    </svg>
+  ),
+  crm: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.56 5.82 22 7 14.14l-5-4.87 6.91-1.01z" />
+    </svg>
+  ),
+  calendar: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+    </svg>
+  ),
+  classes: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 19.5A2.5 2.5 0 016.5 17H20" /><path d="M4 4.5A2.5 2.5 0 016.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15z" />
+    </svg>
+  ),
+  financial: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
+    </svg>
+  ),
+  logout: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+  ),
+}
 
 const NAV = [
-  { name: "Dashboard", href: "/dashboard", icon: "📊" },
-  { name: "Alumnos", href: "/dashboard/alumnos", icon: "👥" },
-  { name: "CRM", href: "/dashboard/crm", icon: "📋" },
-  { name: "Agenda", href: "/dashboard/agenda", icon: "📅" },
-  { name: "Clases", href: "/dashboard/clases", icon: "📖" },
-  { name: "Financiero", href: "/dashboard/financiero", icon: "💰" },
+  { name: "Dashboard", href: "/dashboard", icon: Icons.dashboard },
+  { name: "Alumnos", href: "/dashboard/alumnos", icon: Icons.students },
+  { name: "CRM", href: "/dashboard/crm", icon: Icons.crm },
+  { name: "Agenda", href: "/dashboard/agenda", icon: Icons.calendar },
+  { name: "Clases", href: "/dashboard/clases", icon: Icons.classes },
+  { name: "Financiero", href: "/dashboard/financiero", icon: Icons.financial },
 ]
 
 interface SidebarProps {
@@ -23,45 +64,33 @@ export default function Sidebar({ user }: SidebarProps) {
   const { signOut } = useAuth()
 
   return (
-    <div
-      className="flex flex-col h-screen w-64 fixed left-0 top-0 z-50"
-      style={{ background: "#1a1a2e", borderRight: "1px solid rgba(255,255,255,0.08)" }}
-    >
+    <aside className="flex flex-col h-screen w-[240px] fixed left-0 top-0 z-50 bg-white border-r border-neutral-200/80">
       {/* Logo */}
-      <div className="p-6 flex items-center gap-3">
-        <div
-          className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shadow-lg"
-          style={{
-            background: "linear-gradient(135deg, rgba(139,92,246,0.8), rgba(79,70,229,0.8))",
-            boxShadow: "0 0 20px rgba(139,92,246,0.3)",
-          }}
-        >
-          🥁
+      <div className="h-16 flex items-center gap-3 px-5 border-b border-neutral-100">
+        <div className="w-8 h-8 rounded-lg bg-neutral-900 flex items-center justify-center">
+          <span className="text-white text-sm font-bold">K</span>
         </div>
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-white">Khora</h1>
-          <p className="text-[10px] uppercase tracking-widest font-semibold" style={{ color: "rgba(255,255,255,0.3)" }}>
-            Gestión de clases
-          </p>
+          <h1 className="text-sm font-semibold text-neutral-900 tracking-tight leading-none">Khora</h1>
+          <p className="text-[10px] text-neutral-400 font-medium mt-0.5">Gestión de clases</p>
         </div>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-4 space-y-1 pt-4 overflow-y-auto scrollbar-thin">
+      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto scrollbar-thin">
         {NAV.map(item => {
           const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname?.startsWith(item.href))
           return (
             <Link key={item.name} href={item.href}>
-              <div
-                className={cn(
-                  "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group",
-                  isActive
-                    ? "bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-600/20"
-                    : "text-neutral-400 hover:text-white hover:bg-white/5",
-                )}
-              >
-                <span className="text-lg">{item.icon}</span>
-                <span className="font-medium">{item.name}</span>
+              <div className={`flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150 ${
+                isActive
+                  ? "bg-neutral-100 text-neutral-900"
+                  : "text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50"
+              }`}>
+                <span className={`transition-colors ${isActive ? "text-neutral-900" : "text-neutral-400"}`}>
+                  {item.icon}
+                </span>
+                <span>{item.name}</span>
               </div>
             </Link>
           )
@@ -69,25 +98,24 @@ export default function Sidebar({ user }: SidebarProps) {
       </nav>
 
       {/* Profile */}
-      <div className="p-4 mt-auto">
-        <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-full bg-neutral-700 flex items-center justify-center text-sm font-bold text-white border border-white/10">
-              {user.name.charAt(0).toUpperCase()}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-white truncate">{user.name}</p>
-              <p className="text-[11px] text-neutral-500 font-medium uppercase tracking-wider">{user.role}</p>
-            </div>
+      <div className="p-3 border-t border-neutral-100">
+        <div className="flex items-center gap-3 px-3 py-2 mb-1">
+          <div className="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center text-xs font-semibold text-neutral-600">
+            {user.name.charAt(0).toUpperCase()}
           </div>
-          <button
-            onClick={() => signOut()}
-            className="w-full flex items-center justify-center gap-2 text-neutral-400 hover:text-red-400 hover:bg-red-500/10 py-2 rounded-lg transition-colors text-xs font-medium"
-          >
-            🚪 Cerrar Sesión
-          </button>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-medium text-neutral-900 truncate">{user.name}</p>
+            <p className="text-[11px] text-neutral-400 capitalize">{user.role.toLowerCase()}</p>
+          </div>
         </div>
+        <button
+          onClick={() => signOut()}
+          className="w-full flex items-center gap-2 px-3 py-2 text-neutral-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors text-[13px] font-medium"
+        >
+          {Icons.logout}
+          <span>Cerrar Sesión</span>
+        </button>
       </div>
-    </div>
+    </aside>
   )
 }
