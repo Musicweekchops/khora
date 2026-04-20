@@ -56,39 +56,57 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
     setLoading(true)
 
     try {
-      if (!profile?.teacherProfileId) throw new Error("No tienes perfil de profesor. Cierra sesión y vuelve a entrar.")
+      if (!profile?.teacherProfileId) {
+        throw new Error("No tienes perfil de profesor. Cierra sesión y vuelve a entrar.")
+      }
+
+      console.log("[StudentForm] Starting submit, mode:", mode, "teacherId:", profile.teacherProfileId)
 
       if (mode === "create") {
         if (!form.name.trim()) throw new Error("El nombre es obligatorio")
         if (!form.email.trim()) throw new Error("El email es obligatorio")
 
-        // Crear estudiante vía RPC (la RPC valida email duplicado internamente)
-        const { data: newUid, error: rpcErr } = await supabase.rpc("create_student_for_teacher", {
-          p_email: form.email.trim().toLowerCase(),
-          p_password: form.password || "student123",
-          p_name: form.name.trim(),
-          p_phone: form.phone.trim() || null,
-          p_teacher_id: profile.teacherProfileId,
-        })
+        const email = form.email.trim().toLowerCase()
 
-        if (rpcErr) {
-          console.error("[StudentForm] RPC error:", rpcErr)
-          // Traducir errores comunes
-          if (rpcErr.message.includes("ya está registrado") || rpcErr.message.includes("duplicate key")) {
-            throw new Error("Este email ya está registrado")
-          }
-          throw new Error(rpcErr.message || "Error creando la cuenta del alumno")
+        // 1. Check duplicate email in User table
+        console.log("[StudentForm] Checking duplicate email:", email)
+        const { data: existing, error: checkErr } = await supabase
+          .from("User")
+          .select("id")
+          .eq("email", email)
+          .maybeSingle()
+
+        console.log("[StudentForm] Duplicate check result:", { existing, checkErr })
+
+        if (existing) throw new Error("Este email ya está registrado")
+
+        // 2. Create User row directly (no RPC needed)
+        const newId = crypto.randomUUID()
+        console.log("[StudentForm] Creating User with id:", newId)
+
+        const { error: userErr } = await supabase
+          .from("User")
+          .insert({
+            id: newId,
+            email: email,
+            name: form.name.trim(),
+            phone: form.phone.trim() || null,
+            role: "STUDENT",
+          })
+
+        if (userErr) {
+          console.error("[StudentForm] User insert error:", userErr)
+          throw new Error(userErr.message || "Error creando el usuario")
         }
 
-        if (!newUid) throw new Error("No se recibió ID del nuevo alumno. Verifica la base de datos.")
+        console.log("[StudentForm] User created, creating StudentProfile")
 
-        // Pequeña espera para que el trigger complete
-        await new Promise(resolve => setTimeout(resolve, 500))
-
-        // Actualizar campos extra del perfil
-        const { error: updateErr } = await supabase
+        // 3. Create StudentProfile row
+        const { error: spErr } = await supabase
           .from("StudentProfile")
-          .update({
+          .insert({
+            user_id: newId,
+            teacher_id: profile.teacherProfileId,
             status: form.status,
             lead_source: form.lead_source || null,
             modalidad: form.modalidad,
@@ -97,12 +115,18 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
             emergency_contact: form.emergency_contact || null,
             emergency_phone: form.emergency_phone || null,
           })
-          .eq("user_id", newUid)
 
-        if (updateErr) console.warn("[StudentForm] Profile update warning:", updateErr.message)
+        if (spErr) {
+          console.error("[StudentForm] StudentProfile insert error:", spErr)
+          // Cleanup: delete User row if profile creation failed
+          await supabase.from("User").delete().eq("id", newId)
+          throw new Error(spErr.message || "Error creando el perfil del alumno")
+        }
+
+        console.log("[StudentForm] Student created successfully!")
 
       } else {
-        // EDIT: obtener user_id del perfil
+        // EDIT mode
         const { data: sp } = await supabase
           .from("StudentProfile")
           .select("user_id")
@@ -111,7 +135,10 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
 
         if (!sp) throw new Error("Perfil no encontrado")
 
-        await supabase.from("User").update({ name: form.name, phone: form.phone || null }).eq("id", sp.user_id)
+        await supabase.from("User").update({
+          name: form.name,
+          phone: form.phone || null,
+        }).eq("id", sp.user_id)
 
         await supabase
           .from("StudentProfile")
