@@ -35,7 +35,7 @@ const AuthContext = createContext<AuthContextType>({
 })
 
 // -------------------------------------------------------------------
-// Rutas públicas que no requieren sesión
+// Rutas públicas
 // -------------------------------------------------------------------
 const PUBLIC_PATHS = ['/login', '/register', '/', '/agendar']
 
@@ -56,11 +56,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
 
   // ---------------------------------------------------------------
-  // Cargar perfil público desde Supabase
+  // Cargar perfil desde public.User
   // ---------------------------------------------------------------
-  const fetchProfile = useCallback(async (authUser: User) => {
+  const fetchProfile = useCallback(async (authUser: User): Promise<UserProfile | null> => {
     try {
-      // Consultar User + perfiles vinculados
       const { data, error } = await supabase
         .from('User')
         .select(`
@@ -72,16 +71,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle()
 
       if (error) {
-        console.error('[Auth] Error consultando perfil:', error.message)
+        console.warn('[Auth] Profile query error:', error.message)
         return null
       }
 
       if (!data) {
-        console.warn('[Auth] No se encontró fila en public.User para', authUser.id)
+        console.warn('[Auth] No User row found for', authUser.id)
         return null
       }
 
-      // Normalizar respuesta (Supabase puede devolver array u objeto)
       const tp = Array.isArray(data.TeacherProfile)
         ? data.TeacherProfile[0]
         : data.TeacherProfile
@@ -89,7 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ? data.StudentProfile[0]
         : data.StudentProfile
 
-      const formatted: UserProfile = {
+      return {
         id: data.id,
         email: data.email,
         name: data.name,
@@ -98,45 +96,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         teacherProfileId: tp?.id ?? null,
         studentProfileId: sp?.id ?? null,
       }
-
-      return formatted
     } catch (e) {
-      console.error('[Auth] Excepción en fetchProfile:', e)
+      console.error('[Auth] fetchProfile exception:', e)
       return null
     }
   }, [])
 
   // ---------------------------------------------------------------
-  // Inicialización + listener
+  // Single source of truth: onAuthStateChange
+  // No separate getSession() call → prevents lock contention
   // ---------------------------------------------------------------
   useEffect(() => {
     let mounted = true
 
-    // Safety timeout: si en 6s no resolvió, desbloquear UI
+    // Safety fallback: unlock UI after 5 seconds no matter what
     const timeout = setTimeout(() => {
-      if (mounted && loading) setLoading(false)
-    }, 6000)
-
-    async function init() {
-      try {
-        const { data: { session: s } } = await supabase.auth.getSession()
-        if (!mounted) return
-
-        setSession(s)
-        setUser(s?.user ?? null)
-
-        if (s?.user) {
-          const p = await fetchProfile(s.user)
-          if (mounted) setProfile(p)
-        }
-      } catch (err) {
-        console.error('[Auth] init error:', err)
-      } finally {
-        if (mounted) setLoading(false)
+      if (mounted && loading) {
+        console.warn('[Auth] Timeout — unlocking UI')
+        setLoading(false)
       }
-    }
-
-    init()
+    }, 5000)
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, currentSession) => {
@@ -158,6 +137,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (event === 'SIGNED_OUT') router.push('/login')
       },
     )
+
+    // Trigger initial session check via the listener
+    // This is the safe way — it goes through onAuthStateChange
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      if (!mounted) return
+      // Only set if onAuthStateChange hasn't fired yet
+      if (loading) {
+        setSession(s)
+        setUser(s?.user ?? null)
+        if (s?.user) {
+          fetchProfile(s.user).then(p => {
+            if (mounted) {
+              setProfile(p)
+              setLoading(false)
+            }
+          })
+        } else {
+          setLoading(false)
+        }
+      }
+    }).catch(err => {
+      // Lock errors are non-fatal — the listener will eventually fire
+      console.warn('[Auth] getSession fallback error (non-fatal):', err.message)
+      if (mounted && loading) setLoading(false)
+    })
 
     return () => {
       mounted = false
