@@ -1,13 +1,26 @@
 "use client"
 
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { User, Session } from '@supabase/supabase-js'
 
+// -------------------------------------------------------------------
+// Tipos
+// -------------------------------------------------------------------
+export interface UserProfile {
+  id: string
+  email: string
+  name: string
+  phone: string | null
+  role: 'TEACHER' | 'STUDENT'
+  teacherProfileId: string | null
+  studentProfileId: string | null
+}
+
 interface AuthContextType {
   user: User | null
-  profile: any | null
+  profile: UserProfile | null
   session: Session | null
   loading: boolean
   signOut: () => Promise<void>
@@ -21,120 +34,154 @@ const AuthContext = createContext<AuthContextType>({
   signOut: async () => {},
 })
 
-export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+// -------------------------------------------------------------------
+// Rutas públicas que no requieren sesión
+// -------------------------------------------------------------------
+const PUBLIC_PATHS = ['/login', '/register', '/', '/agendar']
+
+function isPublicPath(pathname: string | null) {
+  if (!pathname) return false
+  return PUBLIC_PATHS.some(p => pathname === p || pathname.startsWith('/agendar'))
+}
+
+// -------------------------------------------------------------------
+// Provider
+// -------------------------------------------------------------------
+export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
-  const [profile, setProfile] = useState<any | null>(null)
+  const [profile, setProfile] = useState<UserProfile | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const router = useRouter()
   const pathname = usePathname()
 
-  const fetchProfile = async (userId: string) => {
+  // ---------------------------------------------------------------
+  // Cargar perfil público desde Supabase
+  // ---------------------------------------------------------------
+  const fetchProfile = useCallback(async (authUser: User) => {
     try {
+      // Consultar User + perfiles vinculados
       const { data, error } = await supabase
         .from('User')
-        .select('*, teacherProfile:"TeacherProfile"(id), studentProfile:"StudentProfile"(id)')
-        .eq('id', userId)
-        .single()
-      
+        .select(`
+          id, email, name, phone, role,
+          TeacherProfile ( id ),
+          StudentProfile ( id )
+        `)
+        .eq('id', authUser.id)
+        .maybeSingle()
+
       if (error) {
-        console.error('[AuthContext] Error letal obteniendo el Perfil de public.User:', error)
-        setProfile(null)
-        return
+        console.error('[Auth] Error consultando perfil:', error.message)
+        return null
       }
 
-      if (data) {
-        const formattedProfile = {
-          ...data,
-          teacherProfileId: Array.isArray(data.teacherProfile) ? data.teacherProfile[0]?.id : data.teacherProfile?.id,
-          studentProfileId: Array.isArray(data.studentProfile) ? data.studentProfile[0]?.id : data.studentProfile?.id,
-        }
-        setProfile(formattedProfile)
-      } else {
-        setProfile(null)
+      if (!data) {
+        console.warn('[Auth] No se encontró fila en public.User para', authUser.id)
+        return null
       }
+
+      // Normalizar respuesta (Supabase puede devolver array u objeto)
+      const tp = Array.isArray(data.TeacherProfile)
+        ? data.TeacherProfile[0]
+        : data.TeacherProfile
+      const sp = Array.isArray(data.StudentProfile)
+        ? data.StudentProfile[0]
+        : data.StudentProfile
+
+      const formatted: UserProfile = {
+        id: data.id,
+        email: data.email,
+        name: data.name,
+        phone: data.phone,
+        role: data.role as 'TEACHER' | 'STUDENT',
+        teacherProfileId: tp?.id ?? null,
+        studentProfileId: sp?.id ?? null,
+      }
+
+      return formatted
     } catch (e) {
-      console.error('[AuthContext] FATAL EXCEPTION en fetchProfile:', e)
-      setProfile(null)
+      console.error('[Auth] Excepción en fetchProfile:', e)
+      return null
     }
-  }
+  }, [])
 
+  // ---------------------------------------------------------------
+  // Inicialización + listener
+  // ---------------------------------------------------------------
   useEffect(() => {
-    let isMounted = true
+    let mounted = true
 
-    // Salvavidas absoluto: Si después de 5 segundos loading sigue en true, forzarlo a false.
-    const safetyTimeout = setTimeout(() => {
-      if (isMounted) setLoading(false)
-    }, 5000)
+    // Safety timeout: si en 6s no resolvió, desbloquear UI
+    const timeout = setTimeout(() => {
+      if (mounted && loading) setLoading(false)
+    }, 6000)
 
-    const getInitialSession = async () => {
+    async function init() {
       try {
-        const { data: { session: initialSession }, error } = await supabase.auth.getSession()
-        if (error) throw error
+        const { data: { session: s } } = await supabase.auth.getSession()
+        if (!mounted) return
 
-        if (!isMounted) return
-        setSession(initialSession)
-        setUser(initialSession?.user ?? null)
-        
-        if (initialSession?.user) {
-          await fetchProfile(initialSession.user.id)
+        setSession(s)
+        setUser(s?.user ?? null)
+
+        if (s?.user) {
+          const p = await fetchProfile(s.user)
+          if (mounted) setProfile(p)
         }
-      } catch (error) {
-        console.error('Error getting initial session:', error)
+      } catch (err) {
+        console.error('[Auth] init error:', err)
       } finally {
-        if (isMounted) setLoading(false)
+        if (mounted) setLoading(false)
       }
     }
 
-    getInitialSession()
+    init()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, currentSession) => {
-      if (!isMounted) return
-      
-      try {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, currentSession) => {
+        if (!mounted) return
+
         setSession(currentSession)
         setUser(currentSession?.user ?? null)
-        
+
         if (currentSession?.user) {
-          await fetchProfile(currentSession.user.id)
+          const p = await fetchProfile(currentSession.user)
+          if (mounted) setProfile(p)
         } else {
           setProfile(null)
         }
-      } catch (err) {
-        console.error('Error en onAuthStateChange:', err)
-      } finally {
-        if (isMounted) setLoading(false)
-      }
 
-      if (_event === 'SIGNED_IN') {
-        router.push('/dashboard')
-      }
-      
-      if (_event === 'SIGNED_OUT') {
-        router.push('/login')
-      }
-    })
+        if (mounted) setLoading(false)
+
+        if (event === 'SIGNED_IN') router.push('/dashboard')
+        if (event === 'SIGNED_OUT') router.push('/login')
+      },
+    )
 
     return () => {
-      isMounted = false
-      clearTimeout(safetyTimeout)
+      mounted = false
+      clearTimeout(timeout)
       subscription.unsubscribe()
     }
-  }, [router])
+  }, [router, fetchProfile])
 
-  // Lógica de protección de rutas básica
+  // ---------------------------------------------------------------
+  // Protección de rutas
+  // ---------------------------------------------------------------
   useEffect(() => {
-    const publicPaths = ['/login', '/register', '/', '/agendar']
-    const isPublicPath = publicPaths.some(path => pathname === path || pathname?.startsWith('/agendar/'))
-
-    if (!loading && !user && !isPublicPath) {
+    if (!loading && !user && !isPublicPath(pathname)) {
       router.push('/login')
     }
   }, [user, loading, pathname, router])
 
-  const signOut = async () => {
+  // ---------------------------------------------------------------
+  // Sign out
+  // ---------------------------------------------------------------
+  const signOut = useCallback(async () => {
     await supabase.auth.signOut()
-  }
+    setProfile(null)
+  }, [])
 
   return (
     <AuthContext.Provider value={{ user, profile, session, loading, signOut }}>

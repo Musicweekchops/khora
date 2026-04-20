@@ -1,7 +1,6 @@
 "use client"
-
-import { useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useEffect } from "react"
 import { useAuth } from "@/lib/context/AuthContext"
 
 export default function HomePage() {
@@ -10,13 +9,13 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!loading) {
-      if (user) {
-        router.push("/dashboard")
-      } else {
-        router.push("/login")
-      }
+      router.push(user ? "/dashboard" : "/login")
     }
   }, [user, loading, router])
 
-  return null
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-neutral-950">
+      <div className="h-8 w-8 animate-spin rounded-full border-4 border-violet-500 border-t-transparent" />
+    </div>
+  )
 }

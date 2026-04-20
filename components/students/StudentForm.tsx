@@ -12,367 +12,231 @@ interface StudentFormProps {
 
 export default function StudentForm({ mode, studentId }: StudentFormProps) {
   const router = useRouter()
-  const { profile: teacherProfile } = useAuth()
+  const { profile } = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    password: "",
-    status: "PROSPECT",
-    leadSource: "",
-    modalidad: "online",
-    preferredDay: "",
-    preferredTime: "",
-    emergencyContact: "",
-    emergencyPhone: ""
+  const [form, setForm] = useState({
+    name: "", email: "", phone: "", password: "",
+    status: "PROSPECT", lead_source: "", modalidad: "online",
+    preferred_day: "", preferred_time: "",
+    emergency_contact: "", emergency_phone: "",
   })
 
   useEffect(() => {
-    if (mode === "edit" && studentId) {
-      fetchStudent()
-    }
+    if (mode === "edit" && studentId) loadStudent()
   }, [mode, studentId])
 
-  const fetchStudent = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('StudentProfile')
-        .select('*, user:"User"(*)')
-        .eq('id', studentId)
-        .single()
+  async function loadStudent() {
+    const { data, error } = await supabase
+      .from("StudentProfile")
+      .select("*, User ( name, email, phone )")
+      .eq("id", studentId)
+      .single()
 
-      if (error) throw error
+    if (error || !data) return setError("No se pudo cargar el alumno")
 
-      setFormData({
-        name: data.user.name,
-        email: data.user.email,
-        phone: data.user.phone || "",
-        password: "",
-        status: data.status,
-        leadSource: data.leadSource || "",
-        modalidad: data.modalidad || "online",
-        preferredDay: data.preferredDay || "",
-        preferredTime: data.preferredTime || "",
-        emergencyContact: data.emergencyContact || "",
-        emergencyPhone: data.emergencyPhone || ""
-      })
-    } catch (error) {
-      console.error("Error al cargar alumno:", error)
-      setError("Error al cargar los datos del alumno")
-    }
+    setForm({
+      name: data.User?.name ?? "",
+      email: data.User?.email ?? "",
+      phone: data.User?.phone ?? "",
+      password: "",
+      status: data.status ?? "PROSPECT",
+      lead_source: data.lead_source ?? "",
+      modalidad: data.modalidad ?? "online",
+      preferred_day: data.preferred_day ?? "",
+      preferred_time: data.preferred_time ?? "",
+      emergency_contact: data.emergency_contact ?? "",
+      emergency_phone: data.emergency_phone ?? "",
+    })
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError("")
     setLoading(true)
 
     try {
-      if (!teacherProfile?.teacherProfileId) {
-        throw new Error("No tienes un perfil de profesor asociado")
-      }
+      if (!profile?.teacherProfileId) throw new Error("No tienes perfil de profesor")
 
       if (mode === "create") {
-        // 1. Verificar si el email ya existe en public.User
-        const { data: existingUser } = await supabase
-          .from('User')
-          .select('id')
-          .eq('email', formData.email)
-          .single()
+        // Verificar email duplicado
+        const { data: existing } = await supabase
+          .from("User")
+          .select("id")
+          .eq("email", form.email)
+          .maybeSingle()
 
-        if (existingUser) {
-          throw new Error("El email ya está registrado")
-        }
+        if (existing) throw new Error("El email ya está registrado")
 
-        // Llamar a RPC mágico que crea el usuario en auth.users activando los triggers seguros
-        const { data: newUserId, error: rpcError } = await supabase.rpc('create_student_account', {
-          new_email: formData.email,
-          new_password: formData.password || "student123",
-          new_name: formData.name,
-          new_phone: formData.phone || null,
-          tgt_teacher_id: teacherProfile.teacherProfileId
+        // Crear estudiante vía RPC (inserta en auth.users → trigger crea User + StudentProfile)
+        const { data: newUid, error: rpcErr } = await supabase.rpc("create_student_for_teacher", {
+          p_email: form.email,
+          p_password: form.password || "student123",
+          p_name: form.name,
+          p_phone: form.phone || null,
+          p_teacher_id: profile.teacherProfileId,
         })
 
-        if (rpcError) {
-          console.error("Error en RPC create_student_account:", rpcError)
-          throw new Error("No se pudo crear la cuenta oficial del alumno en el sistema base de datos.")
+        if (rpcErr) {
+          console.error("[StudentForm] RPC error:", rpcErr)
+          throw new Error(rpcErr.message || "Error creando la cuenta del alumno")
         }
 
-        // 2. El Trigger acaba de crear el Perfil de Estudiante vacío, vamos a llenarlo con el resto de datos.
-        const { error: profileError } = await supabase
-          .from('StudentProfile')
+        // Actualizar campos extra del perfil
+        await supabase
+          .from("StudentProfile")
           .update({
-            status: formData.status,
-            leadSource: formData.leadSource,
-            modalidad: formData.modalidad,
-            preferredDay: formData.preferredDay,
-            preferredTime: formData.preferredTime,
-            emergencyContact: formData.emergencyContact,
-            emergencyPhone: formData.emergencyPhone
+            status: form.status,
+            lead_source: form.lead_source,
+            modalidad: form.modalidad,
+            preferred_day: form.preferred_day,
+            preferred_time: form.preferred_time,
+            emergency_contact: form.emergency_contact,
+            emergency_phone: form.emergency_phone,
           })
-          .eq('userId', newUserId)
-
-        if (profileError) throw profileError
+          .eq("user_id", newUid)
 
       } else {
-        // MODO EDITAR
-        const { data: currentProfile } = await supabase
-          .from('StudentProfile')
-          .select('userId')
-          .eq('id', studentId)
+        // EDIT: obtener user_id del perfil
+        const { data: sp } = await supabase
+          .from("StudentProfile")
+          .select("user_id")
+          .eq("id", studentId)
           .single()
 
-        if (!currentProfile) throw new Error("Perfil no encontrado")
+        if (!sp) throw new Error("Perfil no encontrado")
 
-        // 1. Actualizar Usuario
-        const { error: userUpdateError } = await supabase
-          .from('User')
+        await supabase.from("User").update({ name: form.name, phone: form.phone }).eq("id", sp.user_id)
+
+        await supabase
+          .from("StudentProfile")
           .update({
-            name: formData.name,
-            phone: formData.phone
+            status: form.status,
+            lead_source: form.lead_source,
+            modalidad: form.modalidad,
+            preferred_day: form.preferred_day,
+            preferred_time: form.preferred_time,
+            emergency_contact: form.emergency_contact,
+            emergency_phone: form.emergency_phone,
           })
-          .eq('id', currentProfile.userId)
-
-        if (userUpdateError) throw userUpdateError
-
-        // 2. Actualizar Perfil
-        const { error: profileUpdateError } = await supabase
-          .from('StudentProfile')
-          .update({
-            status: formData.status,
-            leadSource: formData.leadSource,
-            modalidad: formData.modalidad,
-            preferredDay: formData.preferredDay,
-            preferredTime: formData.preferredTime,
-            emergencyContact: formData.emergencyContact,
-            emergencyPhone: formData.emergencyPhone
-          })
-          .eq('id', studentId)
-
-        if (profileUpdateError) throw profileUpdateError
+          .eq("id", studentId)
       }
 
       router.push("/dashboard/alumnos")
-    } catch (error: any) {
-      setError(error.message || "Error al guardar el alumno")
+    } catch (err: any) {
+      setError(err.message || "Error al guardar")
     } finally {
       setLoading(false)
     }
   }
 
+  const set = (key: string, value: string) => setForm(prev => ({ ...prev, [key]: value }))
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-12 pb-20">
-      {/* Error Message */}
+    <form onSubmit={handleSubmit} className="space-y-10 pb-20">
       {error && (
-        <div className="bg-destructive/10 text-destructive p-4 rounded-2xl border border-destructive/20 text-sm font-bold flex items-center gap-3 animate-shake">
-          <span>⚠️</span> {error}
+        <div className="bg-red-50 text-red-700 p-4 rounded-2xl border border-red-200 text-sm font-bold flex items-center gap-3">
+          ⚠️ {error}
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-        {/* Lado Izquierdo: Datos Personales */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+        {/* Left */}
         <div className="space-y-8">
-          <div>
-            <h3 className="text-xl font-black text-neutral-900 mb-6 flex items-center gap-3">
-              <span className="w-2 h-6 bg-primary rounded-full" />
-              Identidad del Alumno
-            </h3>
-            
-            <div className="space-y-6">
-              <FormField label="Nombre Completo *" icon="👤">
-                <input
-                  type="text"
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-5 py-3 border border-neutral-200 bg-white rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all outline-none font-bold text-neutral-900 placeholder:text-neutral-300"
-                  placeholder="Ej: Rodrigo Tapia"
-                />
-              </FormField>
+          <Section title="Identidad del Alumno" accent="bg-violet-500">
+            <Field label="Nombre Completo *" icon="👤">
+              <input type="text" required value={form.name} onChange={e => set("name", e.target.value)} className="input-field" placeholder="Ej: Rodrigo Tapia" />
+            </Field>
+            <Field label="Correo Electrónico *" icon="✉️">
+              <input type="email" required value={form.email} onChange={e => set("email", e.target.value)} className="input-field" placeholder="nombre@ejemplo.com" disabled={mode === "edit"} />
+            </Field>
+            <Field label="Teléfono / WhatsApp" icon="📞">
+              <input type="tel" value={form.phone} onChange={e => set("phone", e.target.value)} className="input-field" placeholder="+56 9 ..." />
+            </Field>
+            {mode === "create" && (
+              <Field label="Contraseña Inicial" icon="🔒">
+                <input type="password" value={form.password} onChange={e => set("password", e.target.value)} className="input-field" placeholder="Dejar vacío = student123" />
+              </Field>
+            )}
+          </Section>
 
-              <FormField label="Correo Electrónico *" icon="✉️">
-                <input
-                  type="email"
-                  required
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full px-5 py-3 border border-neutral-200 bg-white rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all outline-none font-bold text-neutral-900 placeholder:text-neutral-300 disabled:opacity-50"
-                  placeholder="nombre@ejemplo.com"
-                  disabled={mode === "edit"}
-                />
-              </FormField>
-
-              <FormField label="Teléfono / WhatsApp" icon="📞">
-                <input
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  className="w-full px-5 py-3 border border-neutral-200 bg-white rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all outline-none font-bold text-neutral-900 placeholder:text-neutral-300"
-                  placeholder="+56 9 ..."
-                />
-              </FormField>
-
-              {mode === "create" && (
-                <FormField label="Contraseña Inicial" icon="🔒" subtitle="Dejar vacío para auto-generar">
-                  <input
-                    type="password"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="w-full px-5 py-3 border border-neutral-200 bg-white rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all outline-none font-bold text-neutral-900 placeholder:text-neutral-300"
-                    placeholder="••••••••"
-                  />
-                </FormField>
-              )}
-            </div>
-          </div>
-
-          <div>
-            <h3 className="text-xl font-black text-neutral-900 mb-6 flex items-center gap-3">
-              <span className="w-2 h-6 bg-amber-400 rounded-full" />
-              Estado y Origen
-            </h3>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <FormField label="Estado Académico" icon="📈">
-                <select
-                  required
-                  value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  className="w-full px-5 py-3 border border-neutral-200 bg-white rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all outline-none font-bold text-neutral-900 appearance-none"
-                >
+          <Section title="Estado y Origen" accent="bg-amber-400">
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Estado" icon="📈">
+                <select value={form.status} onChange={e => set("status", e.target.value)} className="input-field">
                   <option value="PROSPECT">Prospecto</option>
                   <option value="TRIAL">Clase de Prueba</option>
                   <option value="ACTIVE">Activo</option>
                   <option value="PAUSED">Pausado</option>
                   <option value="INACTIVE">Inactivo</option>
                 </select>
-              </FormField>
-
-              <FormField label="Fuente de Captación" icon="🔗">
-                <select
-                  value={formData.leadSource}
-                  onChange={(e) => setFormData({ ...formData, leadSource: e.target.value })}
-                  className="w-full px-5 py-3 border border-neutral-200 bg-white rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all outline-none font-bold text-neutral-900 appearance-none"
-                >
-                  <option value="">Seleccionar...</option>
+              </Field>
+              <Field label="Fuente" icon="🔗">
+                <select value={form.lead_source} onChange={e => set("lead_source", e.target.value)} className="input-field">
+                  <option value="">Seleccionar…</option>
                   <option value="INSTAGRAM">Instagram</option>
                   <option value="FACEBOOK">Facebook</option>
-                  <option value="GOOGLE">Google Ads</option>
+                  <option value="GOOGLE">Google</option>
                   <option value="REFERRAL">Referido</option>
-                  <option value="WEBSITE">Web Directo</option>
+                  <option value="WEBSITE">Web</option>
                   <option value="OTHER">Otro</option>
                 </select>
-              </FormField>
+              </Field>
             </div>
-          </div>
+          </Section>
         </div>
 
-        {/* Lado Derecho: Preferencias y Emergencia */}
+        {/* Right */}
         <div className="space-y-8">
-          <div>
-            <h3 className="text-xl font-black text-neutral-900 mb-6 flex items-center gap-3">
-              <span className="w-2 h-6 bg-emerald-500 rounded-full" />
-              Personalización de Clases
-            </h3>
-            
-            <div className="space-y-6">
-              <FormField label="Modalidad de Estudio" icon="🎓">
-                <div className="grid grid-cols-2 gap-3 p-1.5 bg-neutral-100 rounded-2xl">
-                  {['online', 'presencial'].map((mod) => (
-                    <button
-                      key={mod}
-                      type="button"
-                      onClick={() => setFormData({ ...formData, modalidad: mod })}
-                      className={`py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                        formData.modalidad === mod
-                          ? "bg-white text-primary shadow-sm"
-                          : "text-neutral-400 hover:text-neutral-600"
-                      }`}
-                    >
-                      {mod === 'online' ? '📹 Virtual' : '🏠 Sede'}
-                    </button>
-                  ))}
-                </div>
-              </FormField>
-
-              <div className="grid grid-cols-2 gap-6">
-                <FormField label="Día Preferido" icon="🗓️">
-                  <select
-                    value={formData.preferredDay}
-                    onChange={(e) => setFormData({ ...formData, preferredDay: e.target.value })}
-                    className="w-full px-5 py-3 border border-neutral-200 bg-white rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all outline-none font-bold text-neutral-900 appearance-none"
+          <Section title="Preferencias" accent="bg-emerald-500">
+            <Field label="Modalidad" icon="🎓">
+              <div className="grid grid-cols-2 gap-3 p-1.5 bg-neutral-100 rounded-2xl">
+                {(["online", "presencial"] as const).map(mod => (
+                  <button
+                    key={mod}
+                    type="button"
+                    onClick={() => set("modalidad", mod)}
+                    className={`py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                      form.modalidad === mod ? "bg-white text-violet-600 shadow-sm" : "text-neutral-400"
+                    }`}
                   >
-                    <option value="">Cualquiera</option>
-                    <option value="Monday">Lunes</option>
-                    <option value="Tuesday">Martes</option>
-                    <option value="Wednesday">Miércoles</option>
-                    <option value="Thursday">Jueves</option>
-                    <option value="Friday">Viernes</option>
-                    <option value="Saturday">Sábado</option>
-                  </select>
-                </FormField>
-
-                <FormField label="Hora Estimada" icon="⏰">
-                  <input
-                    type="time"
-                    value={formData.preferredTime}
-                    onChange={(e) => setFormData({ ...formData, preferredTime: e.target.value })}
-                    className="w-full px-5 py-3 border border-neutral-200 bg-white rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all outline-none font-bold text-neutral-900"
-                  />
-                </FormField>
+                    {mod === "online" ? "📹 Virtual" : "🏠 Presencial"}
+                  </button>
+                ))}
               </div>
+            </Field>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Día Preferido" icon="🗓️">
+                <select value={form.preferred_day} onChange={e => set("preferred_day", e.target.value)} className="input-field">
+                  <option value="">Cualquiera</option>
+                  {["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"].map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </Field>
+              <Field label="Hora" icon="⏰">
+                <input type="time" value={form.preferred_time} onChange={e => set("preferred_time", e.target.value)} className="input-field" />
+              </Field>
             </div>
-          </div>
+          </Section>
 
-          <div className="bg-neutral-50 rounded-3xl p-8 border border-neutral-100 space-y-6">
-            <h3 className="text-lg font-black text-neutral-900 flex items-center gap-3">
-              🚨 Contacto de Emergencia
-            </h3>
-            
-            <div className="space-y-4">
-              <FormField label="Nombre de Contacto" icon="👤">
-                <input
-                  type="text"
-                  value={formData.emergencyContact}
-                  onChange={(e) => setFormData({ ...formData, emergencyContact: e.target.value })}
-                  className="w-full px-5 py-3 border border-neutral-200 bg-white rounded-2xl focus:ring-4 shadow-sm transition-all outline-none font-bold text-neutral-900"
-                  placeholder="Ej: Familiar / Amigo"
-                />
-              </FormField>
-
-              <FormField label="Teléfono de Emergencia" icon="📞">
-                <input
-                  type="tel"
-                  value={formData.emergencyPhone}
-                  onChange={(e) => setFormData({ ...formData, emergencyPhone: e.target.value })}
-                  className="w-full px-5 py-3 border border-neutral-200 bg-white rounded-2xl focus:ring-4 shadow-sm transition-all outline-none font-bold text-neutral-900"
-                  placeholder="+56 9 ..."
-                />
-              </FormField>
-            </div>
+          <div className="bg-neutral-50 rounded-3xl p-8 border border-neutral-100 space-y-4">
+            <h3 className="text-lg font-black text-neutral-900">🚨 Contacto de Emergencia</h3>
+            <Field label="Nombre" icon="👤">
+              <input type="text" value={form.emergency_contact} onChange={e => set("emergency_contact", e.target.value)} className="input-field" placeholder="Familiar / Amigo" />
+            </Field>
+            <Field label="Teléfono" icon="📞">
+              <input type="tel" value={form.emergency_phone} onChange={e => set("emergency_phone", e.target.value)} className="input-field" placeholder="+56 9 ..." />
+            </Field>
           </div>
         </div>
       </div>
 
-      {/* Botones de Acción */}
+      {/* Actions */}
       <div className="sticky bottom-8 z-50 flex justify-end items-center gap-4 bg-white/50 backdrop-blur-xl p-4 rounded-3xl border border-white/20 shadow-2xl">
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="px-8 py-3 bg-neutral-100 text-neutral-600 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-neutral-200 transition-all active:scale-95"
-        >
+        <button type="button" onClick={() => router.back()} className="px-8 py-3 bg-neutral-100 text-neutral-600 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-neutral-200 transition-all">
           Descartar
         </button>
-        <button
-          type="submit"
-          disabled={loading}
-          className="px-10 py-3 bg-neutral-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-primary transition-all shadow-xl shadow-neutral-900/10 disabled:opacity-50 active:scale-95 flex items-center gap-3"
-        >
-          {loading ? (
-            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-          ) : '✓'}
+        <button type="submit" disabled={loading} className="px-10 py-3 bg-neutral-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-violet-600 transition-all shadow-xl disabled:opacity-50 flex items-center gap-3">
+          {loading ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : "✓"}
           <span>{mode === "create" ? "Crear Alumno" : "Guardar Cambios"}</span>
         </button>
       </div>
@@ -380,25 +244,46 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
   )
 }
 
-function FormField({ label, icon, subtitle, children }: {
-  label: string
-  icon: string
-  subtitle?: string
-  children: React.ReactNode
-}) {
+function Section({ title, accent, children }: { title: string; accent: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <h3 className="text-xl font-black text-neutral-900 mb-6 flex items-center gap-3">
+        <span className={`w-2 h-6 ${accent} rounded-full`} />
+        {title}
+      </h3>
+      <div className="space-y-4">{children}</div>
+    </div>
+  )
+}
+
+function Field({ label, icon, children }: { label: string; icon: string; children: React.ReactNode }) {
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest flex items-center gap-2 px-1">
-          <span>{icon}</span> {label}
-        </label>
-        {subtitle && (
-          <span className="text-[10px] font-bold text-neutral-300 italic">
-            {subtitle}
-          </span>
-        )}
-      </div>
+      <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest flex items-center gap-2 px-1">
+        <span>{icon}</span> {label}
+      </label>
       {children}
+      <style jsx global>{`
+        .input-field {
+          width: 100%;
+          padding: 0.75rem 1.25rem;
+          border: 1px solid #e5e7eb;
+          background: white;
+          border-radius: 1rem;
+          outline: none;
+          font-weight: 700;
+          font-size: 0.875rem;
+          color: #171717;
+          transition: all 0.2s;
+        }
+        .input-field:focus {
+          border-color: #8b5cf6;
+          box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+        }
+        .input-field:disabled {
+          opacity: 0.5;
+        }
+      `}</style>
     </div>
   )
 }
