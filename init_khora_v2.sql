@@ -1,13 +1,41 @@
 -- =============================================================================
 -- KHORA V2 — SCHEMA MAESTRO
--- Ejecutar en SQL Editor de un proyecto Supabase LIMPIO
+-- Ejecutar en SQL Editor de Supabase (funciona en proyecto limpio o sucio)
 -- =============================================================================
 
 -- Extensiones
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- =============================================================================
--- TABLAS
+-- PASO 0: LIMPIEZA TOTAL (borrar todo lo que exista)
+-- =============================================================================
+
+-- Triggers primero
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+DROP TRIGGER IF EXISTS on_auth_user_deleted ON auth.users;
+
+-- Funciones
+DROP FUNCTION IF EXISTS public.handle_new_user() CASCADE;
+DROP FUNCTION IF EXISTS public.handle_deleted_user() CASCADE;
+DROP FUNCTION IF EXISTS public.create_student_for_teacher(TEXT, TEXT, TEXT, TEXT, UUID) CASCADE;
+DROP FUNCTION IF EXISTS public.create_student_account(TEXT, TEXT, TEXT, TEXT, UUID) CASCADE;
+DROP FUNCTION IF EXISTS public.is_teacher() CASCADE;
+
+-- Tablas (orden inverso de dependencias)
+DROP TABLE IF EXISTS public."Payment" CASCADE;
+DROP TABLE IF EXISTS public."Task" CASCADE;
+DROP TABLE IF EXISTS public."ClassNote" CASCADE;
+DROP TABLE IF EXISTS public."Class" CASCADE;
+DROP TABLE IF EXISTS public."Booking" CASCADE;
+DROP TABLE IF EXISTS public."AvailabilityException" CASCADE;
+DROP TABLE IF EXISTS public."Availability" CASCADE;
+DROP TABLE IF EXISTS public."ClassType" CASCADE;
+DROP TABLE IF EXISTS public."StudentProfile" CASCADE;
+DROP TABLE IF EXISTS public."TeacherProfile" CASCADE;
+DROP TABLE IF EXISTS public."User" CASCADE;
+
+-- =============================================================================
+-- PASO 1: CREAR TABLAS
 -- =============================================================================
 
 CREATE TABLE public."User" (

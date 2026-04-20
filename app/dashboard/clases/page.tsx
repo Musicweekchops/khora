@@ -75,19 +75,22 @@ export default function ClasesPage() {
       ) : (
         <div className="space-y-3">
           {classes.map(c => (
-            <div key={c.id} className="bg-white rounded-2xl border border-neutral-100 p-5 flex items-center gap-4 hover:shadow-md transition-all">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-sky-50 to-sky-100 flex flex-col items-center justify-center">
-                <span className="text-[10px] font-bold text-sky-600 uppercase">{new Date(c.date + "T12:00").toLocaleDateString("es-CL", { weekday: "short" })}</span>
-                <span className="text-lg font-black text-sky-700">{new Date(c.date + "T12:00").getDate()}</span>
+            <Link key={c.id} href={`/dashboard/clases/detalles?id=${c.id}`}>
+              <div className="bg-white rounded-2xl border border-neutral-100 p-5 flex items-center gap-4 hover:shadow-md hover:border-violet-200 transition-all group cursor-pointer">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-sky-50 to-sky-100 flex flex-col items-center justify-center">
+                  <span className="text-[10px] font-bold text-sky-600 uppercase">{new Date(c.date + "T12:00").toLocaleDateString("es-CL", { weekday: "short" })}</span>
+                  <span className="text-lg font-black text-sky-700">{new Date(c.date + "T12:00").getDate()}</span>
+                </div>
+                <div className="flex-1">
+                  <p className="font-bold text-neutral-900 group-hover:text-violet-600 transition-colors">{c.student_name}</p>
+                  <p className="text-sm text-neutral-500">{formatTime(c.start_time)} – {formatTime(c.end_time)} · {c.modalidad === "online" ? "Virtual" : "Presencial"}</p>
+                </div>
+                <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${statusColors[c.status] ?? "bg-neutral-100 text-neutral-500"}`}>
+                  {c.status === "SCHEDULED" ? "Programada" : c.status === "COMPLETED" ? "Completada" : "Cancelada"}
+                </span>
+                <span className="text-neutral-300 group-hover:text-violet-400 transition-colors">→</span>
               </div>
-              <div className="flex-1">
-                <p className="font-bold text-neutral-900">{c.student_name}</p>
-                <p className="text-sm text-neutral-500">{formatTime(c.start_time)} – {formatTime(c.end_time)} · {c.modalidad === "online" ? "Virtual" : "Presencial"}</p>
-              </div>
-              <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${statusColors[c.status] ?? "bg-neutral-100 text-neutral-500"}`}>
-                {c.status === "SCHEDULED" ? "Programada" : c.status === "COMPLETED" ? "Completada" : "Cancelada"}
-              </span>
-            </div>
+            </Link>
           ))}
         </div>
       )}

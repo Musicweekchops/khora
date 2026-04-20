@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 const NAV = [
   { name: "Dashboard", href: "/dashboard", icon: "📊" },
   { name: "Alumnos", href: "/dashboard/alumnos", icon: "👥" },
+  { name: "CRM", href: "/dashboard/crm", icon: "📋" },
   { name: "Agenda", href: "/dashboard/agenda", icon: "📅" },
   { name: "Clases", href: "/dashboard/clases", icon: "📖" },
   { name: "Financiero", href: "/dashboard/financiero", icon: "💰" },
