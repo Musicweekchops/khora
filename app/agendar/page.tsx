@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { getAvailableSlots, addMinutes, timesOverlap } from "@/lib/availability"
 import { formatTime } from "@/lib/utils"
@@ -9,7 +10,23 @@ interface ClassType {
   id: string; name: string; description: string; icon: string; price: number; currency: string; duration: number
 }
 
-export default function AgendarPage() {
+interface Teacher {
+  id: string; user_id: string; slug: string; User: { name: string }
+}
+
+export default function AgendarPageWrapper() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-neutral-50"><p className="animate-pulse font-bold text-neutral-400">Cargando...</p></div>}>
+      <PublicBookingPage />
+    </Suspense>
+  )
+}
+
+function PublicBookingPage() {
+  const searchParams = useSearchParams()
+  const slug = searchParams.get("p")
+
+  const [teacher, setTeacher] = useState<Teacher | null>(null)
   const [classTypes, setClassTypes] = useState<ClassType[]>([])
   const [selected, setSelected] = useState<ClassType | null>(null)
   const [loading, setLoading] = useState(true)
@@ -22,61 +39,77 @@ export default function AgendarPage() {
   const [error, setError] = useState("")
 
   useEffect(() => {
-    loadClassTypes()
-  }, [])
+    if (slug) loadTeacherAndClasses()
+  }, [slug])
 
   useEffect(() => {
-    if (formData.date && selected) {
+    if (formData.date && selected && teacher) {
       loadSlots()
     }
-  }, [formData.date, selected])
+  }, [formData.date, selected, teacher])
 
-  async function loadClassTypes() {
-    const { data } = await supabase.from("ClassType").select("*").order("price")
-    if (data) setClassTypes(data)
+  async function loadTeacherAndClasses() {
+    setLoading(true)
+    setError("")
+    
+    // 1. Fetch teacher by slug
+    const { data: t, error: tErr } = await supabase
+      .from("TeacherProfile")
+      .select("id, user_id, slug, User ( name )")
+      .eq("slug", slug)
+      .maybeSingle()
+
+    if (tErr || !t) {
+      setError("Profesor no encontrado")
+      setLoading(false)
+      return
+    }
+
+    setTeacher(t as any)
+
+    // 2. Fetch class types for THIS teacher
+    const { data: ct } = await supabase
+      .from("ClassType")
+      .select("*")
+      .eq("teacher_id", t.id)
+      .order("price")
+    
+    if (ct) setClassTypes(ct)
     setLoading(false)
   }
 
   async function loadSlots() {
-    if (!selected || !formData.date) return
+    if (!selected || !formData.date || !teacher) return
     setLoadingSlots(true)
     setSelectedSlot(null)
     
-    // Find teacher
-    const { data: ct } = await supabase.from("ClassType").select("teacher_id").eq("id", selected.id).single()
-    if (ct) {
-      const slots = await getAvailableSlots(formData.date, ct.teacher_id, selected.duration)
-      setAvailableSlots(slots)
-    }
+    const slots = await getAvailableSlots(formData.date, teacher.id, selected.duration)
+    setAvailableSlots(slots)
     setLoadingSlots(false)
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!selected || !selectedSlot) return
+    if (!selected || !selectedSlot || !teacher) return
     setSubmitting(true)
     setError("")
 
     try {
-      // Find teacher
-      const { data: ct } = await supabase.from("ClassType").select("teacher_id").eq("id", selected.id).single()
-      if (!ct) throw new Error("Tipo de clase no encontrado")
-
       const startTime = selectedSlot
       const endTime = addMinutes(startTime, selected.duration)
 
-      // FINAL CONFLICT CHECK (Safety)
+      // FINAL CONFLICT CHECK
       const { data: existingClasses } = await supabase
         .from("Class")
         .select("start_time, end_time")
-        .eq("teacher_id", ct.teacher_id)
+        .eq("teacher_id", teacher.id)
         .eq("date", formData.date)
         .neq("status", "CANCELLED")
 
       const { data: existingBookings } = await supabase
         .from("Booking")
         .select("start_time, end_time")
-        .eq("teacher_id", ct.teacher_id)
+        .eq("teacher_id", teacher.id)
         .eq("date", formData.date)
         .eq("status", "PENDING")
 
@@ -88,7 +121,7 @@ export default function AgendarPage() {
       }
 
       const { error: insertErr } = await supabase.from("Booking").insert({
-        teacher_id: ct.teacher_id,
+        teacher_id: teacher.id,
         class_type_id: selected.id,
         name: formData.name,
         email: formData.email,
@@ -110,14 +143,38 @@ export default function AgendarPage() {
     }
   }
 
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-neutral-50">
+        <div className="text-center">
+          <div className="kh-skeleton w-16 h-16 rounded-full mx-auto mb-4" />
+          <p className="text-neutral-400 font-bold animate-pulse">Cargando agenda de {slug}...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-neutral-50 p-4">
+        <div className="max-w-md w-full bg-white rounded-[40px] border border-neutral-100 p-12 text-center shadow-2xl">
+          <div className="text-6xl mb-6">🔍</div>
+          <h2 className="text-2xl font-black text-neutral-900 mb-2">Lo sentimos</h2>
+          <p className="text-neutral-500 font-medium">{error}</p>
+          <a href="/" className="mt-8 block kh-btn-secondary py-3">Volver al inicio</a>
+        </div>
+      </div>
+    )
+  }
+
   if (success) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-neutral-50 p-4">
         <div className="max-w-md w-full bg-white rounded-[40px] border border-neutral-100 p-12 text-center shadow-2xl">
           <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center text-4xl mx-auto mb-8 animate-bounce">✓</div>
           <h2 className="text-3xl font-black text-neutral-900 mb-3">¡Reserva Enviada!</h2>
-          <p className="text-neutral-500 font-medium leading-relaxed">Hemos recibido tu solicitud. El profesor se pondrá en contacto contigo pronto para confirmar.</p>
-          <button onClick={() => window.location.reload()} className="mt-10 kh-btn-primary w-full py-4">Volver al inicio</button>
+          <p className="text-neutral-500 font-medium leading-relaxed">Hemos recibido tu solicitud para agendar con <b>{teacher?.User?.name}</b>. Te contactaremos pronto.</p>
+          <button onClick={() => window.location.reload()} className="mt-10 kh-btn-primary w-full py-4">Agendar otra</button>
         </div>
       </div>
     )
@@ -128,32 +185,30 @@ export default function AgendarPage() {
       <div className="max-w-3xl mx-auto">
         {/* Header */}
         <div className="text-center mb-12">
-          <h1 className="text-5xl font-black text-neutral-900 tracking-tight mb-4">Agenda tu Clase</h1>
-          <p className="text-neutral-500 font-bold text-lg">Reserva tu espacio en segundos</p>
+          <div className="w-20 h-20 bg-violet-600 text-white rounded-3xl flex items-center justify-center text-3xl font-black mx-auto mb-6 shadow-xl shadow-violet-600/20">
+            {teacher?.User?.name.charAt(0)}
+          </div>
+          <h1 className="text-4xl font-black text-neutral-900 tracking-tight mb-2">Agenda con {teacher?.User?.name}</h1>
+          <p className="text-neutral-500 font-bold">Selecciona el servicio para ver horarios disponibles</p>
         </div>
 
         {!selected ? (
-          /* Step 1: Select class type */
           <div className="grid gap-4">
-            {loading ? (
-              [1,2,3].map(i => <div key={i} className="kh-skeleton h-32" />)
-            ) : classTypes.length === 0 ? (
+            {classTypes.length === 0 ? (
               <div className="kh-card p-20 text-center">
-                <p className="text-neutral-400 font-bold italic">No hay tipos de clases disponibles todavía.</p>
+                <p className="text-neutral-400 font-bold italic">Este profesor no tiene servicios configurados todavía.</p>
               </div>
             ) : (
               classTypes.map(ct => (
                 <button key={ct.id} onClick={() => setSelected(ct)} className="group text-left p-1">
                   <div className="kh-card p-8 flex items-center gap-6 group-hover:border-violet-500 group-hover:shadow-xl transition-all relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-violet-50 rounded-full -mr-12 -mt-12 transition-all group-hover:bg-violet-100" />
-                    <span className="text-5xl relative z-10">{ct.icon || "🎵"}</span>
-                    <div className="flex-1 relative z-10">
+                    <span className="text-5xl">{ct.icon || "🎵"}</span>
+                    <div className="flex-1">
                       <h3 className="text-xl font-black text-neutral-900">{ct.name}</h3>
                       <p className="text-neutral-400 font-bold mt-1 uppercase text-xs tracking-widest">{ct.duration} MINUTOS</p>
                     </div>
-                    <div className="text-right relative z-10">
+                    <div className="text-right">
                       <p className="text-2xl font-black text-neutral-900">${ct.price.toLocaleString()}</p>
-                      <p className="text-[10px] font-black text-neutral-400 uppercase tracking-tighter">CONFIRMACIÓN RÁPIDA</p>
                     </div>
                   </div>
                 </button>
@@ -175,7 +230,6 @@ export default function AgendarPage() {
                 </div>
                 <div className="text-right">
                   <p className="text-2xl font-black">${selected.price.toLocaleString()}</p>
-                  <p className="text-[10px] font-bold text-neutral-500 uppercase">{selected.duration} min</p>
                 </div>
               </div>
 
@@ -183,44 +237,32 @@ export default function AgendarPage() {
                 <div className="space-y-6">
                   <h3 className="font-black text-neutral-900 flex items-center gap-2"><span className="w-2 h-5 bg-violet-500 rounded-full" /> Tus Datos</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="kh-label px-1">Nombre Completo *</label>
-                      <input required value={formData.name} onChange={e => setFormData(p => ({...p, name: e.target.value}))} className="kh-input" placeholder="Ej: Juan Pérez" />
-                    </div>
-                    <div>
-                      <label className="kh-label px-1">Email *</label>
-                      <input type="email" required value={formData.email} onChange={e => setFormData(p => ({...p, email: e.target.value}))} className="kh-input" placeholder="tu@email.com" />
-                    </div>
+                    <input required value={formData.name} onChange={e => setFormData(p => ({...p, name: e.target.value}))} className="kh-input" placeholder="Nombre completo" />
+                    <input type="email" required value={formData.email} onChange={e => setFormData(p => ({...p, email: e.target.value}))} className="kh-input" placeholder="Email" />
                   </div>
-                  <div>
-                    <label className="kh-label px-1">WhatsApp / Teléfono *</label>
-                    <input type="tel" required value={formData.phone} onChange={e => setFormData(p => ({...p, phone: e.target.value}))} className="kh-input" placeholder="+56 9 ..." />
-                  </div>
+                  <input type="tel" required value={formData.phone} onChange={e => setFormData(p => ({...p, phone: e.target.value}))} className="kh-input" placeholder="WhatsApp / Teléfono" />
                 </div>
 
                 <div className="space-y-6 pt-4 border-t border-neutral-100">
-                  <h3 className="font-black text-neutral-900 flex items-center gap-2"><span className="w-2 h-5 bg-emerald-500 rounded-full" /> Elegir Fecha y Hora</h3>
-                  <div>
-                    <label className="kh-label px-1">Fecha de la clase *</label>
-                    <input type="date" required value={formData.date} onChange={e => setFormData(p => ({...p, date: e.target.value}))} className="kh-input" min={new Date().toISOString().split("T")[0]} />
-                  </div>
+                  <h3 className="font-black text-neutral-900 flex items-center gap-2"><span className="w-2 h-5 bg-emerald-500 rounded-full" /> Fecha y Hora</h3>
+                  <input type="date" required value={formData.date} onChange={e => setFormData(p => ({...p, date: e.target.value}))} className="kh-input" min={new Date().toISOString().split("T")[0]} />
 
                   {formData.date && (
                     <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                      <label className="kh-label px-1 mb-3 block">Horas disponibles para el {new Date(formData.date + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}</label>
+                      <label className="kh-label mb-3 block">Horas disponibles ({formatDate(formData.date)})</label>
                       {loadingSlots ? (
                         <div className="flex gap-2"><div className="kh-skeleton w-20 h-10"/><div className="kh-skeleton w-20 h-10"/></div>
                       ) : availableSlots.length === 0 ? (
-                        <p className="p-6 bg-neutral-50 rounded-2xl text-center text-sm font-bold text-neutral-400 italic border border-neutral-100">No hay horarios disponibles para este día.</p>
+                        <p className="p-6 bg-neutral-50 rounded-2xl text-center text-sm font-bold text-neutral-400 italic">No hay horarios disponibles.</p>
                       ) : (
-                        <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
+                        <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
                           {availableSlots.map(slot => (
                             <button
                               key={slot}
                               type="button"
                               onClick={() => setSelectedSlot(slot)}
                               className={`py-3 px-2 rounded-xl text-xs font-black transition-all ${
-                                selectedSlot === slot ? "bg-violet-600 text-white shadow-lg scale-105" : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+                                selectedSlot === slot ? "bg-violet-600 text-white shadow-lg" : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
                               }`}
                             >
                               {formatTime(slot)}
@@ -232,11 +274,6 @@ export default function AgendarPage() {
                   )}
                 </div>
 
-                <div>
-                  <label className="kh-label px-1">Mensaje o Dudas (opcional)</label>
-                  <textarea value={formData.message} onChange={e => setFormData(p => ({...p, message: e.target.value}))} className="kh-input resize-none" rows={3} placeholder="Algo que el profesor deba saber…" />
-                </div>
-
                 {error && <div className="bg-red-50 text-red-700 p-4 rounded-2xl text-sm font-bold border border-red-200">⚠️ {error}</div>}
 
                 <button 
@@ -244,7 +281,7 @@ export default function AgendarPage() {
                   disabled={submitting || !selectedSlot} 
                   className="w-full kh-btn-primary py-5 text-lg shadow-xl shadow-violet-600/20"
                 >
-                  {submitting ? "Procesando..." : "🎵 Solicitar Reserva"}
+                  {submitting ? "Reservando..." : "🎵 Solicitar Reserva"}
                 </button>
               </form>
             </div>
@@ -253,4 +290,8 @@ export default function AgendarPage() {
       </div>
     </div>
   )
+}
+
+function formatDate(dateStr: string) {
+  return new Date(dateStr + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
 }

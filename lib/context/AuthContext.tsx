@@ -41,7 +41,8 @@ const PUBLIC_PATHS = ['/login', '/register', '/', '/agendar']
 
 function isPublicPath(pathname: string | null) {
   if (!pathname) return false
-  return PUBLIC_PATHS.some(p => pathname === p || pathname.startsWith('/agendar'))
+  const publicPaths = ['/login', '/register', '/', '/agendar']
+  return publicPaths.some(p => pathname === p || pathname.startsWith('/agendar/'))
 }
 
 // -------------------------------------------------------------------

@@ -23,8 +23,10 @@ interface Range {
 
 export default function AvailabilitySettings({ teacherId }: { teacherId: string }) {
   const [ranges, setRanges] = useState<Range[]>([])
+  const [slug, setSlug] = useState("")
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [copied, setCopied] = useState(false)
   
   const [newRange, setNewRange] = useState({
     day_of_week: 1,
@@ -37,15 +39,46 @@ export default function AvailabilitySettings({ teacherId }: { teacherId: string 
   }, [teacherId])
 
   async function loadAvailability() {
-    const { data } = await supabase
+    // 1. Fetch ranges
+    const { data: rangeData } = await supabase
       .from("Availability")
       .select("*")
       .eq("teacher_id", teacherId)
       .order("day_of_week")
       .order("start_time")
     
-    if (data) setRanges(data)
+    if (rangeData) setRanges(rangeData)
+
+    // 2. Fetch slug
+    const { data: tp } = await supabase
+      .from("TeacherProfile")
+      .select("slug")
+      .eq("id", teacherId)
+      .single()
+    
+    if (tp) setSlug(tp.slug || "")
+
     setLoading(false)
+  }
+
+  async function updateSlug() {
+    if (!slug.trim()) return
+    setSaving(true)
+    const { error } = await supabase
+      .from("TeacherProfile")
+      .update({ slug: slug.trim().toLowerCase().replace(/\s+/g, "-") })
+      .eq("id", teacherId)
+    
+    if (error) alert("Este nombre de link ya está ocupado. Prueba otro.")
+    else alert("¡Link actualizado!")
+    setSaving(false)
+  }
+
+  const copyLink = () => {
+    const url = `${window.location.origin}/agendar?p=${slug}`
+    navigator.clipboard.writeText(url)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   async function handleAdd() {
@@ -73,49 +106,79 @@ export default function AvailabilitySettings({ teacherId }: { teacherId: string 
   if (loading) return <div className="kh-skeleton h-40" />
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-black text-neutral-900">Horarios de Disponibilidad</h3>
-        <p className="text-xs text-neutral-400 font-medium italic">Define cuándo estás libre para recibir reservas públicas</p>
+    <div className="space-y-8">
+      {/* Link de Reserva Section */}
+      <div className="kh-card p-8 bg-violet-600 text-white border-none shadow-xl shadow-violet-600/20">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-1">
+            <h3 className="text-xl font-black">Tu Link de Reserva</h3>
+            <p className="text-violet-100 text-sm opacity-90 font-medium">Comparte este link para que tus alumnos agenden clases.</p>
+          </div>
+          <div className="flex gap-2 bg-white/10 p-1.5 rounded-2xl backdrop-blur-md">
+            <input 
+              type="text" 
+              value={slug}
+              onChange={e => setSlug(e.target.value)}
+              className="bg-transparent border-none text-white font-black text-sm px-4 outline-none w-40"
+              placeholder="tu-nombre"
+            />
+            <button onClick={updateSlug} className="bg-white text-violet-600 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-violet-50 transition-all">
+              {saving ? "..." : "Guardar"}
+            </button>
+          </div>
+          <button 
+            onClick={copyLink} 
+            className={`px-8 py-4 rounded-2xl text-sm font-black uppercase tracking-widest transition-all ${
+              copied ? "bg-emerald-500 text-white" : "bg-white text-violet-600 hover:scale-105"
+            }`}
+          >
+            {copied ? "✓ Copiado" : "🔗 Copiar Link Público"}
+          </button>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between pt-4 border-t border-neutral-100">
+        <h3 className="text-xl font-black text-neutral-900">Configuración de Horarios</h3>
+        <p className="text-xs text-neutral-400 font-bold uppercase tracking-widest">Availability Ranges</p>
       </div>
 
       {/* Formulario para nuevo rango */}
-      <div className="kh-card p-6 bg-neutral-50/50 border-neutral-200">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+      <div className="bg-neutral-50 rounded-3xl p-8 border border-neutral-100">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
           <div>
-            <label className="kh-label">Día</label>
+            <label className="kh-label px-1">Día de la semana</label>
             <select 
               value={newRange.day_of_week} 
               onChange={e => setNewRange(p => ({...p, day_of_week: Number(e.target.value)}))}
-              className="kh-input text-sm"
+              className="kh-input"
             >
               {DAYS.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="kh-label">Inicio</label>
+            <label className="kh-label px-1">Hora de Inicio</label>
             <input 
               type="time" 
               value={newRange.start_time} 
               onChange={e => setNewRange(p => ({...p, start_time: e.target.value}))}
-              className="kh-input text-sm"
+              className="kh-input"
             />
           </div>
           <div>
-            <label className="kh-label">Fin</label>
+            <label className="kh-label px-1">Hora de Fin</label>
             <input 
               type="time" 
               value={newRange.end_time} 
               onChange={e => setNewRange(p => ({...p, end_time: e.target.value}))}
-              className="kh-input text-sm"
+              className="kh-input"
             />
           </div>
           <button 
             onClick={handleAdd} 
             disabled={saving}
-            className="kh-btn-primary py-3"
+            className="kh-btn-primary py-4"
           >
-            {saving ? "..." : "+ Agregar Rango"}
+            {saving ? "Cargando..." : "+ Agregar Horario"}
           </button>
         </div>
       </div>
