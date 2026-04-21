@@ -102,9 +102,13 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
         console.log("[StudentForm] User created, creating StudentProfile")
 
         // 3. Create StudentProfile row
+        const studentProfileId = crypto.randomUUID()
+        console.log("[StudentForm] Creating StudentProfile with id:", studentProfileId)
+
         const { error: spErr } = await supabase
           .from("StudentProfile")
           .insert({
+            id: studentProfileId,
             user_id: newId,
             teacher_id: profile.teacherProfileId,
             status: form.status,
@@ -124,6 +128,9 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
         }
 
         console.log("[StudentForm] Student created successfully!")
+        router.push(`/dashboard/alumnos/detalles?id=${studentProfileId}`)
+        return // Skip the default redirect at the end
+
 
       } else {
         // EDIT mode

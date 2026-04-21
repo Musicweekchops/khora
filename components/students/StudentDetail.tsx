@@ -4,9 +4,10 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { formatCurrency, formatDate, formatTime } from "@/lib/utils"
+import ScheduleManager from "@/components/students/ScheduleManager"
 
 interface StudentData {
-  id: string; user_id: string; status: string; modalidad: string; lead_source: string
+  id: string; user_id: string; teacher_id: string; status: string; modalidad: string; lead_source: string
   preferred_day: string; preferred_time: string; emergency_contact: string; emergency_phone: string
   lifetime_value: number; created_at: string
   user: { name: string; email: string; phone: string }
@@ -24,7 +25,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
   const [payments, setPayments] = useState<PaymentRow[]>([])
   const [notes, setNotes] = useState<NoteRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<"overview" | "classes" | "tasks" | "payments" | "notes">("overview")
+  const [activeTab, setActiveTab] = useState<"overview" | "schedule" | "classes" | "tasks" | "payments" | "notes">("overview")
   const [newNote, setNewNote] = useState("")
   const [addingNote, setAddingNote] = useState(false)
 
@@ -41,7 +42,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
 
     if (sp) {
       setStudent({
-        id: sp.id, user_id: sp.user_id, status: sp.status ?? "PROSPECT",
+        id: sp.id, user_id: sp.user_id, teacher_id: sp.teacher_id, status: sp.status ?? "PROSPECT",
         modalidad: sp.modalidad ?? "online", lead_source: sp.lead_source ?? "",
         preferred_day: sp.preferred_day ?? "", preferred_time: sp.preferred_time ?? "",
         emergency_contact: sp.emergency_contact ?? "", emergency_phone: sp.emergency_phone ?? "",
@@ -130,8 +131,18 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
   const completedTasks = tasks.filter(t => t.completed).length
   const totalPaid = payments.reduce((s, p) => s + p.amount, 0)
 
+  // Monthly class progress
+  const now = new Date()
+  const thisMonthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`
+  const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+  const thisMonthEndStr = `${thisMonthEnd.getFullYear()}-${String(thisMonthEnd.getMonth() + 1).padStart(2, "0")}-${String(thisMonthEnd.getDate()).padStart(2, "0")}`
+  const monthClasses = classes.filter(c => c.date >= thisMonthStart && c.date <= thisMonthEndStr)
+  const monthCompleted = monthClasses.filter(c => c.status === "COMPLETED").length
+  const monthTotal = monthClasses.length
+
   const tabs = [
     { key: "overview", label: "Resumen", icon: "📊" },
+    { key: "schedule", label: "Horario", icon: "↻" },
     { key: "classes", label: `Clases (${classes.length})`, icon: "📖" },
     { key: "tasks", label: `Tareas (${tasks.length})`, icon: "📝" },
     { key: "payments", label: `Pagos (${payments.length})`, icon: "💰" },
@@ -174,7 +185,8 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
         </div>
 
         {/* Quick stats */}
-        <div className="grid grid-cols-5 gap-4 mt-8">
+        <div className="grid grid-cols-6 gap-4 mt-8">
+          <MiniStat label="Progreso del mes" value={`${monthCompleted}/${monthTotal}`} icon="↻" />
           <MiniStat label="Días como alumno" value={String(daysSinceJoined)} icon="📅" />
           <MiniStat label="Clases tomadas" value={String(completedClasses)} icon="📖" />
           <MiniStat label="Tareas completadas" value={`${completedTasks}/${tasks.length}`} icon="✅" />
@@ -229,6 +241,12 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
                 {classes.length === 0 && <p className="text-neutral-400 text-sm">Sin clases registradas</p>}
               </div>
             </div>
+          </div>
+        )}
+
+        {activeTab === "schedule" && (
+          <div className="bg-white rounded-3xl border border-neutral-100 p-8 shadow-sm">
+            <ScheduleManager studentId={studentId} teacherId={student.teacher_id} />
           </div>
         )}
 

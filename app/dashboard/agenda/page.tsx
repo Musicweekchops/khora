@@ -63,7 +63,7 @@ export default function AgendaPage() {
 
     const { data } = await supabase
       .from("Class")
-      .select("id, date, start_time, end_time, status, modalidad, StudentProfile ( User ( name ) )")
+      .select("id, date, start_time, end_time, status, modalidad, is_recurring, StudentProfile ( User ( name ) )")
       .eq("teacher_id", profile!.teacherProfileId!)
       .gte("date", start)
       .lte("date", end)
@@ -73,7 +73,7 @@ export default function AgendaPage() {
     if (data) {
       setClasses(data.map((c: any) => ({
         id: c.id, date: c.date, start_time: c.start_time, end_time: c.end_time,
-        status: c.status, modalidad: c.modalidad,
+        status: c.status, modalidad: c.modalidad, is_recurring: !!c.is_recurring,
         student_name: c.StudentProfile?.User?.name ?? "Sin asignar",
       })))
     }
@@ -204,7 +204,12 @@ export default function AgendaPage() {
                           }`}
                           style={{ borderLeftWidth: "3px" }}
                         >
-                          <p className="font-black truncate">{cls.student_name}</p>
+                          <div className="flex items-center justify-between gap-1">
+                            <p className="font-black truncate">{cls.student_name}</p>
+                            {cls.is_recurring && (
+                              <span className="text-[10px] opacity-70" title="Clase recurrente">↻</span>
+                            )}
+                          </div>
                           <p className="opacity-60">{formatTime(cls.start_time)}</p>
                         </div>
                       </Link>
