@@ -5,6 +5,7 @@ import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/context/AuthContext"
 import { formatTime } from "@/lib/utils"
+import AvailabilitySettings from "@/components/agenda/AvailabilitySettings"
 
 interface CalendarClass {
   id: string; date: string; start_time: string; end_time: string
@@ -34,6 +35,7 @@ export default function AgendaPage() {
   const [weekStart, setWeekStart] = useState(() => getMonday(new Date()))
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [showAvailModal, setShowAvailModal] = useState(false)
   const [selectedSlot, setSelectedSlot] = useState<{ date: string; hour: number } | null>(null)
   const [students, setStudents] = useState<{ id: string; name: string }[]>([])
 
@@ -61,7 +63,8 @@ export default function AgendaPage() {
     const start = toDateStr(weekDays[0])
     const end = toDateStr(weekDays[6])
 
-    const { data } = await supabase
+    // Load actual classes
+    const { data: classData } = await supabase
       .from("Class")
       .select("id, date, start_time, end_time, status, modalidad, is_recurring, StudentProfile ( User ( name ) )")
       .eq("teacher_id", profile!.teacherProfileId!)
@@ -70,13 +73,30 @@ export default function AgendaPage() {
       .neq("status", "CANCELLED")
       .order("start_time")
 
-    if (data) {
-      setClasses(data.map((c: any) => ({
-        id: c.id, date: c.date, start_time: c.start_time, end_time: c.end_time,
-        status: c.status, modalidad: c.modalidad, is_recurring: !!c.is_recurring,
-        student_name: c.StudentProfile?.User?.name ?? "Sin asignar",
-      })))
-    }
+    // Load pending bookings
+    const { data: bookingData } = await supabase
+      .from("Booking")
+      .select("id, date, start_time, end_time, status, name")
+      .eq("teacher_id", profile!.teacherProfileId!)
+      .eq("status", "PENDING")
+      .gte("date", start)
+      .lte("date", end)
+
+    const formattedClasses = (classData || []).map((c: any) => ({
+      id: c.id, date: c.date, start_time: c.start_time, end_time: c.end_time,
+      status: c.status, modalidad: c.modalidad, is_recurring: !!c.is_recurring,
+      student_name: c.StudentProfile?.User?.name ?? "Sin asignar",
+      is_booking: false
+    }))
+
+    const formattedBookings = (bookingData || []).map((b: any) => ({
+      id: b.id, date: b.date, start_time: b.start_time, end_time: b.end_time,
+      status: "PENDING", modalidad: "N/A", is_recurring: false,
+      student_name: `SOLICITUD: ${b.name}`,
+      is_booking: true
+    }))
+
+    setClasses([...formattedClasses, ...formattedBookings])
     setLoading(false)
   }
 
@@ -143,6 +163,10 @@ export default function AgendaPage() {
           <p className="text-neutral-500 font-medium mt-1 capitalize">{monthYear}</p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setShowAvailModal(true)} className="kh-btn-secondary px-4 py-2 border border-violet-200 text-violet-600 flex items-center gap-2">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            Disponibilidad
+          </button>
           <button onClick={goToday} className="px-4 py-2 bg-white border border-neutral-200 rounded-xl text-sm font-bold text-neutral-700 hover:bg-neutral-50 transition-colors">
             Hoy
           </button>
@@ -195,12 +219,14 @@ export default function AgendaPage() {
                     }`}
                   >
                     {slotClasses.map(cls => (
-                      <Link key={cls.id} href={`/dashboard/clases/detalles?id=${cls.id}`} onClick={e => e.stopPropagation()}>
+                      <Link key={cls.id} href={cls.is_booking ? `/dashboard/crm` : `/dashboard/clases/detalles?id=${cls.id}`} onClick={e => e.stopPropagation()}>
                         <div
                           className={`rounded-lg p-2 text-xs mb-1 hover:shadow-md hover:scale-[1.02] transition-all cursor-pointer ${
                             cls.status === "COMPLETED"
                               ? "bg-emerald-50 border-l-emerald-400 text-emerald-700"
-                              : "bg-violet-50 border-l-violet-400 text-violet-700"
+                              : cls.is_booking 
+                                ? "bg-amber-50 border-l-amber-400 text-amber-700 border-2 border-dashed border-amber-200"
+                                : "bg-violet-50 border-l-violet-400 text-violet-700"
                           }`}
                           style={{ borderLeftWidth: "3px" }}
                         >
@@ -208,6 +234,9 @@ export default function AgendaPage() {
                             <p className="font-black truncate">{cls.student_name}</p>
                             {cls.is_recurring && (
                               <span className="text-[10px] opacity-70" title="Clase recurrente">↻</span>
+                            )}
+                            {cls.is_booking && (
+                              <span className="text-[10px] animate-pulse">🔔</span>
                             )}
                           </div>
                           <p className="opacity-60">{formatTime(cls.start_time)}</p>
@@ -292,6 +321,20 @@ export default function AgendaPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Availability Settings Modal */}
+      {showAvailModal && profile?.teacherProfileId && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[40px] p-10 w-full max-w-4xl shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <button 
+              onClick={() => setShowAvailModal(false)}
+              className="absolute top-8 right-8 w-10 h-10 flex items-center justify-center bg-neutral-100 rounded-full hover:bg-neutral-200 transition-colors text-neutral-500 font-bold"
+            >
+              ✕
+            </button>
+            <AvailabilitySettings teacherId={profile.teacherProfileId} />
           </div>
         </div>
       )}
