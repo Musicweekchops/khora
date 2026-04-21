@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { formatTime } from "@/lib/utils"
+import ServiceManager from "./ServiceManager"
 
 const DAYS = [
   { id: 1, name: "Lunes" },
@@ -27,6 +28,7 @@ export default function AvailabilitySettings({ teacherId }: { teacherId: string 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [activeTab, setActiveTab] = useState<"horarios" | "servicios">("horarios")
   
   const [newRange, setNewRange] = useState({
     day_of_week: 1,
@@ -137,81 +139,103 @@ export default function AvailabilitySettings({ teacherId }: { teacherId: string 
         </div>
       </div>
 
-      <div className="flex items-center justify-between pt-4 border-t border-neutral-100">
-        <h3 className="text-xl font-black text-neutral-900">Configuración de Horarios</h3>
-        <p className="text-xs text-neutral-400 font-bold uppercase tracking-widest">Availability Ranges</p>
+      <div className="flex items-center gap-6 border-b border-neutral-100 pb-2">
+        <button 
+          onClick={() => setActiveTab("horarios")}
+          className={`pb-4 px-2 text-sm font-black uppercase tracking-widest transition-all relative ${
+            activeTab === "horarios" ? "text-violet-600" : "text-neutral-400 hover:text-neutral-600"
+          }`}
+        >
+          Horarios
+          {activeTab === "horarios" && <span className="absolute bottom-0 left-0 w-full h-1 bg-violet-600 rounded-full" />}
+        </button>
+        <button 
+          onClick={() => setActiveTab("servicios")}
+          className={`pb-4 px-2 text-sm font-black uppercase tracking-widest transition-all relative ${
+            activeTab === "servicios" ? "text-violet-600" : "text-neutral-400 hover:text-neutral-600"
+          }`}
+        >
+          Servicios (Clases)
+          {activeTab === "servicios" && <span className="absolute bottom-0 left-0 w-full h-1 bg-violet-600 rounded-full" />}
+        </button>
       </div>
 
-      {/* Formulario para nuevo rango */}
-      <div className="bg-neutral-50 rounded-3xl p-8 border border-neutral-100">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
-          <div>
-            <label className="kh-label px-1">Día de la semana</label>
-            <select 
-              value={newRange.day_of_week} 
-              onChange={e => setNewRange(p => ({...p, day_of_week: Number(e.target.value)}))}
-              className="kh-input"
-            >
-              {DAYS.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="kh-label px-1">Hora de Inicio</label>
-            <input 
-              type="time" 
-              value={newRange.start_time} 
-              onChange={e => setNewRange(p => ({...p, start_time: e.target.value}))}
-              className="kh-input"
-            />
-          </div>
-          <div>
-            <label className="kh-label px-1">Hora de Fin</label>
-            <input 
-              type="time" 
-              value={newRange.end_time} 
-              onChange={e => setNewRange(p => ({...p, end_time: e.target.value}))}
-              className="kh-input"
-            />
-          </div>
-          <button 
-            onClick={handleAdd} 
-            disabled={saving}
-            className="kh-btn-primary py-4"
-          >
-            {saving ? "Cargando..." : "+ Agregar Horario"}
-          </button>
-        </div>
-      </div>
-
-      {/* Lista de rangos por día */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {DAYS.map(day => {
-          const dayRanges = ranges.filter(r => r.day_of_week === day.id)
-          return (
-            <div key={day.id} className="bg-white rounded-2xl border border-neutral-100 p-4 border-t-4 border-t-violet-500">
-              <h4 className="font-black text-neutral-900 mb-3 flex items-center justify-between">
-                <span>{day.name}</span>
-                {dayRanges.length === 0 && <span className="text-[10px] text-neutral-300 font-bold uppercase tracking-widest">Cerrado</span>}
-              </h4>
-              <div className="space-y-2">
-                {dayRanges.map(r => (
-                  <div key={r.id} className="flex items-center justify-between bg-neutral-50 p-2 rounded-xl group transition-all hover:bg-neutral-100">
-                    <span className="text-sm font-bold text-neutral-600">
-                      {formatTime(r.start_time)} – {formatTime(r.end_time)}
-                    </span>
-                    <button 
-                      onClick={() => handleDelete(r.id)}
-                      className="text-neutral-300 hover:text-red-500 transition-colors px-2"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
+      {activeTab === "horarios" ? (
+        <>
+          {/* Formulario para nuevo rango */}
+          <div className="bg-neutral-50 rounded-3xl p-8 border border-neutral-100">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
+              <div>
+                <label className="kh-label px-1">Día de la semana</label>
+                <select 
+                  value={newRange.day_of_week} 
+                  onChange={e => setNewRange(p => ({...p, day_of_week: Number(e.target.value)}))}
+                  className="kh-input"
+                >
+                  {DAYS.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
               </div>
+              <div>
+                <label className="kh-label px-1">Hora de Inicio</label>
+                <input 
+                  type="time" 
+                  value={newRange.start_time} 
+                  onChange={e => setNewRange(p => ({...p, start_time: e.target.value}))}
+                  className="kh-input"
+                />
+              </div>
+              <div>
+                <label className="kh-label px-1">Hora de Fin</label>
+                <input 
+                  type="time" 
+                  value={newRange.end_time} 
+                  onChange={e => setNewRange(p => ({...p, end_time: e.target.value}))}
+                  className="kh-input"
+                />
+              </div>
+              <button 
+                onClick={handleAdd} 
+                disabled={saving}
+                className="kh-btn-primary py-4"
+              >
+                {saving ? "Cargando..." : "+ Agregar Horario"}
+              </button>
             </div>
-          )
-        })}
-      </div>
+          </div>
+
+          {/* Lista de rangos por día */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {DAYS.map(day => {
+              const dayRanges = ranges.filter(r => r.day_of_week === day.id)
+              return (
+                <div key={day.id} className="bg-white rounded-2xl border border-neutral-100 p-4 border-t-4 border-t-violet-500">
+                  <h4 className="font-black text-neutral-900 mb-3 flex items-center justify-between">
+                    <span>{day.name}</span>
+                    {dayRanges.length === 0 && <span className="text-[10px] text-neutral-300 font-bold uppercase tracking-widest">Cerrado</span>}
+                  </h4>
+                  <div className="space-y-2">
+                    {dayRanges.map(r => (
+                      <div key={r.id} className="flex items-center justify-between bg-neutral-50 p-2 rounded-xl group transition-all hover:bg-neutral-100">
+                        <span className="text-sm font-bold text-neutral-600">
+                          {formatTime(r.start_time)} – {formatTime(r.end_time)}
+                        </span>
+                        <button 
+                          onClick={() => handleDelete(r.id)}
+                          className="text-neutral-300 hover:text-red-500 transition-colors px-2"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </>
+      ) : (
+        <ServiceManager teacherId={teacherId} />
+      )}
     </div>
   )
 }
