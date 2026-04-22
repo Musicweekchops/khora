@@ -107,51 +107,56 @@ export default function BibliotecaPage() {
     let finalUrl = form.url.trim() || null
     let filePath = null
 
-    // Handle File Upload if selected
-    if (file) {
-      const fileExt = file.name.split('.').pop()
-      const fileName = `${Math.random()}.${fileExt}`
-      const path = `${profile!.teacherProfileId}/${fileName}`
+    try {
+      // Handle File Upload if selected
+      if (file) {
+        const fileExt = file.name.split('.').pop()
+        const fileName = `${Math.random()}.${fileExt}`
+        const path = `${profile!.teacherProfileId}/${fileName}`
 
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('materials')
-        .upload(path, file)
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('materials')
+          .upload(path, file)
 
-      if (uploadError) {
-        console.error("Upload error:", uploadError)
-        alert("Error al subir el archivo")
-        setSaving(false)
-        return
+        if (uploadError) {
+          console.error("Upload error:", uploadError)
+          alert("Error al subir el archivo")
+          return
+        }
+
+        filePath = path
+        // Get public URL for display
+        const { data: { publicUrl } } = supabase.storage
+          .from('materials')
+          .getPublicUrl(path)
+        finalUrl = publicUrl
       }
 
-      filePath = path
-      // Get public URL for display
-      const { data: { publicUrl } } = supabase.storage
-        .from('materials')
-        .getPublicUrl(path)
-      finalUrl = publicUrl
-    }
+      const { error } = await supabase.from("LibraryContent").insert({
+        teacher_id: profile!.teacherProfileId!,
+        title: form.title.trim(),
+        description: form.description.trim() || null,
+        type: form.type,
+        url: finalUrl,
+        file_path: filePath,
+        category: form.category
+      })
 
-    const { error } = await supabase.from("LibraryContent").insert({
-      teacher_id: profile!.teacherProfileId!,
-      title: form.title.trim(),
-      description: form.description.trim() || null,
-      type: form.type,
-      url: finalUrl,
-      file_path: filePath,
-      category: form.category
-    })
-
-    if (!error) {
-      setForm({ title: "", description: "", type: "link", url: "", category: "General" })
-      setFile(null)
-      setShowForm(false)
-      loadLibrary()
-    } else {
-      console.error("Insert error:", error)
-      alert("Error al guardar en la base de datos")
+      if (!error) {
+        setForm({ title: "", description: "", type: "link", url: "", category: "General" })
+        setFile(null)
+        setShowForm(false)
+        loadLibraryTeacher(profile!.teacherProfileId!)
+      } else {
+        console.error("Insert error:", error)
+        alert("Error al guardar en la base de datos")
+      }
+    } catch (err) {
+      console.error("Unexpected error:", err)
+      alert("Ocurrió un error inesperado")
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
   }
 
   async function deleteItem(id: string) {
