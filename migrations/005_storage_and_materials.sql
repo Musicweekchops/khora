@@ -1,12 +1,15 @@
--- 1. Crear el bucket de materiales (si no existe)
--- Nota: Esto requiere privilegios de administrador en el dashboard de Supabase, 
--- pero se incluye el SQL para las políticas.
-
+-- 1. Crear o actualizar el bucket de materiales a PUBLICO
 INSERT INTO storage.buckets (id, name, public) 
-VALUES ('materials', 'materials', false)
-ON CONFLICT (id) DO NOTHING;
+VALUES ('materials', 'materials', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
 
--- 2. Políticas de Seguridad para el Bucket 'materials'
+-- 2. Limpiar políticas existentes para evitar errores de duplicidad
+DROP POLICY IF EXISTS "Public Read for Authenticated Users" ON storage.objects;
+DROP POLICY IF EXISTS "Teachers can upload materials" ON storage.objects;
+DROP POLICY IF EXISTS "Teachers can delete their own materials" ON storage.objects;
+DROP POLICY IF EXISTS "Teachers can update materials" ON storage.objects;
+
+-- 3. Crear las políticas de seguridad para el Bucket 'materials'
 
 -- Permiso de LECTURA: Profesores y Alumnos autenticados
 CREATE POLICY "Public Read for Authenticated Users" 
@@ -23,7 +26,7 @@ WITH CHECK (
   (SELECT role FROM public."User" WHERE id = auth.uid()) = 'TEACHER'
 );
 
--- Permiso de ELIMINACIÓN: Solo el dueño del archivo (profesor)
+-- Permiso de ELIMINACIÓN: Solo Profesores
 CREATE POLICY "Teachers can delete their own materials" 
 ON storage.objects FOR DELETE 
 TO authenticated 
@@ -32,7 +35,7 @@ USING (
   (SELECT role FROM public."User" WHERE id = auth.uid()) = 'TEACHER'
 );
 
--- Permiso de ACTUALIZACIÓN (opcional)
+-- Permiso de ACTUALIZACIÓN
 CREATE POLICY "Teachers can update materials" 
 ON storage.objects FOR UPDATE 
 TO authenticated 

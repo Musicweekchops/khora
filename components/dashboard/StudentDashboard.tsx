@@ -86,21 +86,21 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
   return (
     <div className="space-y-8">
       {/* WELCOME */}
-      <div className="bg-neutral-900 rounded-[40px] p-10 text-white relative overflow-hidden shadow-2xl shadow-neutral-900/20">
+      <div className="bg-neutral-900 rounded-[40px] p-10 text-white relative overflow-hidden">
         <div className="relative z-10">
           <h1 className="text-4xl font-black tracking-tight mb-2">¡Hola, {profile.name}! 👋</h1>
-          <p className="text-neutral-400 font-medium max-w-md">Bienvenido a tu panel de estudio. Aquí tienes un resumen de tu progreso y próximas clases.</p>
+          <p className="text-neutral-500 font-medium max-w-md">Bienvenido a tu panel de estudio. Aquí tienes un resumen de tu progreso y próximas clases.</p>
           
           <div className="mt-10 flex flex-wrap gap-4">
-            <Link href="/dashboard/clases" className="px-6 py-3 bg-white text-neutral-900 rounded-2xl text-sm font-black hover:bg-violet-400 hover:text-white transition-all flex items-center gap-2">
-              Ver mis clases <ChevronRight className="w-4 h-4" />
+            <Link href="/dashboard/clases" className="px-6 py-3 bg-white text-neutral-900 rounded-2xl text-xs font-black hover:bg-neutral-100 transition-all flex items-center gap-2">
+              Explorar mis clases <ChevronRight className="w-4 h-4" />
             </Link>
           </div>
         </div>
         
-        {/* Abstract shapes */}
-        <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-violet-600/20 blur-[100px] rounded-full" />
-        <div className="absolute bottom-[-20%] left-[10%] w-48 h-48 bg-emerald-600/10 blur-[80px] rounded-full" />
+        {/* Subtler shapes */}
+        <div className="absolute top-[-40%] right-[-10%] w-96 h-96 bg-indigo-500/10 blur-[120px] rounded-full" />
+        <div className="absolute bottom-[-10%] left-[5%] w-64 h-64 bg-teal-500/5 blur-[100px] rounded-full" />
       </div>
 
       {/* STATS */}
@@ -109,19 +109,19 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
           label="Clases Pendientes" 
           value={stats.upcomingClasses} 
           icon={<Calendar className="w-6 h-6" />} 
-          color="bg-blue-50 text-blue-600"
+          color="bg-slate-50 text-slate-600"
         />
         <StatCard 
           label="Tareas por Hacer" 
           value={stats.pendingTasks} 
           icon={<ClipboardList className="w-6 h-6" />} 
-          color="bg-emerald-50 text-emerald-600"
+          color="bg-neutral-50 text-neutral-600"
         />
         <StatCard 
           label="Material Asignado" 
           value={stats.totalMaterials} 
           icon={<BookOpen className="w-6 h-6" />} 
-          color="bg-violet-50 text-violet-600"
+          color="bg-indigo-50 text-indigo-600"
         />
       </div>
 
