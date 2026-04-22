@@ -92,6 +92,14 @@ export default function ClassDetailView({ classId }: { classId: string }) {
         .select("id, User ( name )")
         .eq("teacher_id", classData.teacher_id)
       if (st) setStudents(st.map((s: any) => ({ id: s.id, name: s.User?.name ?? "—" })))
+
+      // Load entire library for selection
+      const { data: lib } = await supabase
+        .from("LibraryContent")
+        .select("id, title, category")
+        .eq("teacher_id", classData.teacher_id)
+        .order("category")
+      if (lib) setLibrary(lib)
     }
 
     const { data: n } = await supabase
@@ -107,14 +115,6 @@ export default function ClassDetailView({ classId }: { classId: string }) {
       .eq("class_id", classId)
       .order("created_at", { ascending: false })
     if (t) setTasks(t as any)
-
-    // Load entire library for selection
-    const { data: lib } = await supabase
-      .from("LibraryContent")
-      .select("id, title, category")
-      .eq("teacher_id", classData!.teacher_id)
-      .order("category")
-    if (lib) setLibrary(lib)
 
     setLoading(false)
   }
