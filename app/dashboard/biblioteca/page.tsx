@@ -13,7 +13,9 @@ import {
   MoreVertical, 
   Trash2, 
   ExternalLink,
-  BookOpen
+  BookOpen,
+  Upload,
+  CloudUpload
 } from "lucide-react"
 
 interface Content {
@@ -33,6 +35,8 @@ export default function BibliotecaPage() {
   const [search, setSearch] = useState("")
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [file, setFile] = useState<File | null>(null)
+  const [uploadProgress, setUploadProgress] = useState(0)
 
   const [form, setForm] = useState({
     title: "",
@@ -43,18 +47,55 @@ export default function BibliotecaPage() {
   })
 
   useEffect(() => {
-    if (profile?.teacherProfileId) loadLibrary()
-  }, [profile?.teacherProfileId])
+    if (profile?.role === "TEACHER" && profile.teacherProfileId) {
+      loadLibraryTeacher(profile.teacherProfileId)
+    } else if (profile?.role === "STUDENT" && profile.studentProfileId) {
+      loadLibraryStudent(profile.studentProfileId)
+    }
+  }, [profile])
 
-  async function loadLibrary() {
+  async function loadLibraryTeacher(teacherId: string) {
     setLoading(true)
     const { data, error } = await supabase
       .from("LibraryContent")
       .select("*")
-      .eq("teacher_id", profile!.teacherProfileId!)
+      .eq("teacher_id", teacherId)
       .order("created_at", { ascending: false })
     
     if (data) setItems(data)
+    setLoading(false)
+  }
+
+  async function loadLibraryStudent(studentId: string) {
+    setLoading(true)
+    // 1. Get IDs from Tasks
+    const { data: taskItems } = await supabase
+      .from("Task")
+      .select("content_id")
+      .eq("student_id", studentId)
+      .not("content_id", "is", null)
+    
+    // 2. Get IDs from Notes of their classes
+    const { data: noteItems } = await supabase
+      .from("ClassNote")
+      .select("content_id, Class!inner(student_id)")
+      .eq("Class.student_id", studentId)
+      .not("content_id", "is", null)
+
+    const ids = Array.from(new Set([
+      ...(taskItems?.map(i => i.content_id) || []),
+      ...(noteItems?.map(i => i.content_id) || [])
+    ]))
+
+    if (ids.length > 0) {
+      const { data, error } = await supabase
+        .from("LibraryContent")
+        .select("*")
+        .in("id", ids)
+        .order("created_at", { ascending: false })
+      if (data) setItems(data)
+    }
+    
     setLoading(false)
   }
 
@@ -63,19 +104,52 @@ export default function BibliotecaPage() {
     if (!form.title.trim()) return
     setSaving(true)
 
+    let finalUrl = form.url.trim() || null
+    let filePath = null
+
+    // Handle File Upload if selected
+    if (file) {
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${Math.random()}.${fileExt}`
+      const path = `${profile!.teacherProfileId}/${fileName}`
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('materials')
+        .upload(path, file)
+
+      if (uploadError) {
+        console.error("Upload error:", uploadError)
+        alert("Error al subir el archivo")
+        setSaving(false)
+        return
+      }
+
+      filePath = path
+      // Get public URL for display
+      const { data: { publicUrl } } = supabase.storage
+        .from('materials')
+        .getPublicUrl(path)
+      finalUrl = publicUrl
+    }
+
     const { error } = await supabase.from("LibraryContent").insert({
       teacher_id: profile!.teacherProfileId!,
       title: form.title.trim(),
       description: form.description.trim() || null,
       type: form.type,
-      url: form.url.trim() || null,
+      url: finalUrl,
+      file_path: filePath,
       category: form.category
     })
 
     if (!error) {
       setForm({ title: "", description: "", type: "link", url: "", category: "General" })
+      setFile(null)
       setShowForm(false)
       loadLibrary()
+    } else {
+      console.error("Insert error:", error)
+      alert("Error al guardar en la base de datos")
     }
     setSaving(false)
   }
@@ -104,20 +178,22 @@ export default function BibliotecaPage() {
       {/* HEADER */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-black text-neutral-900 tracking-tight">Biblioteca de Contenidos</h1>
-          <p className="text-neutral-500 font-medium mt-1">Gestiona recursos y materiales para tus clases.</p>
+          <h1 className="text-3xl font-black text-neutral-900 tracking-tight">Mi Biblioteca</h1>
+          <p className="text-neutral-500 font-medium mt-1">Materiales y recursos asignados a tus clases.</p>
         </div>
-        <button 
-          onClick={() => setShowForm(!showForm)}
-          className="kh-btn-primary flex items-center gap-2 px-6 py-3"
-        >
-          <Plus className="w-5 h-5" />
-          <span>Nuevo Recurso</span>
-        </button>
+        {profile?.role === "TEACHER" && (
+          <button 
+            onClick={() => setShowForm(!showForm)}
+            className="kh-btn-primary flex items-center gap-2 px-6 py-3"
+          >
+            <Plus className="w-5 h-5" />
+            <span>Nuevo Recurso</span>
+          </button>
+        )}
       </div>
 
-      {/* FORM */}
-      {showForm && (
+      {/* FORM (Solo para Profesores) */}
+      {showForm && profile?.role === "TEACHER" && (
         <form onSubmit={handleSubmit} className="kh-card p-8 bg-white border-neutral-200 animate-in fade-in slide-in-from-top-4 duration-300 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-4">
@@ -142,8 +218,27 @@ export default function BibliotecaPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="kh-label pl-1 mb-2 block">URL / Link</label>
-                  <input value={form.url} onChange={e => setForm(p => ({...p, url: e.target.value}))} className="kh-input" placeholder="https://..." />
+                  <label className="kh-label pl-1 mb-2 block">
+                    {['pdf', 'image', 'audio'].includes(form.type) ? "Seleccionar Archivo" : "URL / Link"}
+                  </label>
+                  {['pdf', 'image', 'audio'].includes(form.type) ? (
+                    <div className="relative group">
+                      <input 
+                        type="file" 
+                        onChange={e => setFile(e.target.files?.[0] || null)}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                        accept={form.type === 'pdf' ? '.pdf' : form.type === 'image' ? 'image/*' : 'audio/*'}
+                      />
+                      <div className={`kh-input flex items-center justify-between group-hover:border-violet-400 transition-colors ${file ? 'border-emerald-200 bg-emerald-50/30' : ''}`}>
+                        <span className="text-xs font-medium truncate max-w-[150px]">
+                          {file ? file.name : "Subir archivo..."}
+                        </span>
+                        <CloudUpload className={`w-4 h-4 ${file ? 'text-emerald-500' : 'text-neutral-400'}`} />
+                      </div>
+                    </div>
+                  ) : (
+                    <input value={form.url} onChange={e => setForm(p => ({...p, url: e.target.value}))} className="kh-input" placeholder="https://..." />
+                  )}
                 </div>
               </div>
               <div>

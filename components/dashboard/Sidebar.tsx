@@ -51,7 +51,7 @@ const Icons = {
   ),
 }
 
-const NAV = [
+const TEACHER_NAV = [
   { name: "Dashboard", href: "/dashboard", icon: Icons.dashboard },
   { name: "Alumnos", href: "/dashboard/alumnos", icon: Icons.students },
   { name: "CRM", href: "/dashboard/crm", icon: Icons.crm },
@@ -59,6 +59,12 @@ const NAV = [
   { name: "Clases", href: "/dashboard/clases", icon: Icons.classes },
   { name: "Biblioteca", href: "/dashboard/biblioteca", icon: Icons.library },
   { name: "Financiero", href: "/dashboard/financiero", icon: Icons.financial },
+]
+
+const STUDENT_NAV = [
+  { name: "Dashboard", href: "/dashboard", icon: Icons.dashboard },
+  { name: "Mis Clases", href: "/dashboard/clases", icon: Icons.calendar },
+  { name: "Mi Biblioteca", href: "/dashboard/biblioteca", icon: Icons.library },
 ]
 
 interface SidebarProps {
@@ -84,7 +90,7 @@ export default function Sidebar({ user }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto scrollbar-thin">
-        {NAV.map(item => {
+        {(user.role === 'TEACHER' ? TEACHER_NAV : STUDENT_NAV).map(item => {
           const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname?.startsWith(item.href))
           return (
             <Link key={item.name} href={item.href}>

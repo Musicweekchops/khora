@@ -22,8 +22,11 @@ import {
   ClipboardList,
   Library,
   ExternalLink,
-  ChevronLeft
+  ChevronLeft,
+  FileText,
+  PlayCircle
 } from "lucide-react"
+import VideoPlayer from "@/components/ui/VideoPlayer"
 
 interface ClassData {
   id: string; date: string; start_time: string; end_time: string
@@ -213,13 +216,19 @@ export default function ClassDetailView({ classId }: { classId: string }) {
               {new Date(cls.date + "T12:00").toLocaleDateString("es-CL", { day: "numeric", month: "short" })}
             </span>
           </div>
-          {cls.student_id && (
+          {cls.student_id && profile?.role === 'TEACHER' && (
             <>
               <span className="text-neutral-200">·</span>
               <Link href={`/dashboard/alumnos/detalles?id=${cls.student_id}`} className="text-violet-600 font-bold hover:underline flex items-center gap-1.5">
                 <User className="w-4 h-4 text-violet-400" />
                 {cls.student_name}
               </Link>
+            </>
+          )}
+          {profile?.role === 'STUDENT' && (
+            <>
+              <span className="text-neutral-200">·</span>
+              <span className="text-neutral-400 font-medium italic">Clase con Profesor</span>
             </>
           )}
         </div>
@@ -324,18 +333,24 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                   <sc.icon className="w-4 h-4" />
                   {sc.label}
                 </div>
-                <button onClick={() => setEditing(true)}
-                  className="px-6 py-2.5 bg-neutral-900 text-white rounded-2xl text-sm font-bold hover:bg-violet-600 transition-all flex items-center gap-2 shadow-lg shadow-neutral-900/10">
-                  <Edit3 className="w-4 h-4" />
-                  Editar
-                </button>
+                {profile?.role === "TEACHER" && (
+                  <button onClick={() => setEditing(true)}
+                    className="px-6 py-2.5 bg-neutral-900 text-white rounded-2xl text-sm font-bold hover:bg-violet-600 transition-all flex items-center gap-2 shadow-lg shadow-neutral-900/10">
+                    <Edit3 className="w-4 h-4" />
+                    Editar
+                  </button>
+                )}
               </div>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <InfoBlock label="Alumno" icon={<User className="w-4 h-4 text-blue-400" />}>
                 {cls.student_id ? (
-                  <Link href={`/dashboard/alumnos/detalles?id=${cls.student_id}`} className="text-violet-600 font-black hover:underline">{cls.student_name}</Link>
+                  profile?.role === 'TEACHER' ? (
+                    <Link href={`/dashboard/alumnos/detalles?id=${cls.student_id}`} className="text-violet-600 font-black hover:underline">{cls.student_name}</Link>
+                  ) : (
+                    <span className="text-neutral-900 font-black">{cls.student_name}</span>
+                  )
                 ) : (
                   <span className="text-neutral-400 font-bold">Sin asignar</span>
                 )}
@@ -361,47 +376,44 @@ export default function ClassDetailView({ classId }: { classId: string }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* NOTES */}
         <div className="bg-white rounded-[40px] border border-neutral-100 p-8 space-y-6 shadow-sm">
-          <div className="flex items-center justify-between">
-            <h3 className="font-black text-xl text-neutral-900 flex items-center gap-3">
-              <div className="w-10 h-10 bg-violet-50 text-violet-600 rounded-2xl flex items-center justify-center">
-                <StickyNote className="w-5 h-5" />
-              </div>
-              Notas de la Clase
-            </h3>
-          </div>
+          <h3 className="font-black text-xl text-neutral-900 flex items-center gap-3">
+            <div className="w-10 h-10 bg-violet-50 text-violet-600 rounded-2xl flex items-center justify-center">
+              <StickyNote className="w-5 h-5" />
+            </div>
+            Notas de la Clase
+          </h3>
 
-          <div className="bg-neutral-50 rounded-[32px] p-6 space-y-4 border border-neutral-100">
-            <textarea 
-              value={newNote.content} 
-              onChange={e => setNewNote(p => ({...p, content: e.target.value}))}
-              placeholder="Observaciones, progreso, temas cubiertos…" 
-              rows={4}
-              className="w-full bg-transparent border-0 outline-none text-sm font-medium resize-none text-neutral-700 placeholder:text-neutral-300" 
-            />
-            
-            <div className="flex items-center justify-between pt-4 border-t border-neutral-200/50">
-              <div className="flex items-center gap-2">
+          {profile?.role === "TEACHER" && (
+            <div className="bg-neutral-50 rounded-[32px] p-6 space-y-4 border border-neutral-100">
+              <textarea 
+                value={newNote.content} 
+                onChange={e => setNewNote(p => ({...p, content: e.target.value}))}
+                placeholder="Observaciones, progreso, temas cubiertos…" 
+                rows={4}
+                className="w-full bg-transparent border-0 outline-none text-sm font-medium resize-none text-neutral-700 placeholder:text-neutral-300" 
+              />
+              <div className="flex items-center justify-between pt-4 border-t border-neutral-200/50">
                 <select 
                   value={newNote.content_id}
                   onChange={e => setNewNote(p => ({...p, content_id: e.target.value}))}
-                  className="bg-white border border-neutral-200 rounded-xl px-3 py-1.5 text-xs font-bold text-neutral-500 outline-none hover:border-violet-300 transition-colors"
+                  className="bg-white border border-neutral-200 rounded-xl px-3 py-1.5 text-xs font-bold text-neutral-500 outline-none hover:border-violet-300"
                 >
                   <option value="">📎 Sin material</option>
                   {library.map(item => (
                     <option key={item.id} value={item.id}>{item.title}</option>
                   ))}
                 </select>
+                <button 
+                  onClick={addNote} 
+                  disabled={!newNote.content.trim() || saving}
+                  className="px-6 py-2.5 bg-neutral-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-violet-600 disabled:opacity-30 flex items-center gap-2"
+                >
+                  <Save className="w-4 h-4" />
+                  {saving ? "..." : "Guardar Nota"}
+                </button>
               </div>
-              <button 
-                onClick={addNote} 
-                disabled={!newNote.content.trim() || saving}
-                className="px-6 py-2.5 bg-neutral-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-violet-600 transition-all disabled:opacity-30 shadow-lg shadow-neutral-900/10 flex items-center gap-2"
-              >
-                <Save className="w-4 h-4" />
-                {saving ? "..." : "Guardar Nota"}
-              </button>
             </div>
-          </div>
+          )}
 
           <div className="space-y-4">
             {notes.length === 0 ? (
@@ -411,24 +423,34 @@ export default function ClassDetailView({ classId }: { classId: string }) {
             ) : notes.map(n => (
               <div key={n.id} className="bg-white border border-neutral-100 rounded-3xl p-6 group relative hover:shadow-md transition-all">
                 <p className="text-sm text-neutral-800 font-medium whitespace-pre-wrap leading-relaxed">{n.content}</p>
-                
                 {n.LibraryContent && (
-                  <div className="mt-4 p-3 bg-violet-50 rounded-2xl flex items-center justify-between group/link">
-                    <div className="flex items-center gap-2">
-                      <Library className="w-4 h-4 text-violet-400" />
-                      <span className="text-xs font-black text-violet-700">{n.LibraryContent.title}</span>
+                  <div className="space-y-4 mt-6">
+                    {n.LibraryContent.type === 'video' && n.LibraryContent.url && (
+                      <VideoPlayer url={n.LibraryContent.url} title={n.LibraryContent.title} />
+                    )}
+                    <div className="p-4 bg-violet-50 rounded-2xl flex items-center justify-between group/link border border-violet-100">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center text-violet-600">
+                          {n.LibraryContent.type === 'video' ? <PlayCircle className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                        </div>
+                        <div>
+                          <p className="text-xs font-black text-violet-900">{n.LibraryContent.title}</p>
+                          <p className="text-[10px] font-bold text-violet-400 uppercase tracking-widest">{n.LibraryContent.type}</p>
+                        </div>
+                      </div>
+                      <a href={n.LibraryContent.url} target="_blank" rel="noopener noreferrer" className="p-2 bg-white text-violet-600 rounded-xl hover:bg-violet-600 hover:text-white transition-all shadow-sm">
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
                     </div>
-                    <a href={n.LibraryContent.url} target="_blank" rel="noopener noreferrer" className="text-violet-600 hover:scale-110 transition-transform">
-                      <ExternalLink className="w-4 h-4" />
-                    </a>
                   </div>
                 )}
-
                 <div className="flex items-center justify-between mt-6 pt-4 border-t border-neutral-50">
                   <p className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">
                     {new Date(n.created_at).toLocaleString("es-CL", { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                   </p>
-                  <button onClick={() => deleteNote(n.id)} className="text-[10px] text-red-300 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-600 font-black uppercase tracking-widest">Eliminar</button>
+                  {profile?.role === 'TEACHER' && (
+                    <button onClick={() => deleteNote(n.id)} className="text-[10px] text-red-300 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-600 font-black uppercase tracking-widest">Eliminar</button>
+                  )}
                 </div>
               </div>
             ))}
@@ -437,59 +459,56 @@ export default function ClassDetailView({ classId }: { classId: string }) {
 
         {/* TASKS */}
         <div className="bg-white rounded-[40px] border border-neutral-100 p-8 space-y-6 shadow-sm">
-          <div className="flex items-center justify-between">
-            <h3 className="font-black text-xl text-neutral-900 flex items-center gap-3">
-              <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center">
-                <ClipboardList className="w-5 h-5" />
-              </div>
-              Tareas Asignadas
-            </h3>
-          </div>
+          <h3 className="font-black text-xl text-neutral-900 flex items-center gap-3">
+            <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center">
+              <ClipboardList className="w-5 h-5" />
+            </div>
+            Tareas Asignadas
+          </h3>
 
-          <div className="bg-neutral-50 rounded-[32px] p-6 space-y-4 border border-neutral-100">
-            <input 
-              type="text" 
-              value={newTask.title} 
-              onChange={e => setNewTask(p => ({ ...p, title: e.target.value }))}
-              placeholder="Título de la tarea..."
-              className="w-full bg-transparent border-0 outline-none text-base font-black text-neutral-900 placeholder:text-neutral-300" 
-            />
-            <textarea 
-              value={newTask.description} 
-              onChange={e => setNewTask(p => ({ ...p, description: e.target.value }))}
-              placeholder="Detalles opcionales…" 
-              rows={2}
-              className="w-full bg-transparent border-0 outline-none text-sm font-medium resize-none text-neutral-600 placeholder:text-neutral-300" 
-            />
-            
-            <div className="flex items-center justify-between pt-4 border-t border-neutral-200/50">
-              <div className="flex items-center gap-2">
+          {profile?.role === "TEACHER" && (
+            <div className="bg-neutral-50 rounded-[32px] p-6 space-y-4 border border-neutral-100">
+              <input 
+                type="text" 
+                value={newTask.title} 
+                onChange={e => setNewTask(p => ({ ...p, title: e.target.value }))}
+                placeholder="Título de la tarea..."
+                className="w-full bg-transparent border-0 outline-none text-base font-black text-neutral-900 placeholder:text-neutral-300" 
+              />
+              <textarea 
+                value={newTask.description} 
+                onChange={e => setNewTask(p => ({ ...p, description: e.target.value }))}
+                placeholder="Detalles opcionales…" 
+                rows={2}
+                className="w-full bg-transparent border-0 outline-none text-sm font-medium resize-none text-neutral-600" 
+              />
+              <div className="flex items-center justify-between pt-4 border-t border-neutral-200/50">
                 <select 
                   value={newTask.content_id}
                   onChange={e => setNewTask(p => ({...p, content_id: e.target.value}))}
-                  className="bg-white border border-neutral-200 rounded-xl px-3 py-1.5 text-xs font-bold text-neutral-500 outline-none hover:border-emerald-300 transition-colors"
+                  className="bg-white border border-neutral-200 rounded-xl px-3 py-1.5 text-xs font-bold text-neutral-500 outline-none hover:border-emerald-300"
                 >
-                  <option value="">📎 Adjuntar material</option>
+                  <option value="">📎 Material</option>
                   {library.map(item => (
                     <option key={item.id} value={item.id}>{item.title}</option>
                   ))}
                 </select>
+                <button 
+                  onClick={addTask} 
+                  disabled={!newTask.title.trim() || saving}
+                  className="px-6 py-2.5 bg-neutral-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-emerald-600 disabled:opacity-30 shadow-lg flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  {saving ? "..." : "Asignar"}
+                </button>
               </div>
-              <button 
-                onClick={addTask} 
-                disabled={!newTask.title.trim() || saving}
-                className="px-6 py-2.5 bg-neutral-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-emerald-600 transition-all disabled:opacity-30 shadow-lg shadow-neutral-900/10 flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                {saving ? "..." : "Asignar Tarea"}
-              </button>
             </div>
-          </div>
+          )}
 
           <div className="space-y-3">
             {tasks.length === 0 ? (
               <div className="text-center py-12 bg-neutral-50/50 rounded-[32px] border border-dashed border-neutral-200">
-                <p className="text-sm text-neutral-400 font-bold italic">Sin tareas asignadas</p>
+                <p className="text-sm text-neutral-400 font-bold italic">Sin tareas aún</p>
               </div>
             ) : tasks.map(t => (
               <div key={t.id} className="flex flex-col p-5 bg-white border border-neutral-100 rounded-3xl hover:shadow-md transition-all group">
@@ -502,25 +521,35 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                   </button>
                   <div className="flex-1 min-w-0">
                     <p className={`font-black text-sm tracking-tight ${t.completed ? "line-through text-neutral-300" : "text-neutral-900"}`}>{t.title}</p>
-                    {t.description && <p className="text-xs text-neutral-500 font-medium mt-1 leading-relaxed">{t.description}</p>}
+                    {t.description && <p className="text-xs text-neutral-500 font-medium mt-1 uppercase tracking-tighter">{t.description}</p>}
                   </div>
-                  <button onClick={() => deleteTask(t.id)} className="text-neutral-300 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-500 p-1">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {profile?.role === 'TEACHER' && (
+                    <button onClick={() => deleteTask(t.id)} className="text-neutral-300 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-500 p-1">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
-                
                 {t.LibraryContent && (
-                  <div className="mt-4 p-3 bg-emerald-50 rounded-[20px] flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Library className="w-4 h-4 text-emerald-400" />
-                      <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">{t.LibraryContent.title}</span>
+                  <div className="mt-6 space-y-4">
+                    {t.LibraryContent.type === 'video' && t.LibraryContent.url && (
+                      <VideoPlayer url={t.LibraryContent.url} title={t.LibraryContent.title} />
+                    )}
+                    <div className="p-4 bg-emerald-50 rounded-2xl flex items-center justify-between border border-emerald-100">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center text-emerald-600">
+                          {t.LibraryContent.type === 'video' ? <PlayCircle className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                        </div>
+                        <div>
+                          <p className="text-xs font-black text-emerald-900">{t.LibraryContent.title}</p>
+                          <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">{t.LibraryContent.type}</p>
+                        </div>
+                      </div>
+                      <a href={t.LibraryContent.url} target="_blank" rel="noopener noreferrer" className="p-2 bg-white text-emerald-600 rounded-xl hover:bg-emerald-600 transition-all">
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
                     </div>
-                    <a href={t.LibraryContent.url} target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:scale-110 transition-transform">
-                      <ExternalLink className="w-4 h-4" />
-                    </a>
                   </div>
                 )}
-                
                 <div className="mt-4 pt-3 border-t border-neutral-50 flex justify-between items-center">
                   <p className="text-[9px] font-black text-neutral-300 uppercase tracking-widest">
                     Asignada el {new Date(t.created_at).toLocaleDateString("es-CL")}

@@ -22,10 +22,15 @@ export default function ClasesPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (profile?.teacherProfileId) loadClasses(profile.teacherProfileId)
-  }, [profile?.teacherProfileId])
+    if (profile?.role === "TEACHER" && profile.teacherProfileId) {
+      loadClassesTeacher(profile.teacherProfileId)
+    } else if (profile?.role === "STUDENT" && profile.studentProfileId) {
+      loadClassesStudent(profile.studentProfileId)
+    }
+  }, [profile])
 
-  async function loadClasses(teacherId: string) {
+  async function loadClassesTeacher(teacherId: string) {
+    setLoading(true)
     const { data, error } = await supabase
       .from("Class")
       .select(`id, date, start_time, end_time, status, modalidad, StudentProfile ( User ( name ) )`)
@@ -47,6 +52,29 @@ export default function ClasesPage() {
     setLoading(false)
   }
 
+  async function loadClassesStudent(studentId: string) {
+    setLoading(true)
+    const { data, error } = await supabase
+      .from("Class")
+      .select(`id, date, start_time, end_time, status, modalidad, TeacherProfile ( User ( name ) )`)
+      .eq("student_id", studentId)
+      .order("date", { ascending: false })
+      .limit(50)
+
+    if (!error && data) {
+      setClasses(data.map((c: any) => ({
+        id: c.id,
+        date: c.date,
+        start_time: c.start_time,
+        end_time: c.end_time,
+        status: c.status ?? "SCHEDULED",
+        modalidad: c.modalidad ?? "online",
+        student_name: `Prof. ${c.TeacherProfile?.User?.name ?? "Desconocido"}`,
+      })))
+    }
+    setLoading(false)
+  }
+
   const statusColors: Record<string, string> = {
     SCHEDULED: "bg-sky-100 text-sky-700",
     COMPLETED: "bg-emerald-100 text-emerald-700",
@@ -60,9 +88,11 @@ export default function ClasesPage() {
           <h1 className="text-3xl font-black text-neutral-900 tracking-tight">Clases</h1>
           <p className="text-neutral-500 font-medium mt-1">{classes.length} registradas</p>
         </div>
-        <Link href="/dashboard/clases/nueva" className="px-6 py-3 bg-neutral-900 text-white rounded-2xl text-sm font-bold hover:bg-violet-600 transition-colors shadow-lg">
-          + Nueva Clase
-        </Link>
+        {profile?.role === "TEACHER" && (
+          <Link href="/dashboard/clases/nueva" className="px-6 py-3 bg-neutral-900 text-white rounded-2xl text-sm font-bold hover:bg-violet-600 transition-colors shadow-lg">
+            + Nueva Clase
+          </Link>
+        )}
       </div>
 
       {loading ? (
