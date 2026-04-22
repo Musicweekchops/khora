@@ -44,6 +44,11 @@ const Icons = {
       <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
     </svg>
   ),
+  library: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m16 6 4 14" /><path d="M12 6v14" /><path d="M8 8v12" /><path d="M4 4v16" />
+    </svg>
+  ),
 }
 
 const NAV = [
@@ -52,6 +57,7 @@ const NAV = [
   { name: "CRM", href: "/dashboard/crm", icon: Icons.crm },
   { name: "Agenda", href: "/dashboard/agenda", icon: Icons.calendar },
   { name: "Clases", href: "/dashboard/clases", icon: Icons.classes },
+  { name: "Biblioteca", href: "/dashboard/biblioteca", icon: Icons.library },
   { name: "Financiero", href: "/dashboard/financiero", icon: Icons.financial },
 ]
 
