@@ -1,3 +1,11 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/lib/context/AuthContext"
+import { formatTime } from "@/lib/utils"
 import { 
   Calendar, 
   Clock, 
