@@ -52,52 +52,66 @@ export default function AgendaPage() {
   }, [weekStart])
 
   useEffect(() => {
+    console.log("[Agenda] Profile state:", { 
+      hasProfile: !!profile, 
+      teacherId: profile?.teacherProfileId 
+    })
+    
     if (profile?.teacherProfileId) {
       loadClasses()
       loadStudents()
     }
-  }, [profile?.teacherProfileId, weekStart])
+  }, [profile, weekStart])
 
   async function loadClasses() {
     setLoading(true)
-    const start = toDateStr(weekDays[0])
-    const end = toDateStr(weekDays[6])
+    try {
+      const start = toDateStr(weekDays[0])
+      const end = toDateStr(weekDays[6])
 
-    // Load actual classes
-    const { data: classData } = await supabase
-      .from("Class")
-      .select("id, date, start_time, end_time, status, modalidad, is_recurring, StudentProfile ( User ( name ) )")
-      .eq("teacher_id", profile!.teacherProfileId!)
-      .gte("date", start)
-      .lte("date", end)
-      .neq("status", "CANCELLED")
-      .order("start_time")
+      // Load actual classes
+      const { data: classData, error: classErr } = await supabase
+        .from("Class")
+        .select("id, date, start_time, end_time, status, modalidad, is_recurring, StudentProfile ( User ( name ) )")
+        .eq("teacher_id", profile!.teacherProfileId!)
+        .gte("date", start)
+        .lte("date", end)
+        .neq("status", "CANCELLED")
+        .order("start_time")
 
-    // Load pending bookings
-    const { data: bookingData } = await supabase
-      .from("Booking")
-      .select("id, date, start_time, end_time, status, name")
-      .eq("teacher_id", profile!.teacherProfileId!)
-      .eq("status", "PENDING")
-      .gte("date", start)
-      .lte("date", end)
+      if (classErr) console.error("[Agenda] Error classes:", classErr)
 
-    const formattedClasses = (classData || []).map((c: any) => ({
-      id: c.id, date: c.date, start_time: c.start_time, end_time: c.end_time,
-      status: c.status, modalidad: c.modalidad, is_recurring: !!c.is_recurring,
-      student_name: c.StudentProfile?.User?.name ?? "Sin asignar",
-      is_booking: false
-    }))
+      // Load pending bookings
+      const { data: bookingData, error: bookErr } = await supabase
+        .from("Booking")
+        .select("id, date, start_time, end_time, status, name")
+        .eq("teacher_id", profile!.teacherProfileId!)
+        .eq("status", "PENDING")
+        .gte("date", start)
+        .lte("date", end)
 
-    const formattedBookings = (bookingData || []).map((b: any) => ({
-      id: b.id, date: b.date, start_time: b.start_time, end_time: b.end_time,
-      status: "PENDING", modalidad: "N/A", is_recurring: false,
-      student_name: `SOLICITUD: ${b.name}`,
-      is_booking: true
-    }))
+      if (bookErr) console.error("[Agenda] Error bookings:", bookErr)
 
-    setClasses([...formattedClasses, ...formattedBookings])
-    setLoading(false)
+      const formattedClasses = (classData || []).map((c: any) => ({
+        id: c.id, date: c.date, start_time: c.start_time, end_time: c.end_time,
+        status: c.status, modalidad: c.modalidad, is_recurring: !!c.is_recurring,
+        student_name: c.StudentProfile?.User?.name ?? "Sin asignar",
+        is_booking: false
+      }))
+
+      const formattedBookings = (bookingData || []).map((b: any) => ({
+        id: b.id, date: b.date, start_time: b.start_time, end_time: b.end_time,
+        status: "PENDING", modalidad: "N/A", is_recurring: false,
+        student_name: `SOLICITUD: ${b.name}`,
+        is_booking: true
+      }))
+
+      setClasses([...formattedClasses, ...formattedBookings])
+    } catch (err) {
+      console.error("[Agenda] Fetch fatal error:", err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function loadStudents() {
@@ -153,6 +167,15 @@ export default function AgendaPage() {
 
   const today = toDateStr(new Date())
   const monthYear = weekDays[3].toLocaleDateString("es-CL", { month: "long", year: "numeric" })
+
+  if (loading && classes.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
+        <div className="w-12 h-12 border-4 border-violet-100 border-t-violet-600 rounded-full animate-spin" />
+        <p className="text-neutral-400 font-bold animate-pulse">Cargando tu agenda...</p>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
