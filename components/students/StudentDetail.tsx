@@ -5,6 +5,8 @@ import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { formatCurrency, formatDate, formatTime } from "@/lib/utils"
 import ScheduleManager from "@/components/students/ScheduleManager"
+import { toast } from "sonner"
+import { Lock, Save, Trash2, Edit3 } from "lucide-react"
 
 interface StudentData {
   id: string; user_id: string; teacher_id: string; status: string; modalidad: string; lead_source: string
@@ -113,6 +115,23 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
     }
     window.location.href = "/dashboard/alumnos"
   }
+  
+  async function handleResetPassword() {
+    const newPass = prompt("Ingresa la nueva contraseña temporal para el alumno:")
+    if (!newPass) return
+    if (newPass.length < 6) return toast.error("La contraseña debe tener al menos 6 caracteres")
+
+    const { error } = await supabase.rpc('reset_student_password', {
+      p_user_id: student?.user_id,
+      p_new_password: newPass
+    })
+
+    if (error) {
+      toast.error("Error al restablecer contraseña: " + error.message)
+    } else {
+      toast.success("Contraseña restablecida con éxito")
+    }
+  }
 
   if (loading) return <div className="animate-pulse space-y-4">{[1,2,3].map(i => <div key={i} className="h-24 bg-white rounded-2xl" />)}</div>
   if (!student) return <p className="text-neutral-500">Alumno no encontrado</p>
@@ -175,11 +194,20 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
                 <option key={k} value={k}>{v.label}</option>
               ))}
             </select>
-            <Link href={`/dashboard/alumnos/editar?id=${studentId}`} className="px-5 py-2.5 bg-neutral-100 text-neutral-700 rounded-xl text-sm font-bold hover:bg-neutral-200 transition-colors">
-              ✏️ Editar
+            <button 
+              onClick={handleResetPassword}
+              title="Restablecer Contraseña"
+              className="p-2.5 bg-neutral-100 text-neutral-500 rounded-xl hover:bg-amber-100 hover:text-amber-700 transition-all flex items-center gap-2 text-sm font-bold"
+            >
+              <Lock className="w-4 h-4" />
+              <span className="hidden sm:inline">Clave</span>
+            </button>
+            <Link href={`/dashboard/alumnos/editar?id=${studentId}`} className="px-5 py-2.5 bg-neutral-100 text-neutral-700 rounded-xl text-sm font-bold hover:bg-neutral-200 transition-colors flex items-center gap-2">
+              <Edit3 className="w-4 h-4" />
+              <span className="hidden sm:inline">Editar</span>
             </Link>
-            <button onClick={handleDelete} className="px-5 py-2.5 bg-red-50 text-red-600 rounded-xl text-sm font-bold hover:bg-red-100 transition-colors">
-              🗑️
+            <button onClick={handleDelete} className="p-2.5 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors">
+              <Trash2 className="w-4 h-4" />
             </button>
           </div>
         </div>

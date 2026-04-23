@@ -7,38 +7,17 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- =============================================================================
--- PASO 0: LIMPIEZA TOTAL (borrar todo lo que exista)
+-- KHORA V2 — SCHEMA MAESTRO (VERSIÓN SEGURA - NO BORRA DATOS)
 -- =============================================================================
 
--- Triggers primero
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-DROP TRIGGER IF EXISTS on_auth_user_deleted ON auth.users;
-
--- Funciones
-DROP FUNCTION IF EXISTS public.handle_new_user() CASCADE;
-DROP FUNCTION IF EXISTS public.handle_deleted_user() CASCADE;
-DROP FUNCTION IF EXISTS public.create_student_for_teacher(TEXT, TEXT, TEXT, TEXT, UUID) CASCADE;
-DROP FUNCTION IF EXISTS public.create_student_account(TEXT, TEXT, TEXT, TEXT, UUID) CASCADE;
-DROP FUNCTION IF EXISTS public.is_teacher() CASCADE;
-
--- Tablas (orden inverso de dependencias)
-DROP TABLE IF EXISTS public."Payment" CASCADE;
-DROP TABLE IF EXISTS public."Task" CASCADE;
-DROP TABLE IF EXISTS public."ClassNote" CASCADE;
-DROP TABLE IF EXISTS public."Class" CASCADE;
-DROP TABLE IF EXISTS public."Booking" CASCADE;
-DROP TABLE IF EXISTS public."AvailabilityException" CASCADE;
-DROP TABLE IF EXISTS public."Availability" CASCADE;
-DROP TABLE IF EXISTS public."ClassType" CASCADE;
-DROP TABLE IF EXISTS public."StudentProfile" CASCADE;
-DROP TABLE IF EXISTS public."TeacherProfile" CASCADE;
-DROP TABLE IF EXISTS public."User" CASCADE;
+-- Extensiones
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- =============================================================================
--- PASO 1: CREAR TABLAS
+-- PASO 1: CREAR TABLAS (Solo si no existen)
 -- =============================================================================
 
-CREATE TABLE public."User" (
+CREATE TABLE IF NOT EXISTS public."User" (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   email TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
@@ -47,14 +26,14 @@ CREATE TABLE public."User" (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE TABLE public."TeacherProfile" (
+CREATE TABLE IF NOT EXISTS public."TeacherProfile" (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID UNIQUE NOT NULL REFERENCES public."User"(id) ON DELETE CASCADE,
   business_name TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE TABLE public."StudentProfile" (
+CREATE TABLE IF NOT EXISTS public."StudentProfile" (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID UNIQUE NOT NULL REFERENCES public."User"(id) ON DELETE CASCADE,
   teacher_id UUID NOT NULL REFERENCES public."TeacherProfile"(id) ON DELETE CASCADE,
@@ -130,6 +109,8 @@ CREATE TABLE public."Class" (
   duration INTEGER DEFAULT 60,
   status TEXT DEFAULT 'SCHEDULED',
   modalidad TEXT DEFAULT 'online',
+  is_recurring BOOLEAN DEFAULT false,
+  recurring_group_id UUID,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -137,6 +118,18 @@ CREATE TABLE public."ClassNote" (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   class_id UUID NOT NULL REFERENCES public."Class"(id) ON DELETE CASCADE,
   content TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE public."LibraryContent" (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  teacher_id UUID REFERENCES public."TeacherProfile"(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT,
+  type TEXT CHECK (type IN ('VIDEO', 'PDF', 'EXERCISE')),
+  url TEXT NOT NULL,
+  category TEXT,
+  is_public BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -200,7 +193,14 @@ BEGIN
     VALUES (NEW.id)
     ON CONFLICT (user_id) DO NOTHING;
   ELSIF v_role = 'STUDENT' THEN
+    -- Intentar obtener teacher_id de metadata
     v_teacher_id := (NEW.raw_user_meta_data ->> 'teacher_id')::UUID;
+    
+    -- AUTOMATIZACIÓN: Si no hay teacher_id (creación manual), asignar el primer profesor disponible
+    IF v_teacher_id IS NULL THEN
+      SELECT id INTO v_teacher_id FROM public."TeacherProfile" ORDER BY created_at ASC LIMIT 1;
+    END IF;
+
     IF v_teacher_id IS NOT NULL THEN
       INSERT INTO public."StudentProfile" (user_id, teacher_id)
       VALUES (NEW.id, v_teacher_id)
@@ -285,6 +285,26 @@ BEGIN
   END IF;
 
   RETURN v_uid;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- RPC: profesor restablece contraseña de un alumno
+CREATE OR REPLACE FUNCTION public.reset_student_password(
+  p_user_id UUID,
+  p_new_password TEXT
+) RETURNS BOOLEAN AS $$
+BEGIN
+  -- Validar que el que llama sea profesor
+  IF NOT public.is_teacher() THEN
+    RAISE EXCEPTION 'Solo los profesores pueden restablecer contraseñas.';
+  END IF;
+
+  UPDATE auth.users 
+  SET encrypted_password = crypt(p_new_password, gen_salt('bf')),
+      updated_at = now()
+  WHERE id = p_user_id;
+
+  RETURN TRUE;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 

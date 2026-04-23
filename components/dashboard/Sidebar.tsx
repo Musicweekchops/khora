@@ -49,6 +49,12 @@ const Icons = {
       <path d="m16 6 4 14" /><path d="M12 6v14" /><path d="M8 8v12" /><path d="M4 4v16" />
     </svg>
   ),
+  settings: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  ),
 }
 
 const TEACHER_NAV = [
@@ -59,12 +65,14 @@ const TEACHER_NAV = [
   { name: "Clases", href: "/dashboard/clases", icon: Icons.classes },
   { name: "Biblioteca", href: "/dashboard/biblioteca", icon: Icons.library },
   { name: "Financiero", href: "/dashboard/financiero", icon: Icons.financial },
+  { name: "Ajustes", href: "/dashboard/ajustes", icon: Icons.settings },
 ]
 
 const STUDENT_NAV = [
   { name: "Dashboard", href: "/dashboard", icon: Icons.dashboard },
   { name: "Mis Clases", href: "/dashboard/clases", icon: Icons.calendar },
   { name: "Mi Biblioteca", href: "/dashboard/biblioteca", icon: Icons.library },
+  { name: "Ajustes", href: "/dashboard/ajustes", icon: Icons.settings },
 ]
 
 interface SidebarProps {

@@ -67,69 +67,38 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
         if (!form.email.trim()) throw new Error("El email es obligatorio")
 
         const email = form.email.trim().toLowerCase()
+        const initialPassword = form.password.trim() || "student123"
 
-        // 1. Check duplicate email in User table
-        console.log("[StudentForm] Checking duplicate email:", email)
-        const { data: existing, error: checkErr } = await supabase
-          .from("User")
-          .select("id")
-          .eq("email", email)
-          .maybeSingle()
+        console.log("[StudentForm] Creating student via RPC:", email)
 
-        console.log("[StudentForm] Duplicate check result:", { existing, checkErr })
+        // Use the SECURE RPC that creates Auth + User + Profile in one go
+        const { data: newUserId, error: rpcErr } = await supabase.rpc('create_student_for_teacher', {
+          p_email: email,
+          p_password: initialPassword,
+          p_name: form.name.trim(),
+          p_phone: form.phone.trim() || null,
+          p_teacher_id: profile.teacherProfileId
+        })
 
-        if (existing) throw new Error("Este email ya está registrado")
-
-        // 2. Create User row directly (no RPC needed)
-        const newId = crypto.randomUUID()
-        console.log("[StudentForm] Creating User with id:", newId)
-
-        const { error: userErr } = await supabase
-          .from("User")
-          .insert({
-            id: newId,
-            email: email,
-            name: form.name.trim(),
-            phone: form.phone.trim() || null,
-            role: "STUDENT",
-          })
-
-        if (userErr) {
-          console.error("[StudentForm] User insert error:", userErr)
-          throw new Error(userErr.message || "Error creando el usuario")
+        if (rpcErr) {
+          console.error("[StudentForm] RPC Error:", rpcErr)
+          throw new Error(rpcErr.message || "No se pudo crear la cuenta del alumno")
         }
 
-        console.log("[StudentForm] User created, creating StudentProfile")
+        console.log("[StudentForm] Student created with UID:", newUserId)
 
-        // 3. Create StudentProfile row
-        const studentProfileId = crypto.randomUUID()
-        console.log("[StudentForm] Creating StudentProfile with id:", studentProfileId)
-
-        const { error: spErr } = await supabase
+        // The trigger creates the StudentProfile, but we need its ID to redirect.
+        // Let's find the StudentProfile ID linked to this new user_id
+        const { data: sp } = await supabase
           .from("StudentProfile")
-          .insert({
-            id: studentProfileId,
-            user_id: newId,
-            teacher_id: profile.teacherProfileId,
-            status: form.status,
-            lead_source: form.lead_source || null,
-            modalidad: form.modalidad,
-            preferred_day: form.preferred_day || null,
-            preferred_time: form.preferred_time || null,
-            emergency_contact: form.emergency_contact || null,
-            emergency_phone: form.emergency_phone || null,
-          })
+          .select("id")
+          .eq("user_id", newUserId)
+          .single()
 
-        if (spErr) {
-          console.error("[StudentForm] StudentProfile insert error:", spErr)
-          // Cleanup: delete User row if profile creation failed
-          await supabase.from("User").delete().eq("id", newId)
-          throw new Error(spErr.message || "Error creando el perfil del alumno")
+        if (sp) {
+          router.push(`/dashboard/alumnos/detalles?id=${sp.id}`)
+          return
         }
-
-        console.log("[StudentForm] Student created successfully!")
-        router.push(`/dashboard/alumnos/detalles?id=${studentProfileId}`)
-        return // Skip the default redirect at the end
 
 
       } else {
