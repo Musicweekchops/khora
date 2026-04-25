@@ -87,8 +87,28 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
 
         console.log("[StudentForm] Student created with UID:", newUserId)
 
-        // The trigger creates the StudentProfile, but we need its ID to redirect.
-        // Let's find the StudentProfile ID linked to this new user_id
+        // 1. Actualizar el StudentProfile con el resto de los campos del formulario
+        // El trigger handle_new_user ya creó la fila, ahora le pasamos los detalles.
+        const { error: profileErr } = await supabase
+          .from("StudentProfile")
+          .update({
+            status: form.status,
+            modalidad: form.modalidad,
+            lead_source: form.lead_source || null,
+            preferred_day: form.preferred_day || null,
+            preferred_time: form.preferred_time || null,
+            emergency_contact: form.emergency_contact || null,
+            emergency_phone: form.emergency_phone || null,
+          })
+          .eq("user_id", newUserId)
+
+        if (profileErr) {
+          console.warn("[StudentForm] Profile update error:", profileErr)
+          // No lanzamos error fatal porque el usuario ya existe, 
+          // pero avisamos en consola.
+        }
+
+        // 2. Buscar el ID del StudentProfile para redirigir al detalle
         const { data: sp } = await supabase
           .from("StudentProfile")
           .select("id")
