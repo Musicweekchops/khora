@@ -21,10 +21,13 @@ export default function StudentsList() {
   const [search, setSearch] = useState("")
 
   useEffect(() => {
-    if (profile?.teacherProfileId) fetchStudents(profile.teacherProfileId)
-  }, [profile?.teacherProfileId])
+    if (profile?.teacherProfileId) {
+      fetchStudents(profile.teacherProfileId)
+    }
+  }, [profile])
 
   async function fetchStudents(teacherId: string) {
+    setLoading(true)
     try {
       const { data, error } = await supabase
         .from("StudentProfile")
@@ -72,6 +75,19 @@ export default function StudentsList() {
     INACTIVE: "Inactivo",
   }
 
+  if (loading && students.length === 0) {
+    return (
+      <div className="space-y-8">
+        <div className="h-24 bg-white rounded-[32px] animate-pulse" />
+        <div className="space-y-4">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="bg-white rounded-3xl border border-neutral-100 p-6 animate-pulse h-24" />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -100,13 +116,7 @@ export default function StudentsList() {
       </div>
 
       {/* List */}
-      {loading ? (
-        <div className="space-y-3">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="bg-white rounded-2xl border border-neutral-100 p-6 animate-pulse h-20" />
-          ))}
-        </div>
-      ) : filtered.length === 0 ? (
+      {filtered.length === 0 ? (
         <div className="text-center py-20 bg-white rounded-3xl border border-neutral-100">
           <span className="text-5xl mb-4 block opacity-30">👥</span>
           <p className="text-neutral-900 font-bold text-lg">Sin alumnos todavía</p>
