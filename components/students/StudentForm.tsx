@@ -69,22 +69,25 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
         const email = form.email.trim().toLowerCase()
         const initialPassword = form.password.trim() || "student123"
 
-        console.log("[StudentForm] Creating student via RPC:", email)
+        console.log("[StudentForm] Creating student via Edge Function:", email)
 
-        // Use the SECURE RPC that creates Auth + User + Profile in one go
-        const { data: newUserId, error: rpcErr } = await supabase.rpc('create_student_for_teacher', {
-          p_email: email,
-          p_password: initialPassword,
-          p_name: form.name.trim(),
-          p_phone: form.phone.trim() || null,
-          p_teacher_id: profile.teacherProfileId
+        // Usamos la Edge Function oficial que utiliza Admin API para crear el usuario correctamente
+        const { data: edgeData, error: edgeErr } = await supabase.functions.invoke('create-student', {
+          body: {
+            email: email,
+            password: initialPassword,
+            name: form.name.trim(),
+            phone: form.phone.trim() || null,
+            teacher_id: profile.teacherProfileId
+          }
         })
 
-        if (rpcErr) {
-          console.error("[StudentForm] RPC Error:", rpcErr)
-          throw new Error(rpcErr.message || "No se pudo crear la cuenta del alumno")
+        if (edgeErr || edgeData?.error) {
+          console.error("[StudentForm] Edge Function Error:", edgeErr || edgeData?.error)
+          throw new Error(edgeData?.error || "No se pudo crear la cuenta del alumno")
         }
 
+        const newUserId = edgeData.userId
         console.log("[StudentForm] Student created with UID:", newUserId)
 
         // 1. Actualizar el StudentProfile con el resto de los campos del formulario
