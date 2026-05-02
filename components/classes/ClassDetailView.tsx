@@ -31,7 +31,7 @@ import VideoPlayer from "@/components/ui/VideoPlayer"
 interface ClassData {
   id: string; date: string; start_time: string; end_time: string
   status: string; modalidad: string; duration: number
-  student_name: string; student_id: string | null; teacher_id: string
+  student_name: string; student_email?: string; student_id: string | null; teacher_id: string
 }
 interface Note { 
   id: string; content: string; created_at: string; content_id?: string | null;
@@ -72,7 +72,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
 
     const { data: c } = await supabase
       .from("Class")
-      .select("id, date, start_time, end_time, status, modalidad, duration, student_id, teacher_id, StudentProfile ( User ( name ) )")
+      .select("id, date, start_time, end_time, status, modalidad, duration, student_id, teacher_id, StudentProfile ( User ( name, email ) )")
       .eq("id", classId).single()
 
     if (c) {
@@ -80,6 +80,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
         id: c.id, date: c.date, start_time: c.start_time, end_time: c.end_time,
         status: c.status, modalidad: c.modalidad, duration: c.duration ?? 60,
         student_name: (c as any).StudentProfile?.User?.name ?? "Sin asignar",
+        student_email: (c as any).StudentProfile?.User?.email,
         student_id: c.student_id, teacher_id: c.teacher_id,
       }
       setCls(classData)
@@ -176,7 +177,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
     // Token refresh de seguridad
     await supabase.auth.getSession()
 
-    await supabase.from("Task").insert({
+    const { error } = await supabase.from("Task").insert({
       class_id: classId, 
       student_id: cls?.student_id ?? null,
       teacher_id: cls?.teacher_id ?? null,
@@ -184,6 +185,24 @@ export default function ClassDetailView({ classId }: { classId: string }) {
       description: newTask.description.trim() || null,
       content_id: newTask.content_id || null
     })
+
+    if (!error && cls?.student_email) {
+      // Trigger new task email
+      supabase.functions.invoke("send-email", {
+        body: {
+          to: cls.student_email,
+          type: "NEW_TASK",
+          params: {
+            studentName: cls.student_name,
+            taskTitle: newTask.title.trim(),
+            taskDescription: newTask.description.trim() || "",
+            assignedDate: new Date().toLocaleDateString("es-CL", { day: "numeric", month: "long" }),
+            link: window.location.origin + "/dashboard/tareas"
+          }
+        }
+      }).catch(err => console.error("Error sending task email:", err))
+    }
+
     setNewTask({ title: "", description: "", content_id: "" })
     await loadAll()
     setSaving(false)

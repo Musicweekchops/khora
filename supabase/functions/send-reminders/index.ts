@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3"
+import { getTemplate } from "../send-email/templates.ts"
 
 // Asegúrate de agregar esta variable de entorno en Supabase:
 // supabase secrets set RESEND_API_KEY="re_..."
@@ -16,12 +17,22 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseKey)
 
   try {
-    // 1. Obtener la fecha de mañana en formato YYYY-MM-DD
-    const tomorrow = new Date()
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    const targetDate = tomorrow.toISOString().split("T")[0]
+    // 1. Obtener la hora objetivo (24 horas desde ahora) en la zona horaria de Chile
+    const targetTime = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    
+    // Formatear a YYYY-MM-DD
+    const formatterDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit' })
+    const targetDate = formatterDate.format(targetTime)
 
-    // 2. Buscar clases programadas para mañana
+    // Formatear la hora actual en esa ventana (ej. si son las 14:00, busca entre 14:00:00 y 14:59:59)
+    const formatterHour = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Santiago', hour: '2-digit', hour12: false })
+    const targetHourStr = formatterHour.format(targetTime)
+    const targetHour = targetHourStr === '24' ? '00' : targetHourStr.padStart(2, '0')
+
+    const startTimeLimit = `${targetHour}:00:00`
+    const endTimeLimit = `${targetHour}:59:59`
+
+    // 2. Buscar clases programadas para mañana en esta ventana de 1 hora
     const { data: classes, error: classesError } = await supabase
       .from("Class")
       .select(`
@@ -36,12 +47,14 @@ serve(async (req) => {
         )
       `)
       .eq("date", targetDate)
+      .gte("start_time", startTimeLimit)
+      .lte("start_time", endTimeLimit)
       .eq("status", "SCHEDULED")
 
     if (classesError) throw classesError
 
     if (!classes || classes.length === 0) {
-      return new Response(JSON.stringify({ message: "No hay clases programadas para mañana." }), {
+      return new Response(JSON.stringify({ message: `No hay clases programadas para ${targetDate} a las ${targetHour}:00` }), {
         headers: { "Content-Type": "application/json" },
         status: 200,
       })
@@ -71,13 +84,13 @@ serve(async (req) => {
             from: FROM_EMAIL,
             to: sUser.email,
             subject: "¡Recordatorio de Clase Mañana! 🥁",
-            html: `
-              <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2>Hola ${sUser.name},</h2>
-                <p>Te recordamos que tienes una clase programada para mañana <strong>${cls.date}</strong> a las <strong>${cls.start_time.slice(0, 5)}</strong> con el profesor ${tUser.name}.</p>
-                <p>¡Prepárate y nos vemos en clase!</p>
-              </div>
-            `,
+            html: getTemplate('CLASS_REMINDER', {
+              studentName: sUser.name,
+              teacherName: tUser.name,
+              date: cls.date,
+              time: cls.start_time.slice(0, 5),
+              link: "https://khora.app/dashboard"
+            }),
           }),
         })
 

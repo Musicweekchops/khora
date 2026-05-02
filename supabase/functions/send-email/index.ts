@@ -1,0 +1,78 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { getTemplate, EmailType } from "./templates.ts"
+
+const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")
+const FROM_EMAIL = "Khora <onboarding@resend.dev>" 
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+serve(async (req) => {
+  // Manejo de preflight CORS
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
+
+  try {
+    const { to, type, params, subject } = await req.json()
+
+    if (!to || !type || !params) {
+      return new Response(
+        JSON.stringify({ error: "Missing required fields: to, type, params" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+      )
+    }
+
+    const htmlContent = getTemplate(type as EmailType, params)
+
+    if (!htmlContent) {
+      return new Response(
+        JSON.stringify({ error: "Invalid email type" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+      )
+    }
+
+    const defaultSubjects: Record<EmailType, string> = {
+      CLASS_CONFIRMATION: "¡Tu Clase de Música Está Confirmada! 🎵",
+      PAYMENT_REMINDER: "Recordatorio de Pago de Clases 💳",
+      NEW_TASK: "Nueva Tarea Asignada en Khora 📝",
+    }
+
+    const finalSubject = subject || defaultSubjects[type as EmailType] || "Notificación de Khora"
+
+    // Enviar correo vía Resend
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+      },
+      body: JSON.stringify({
+        from: FROM_EMAIL,
+        to: to,
+        subject: finalSubject,
+        html: htmlContent,
+      }),
+    })
+
+    const resData = await res.json()
+
+    if (!res.ok) {
+      throw new Error(JSON.stringify(resData))
+    }
+
+    return new Response(
+      JSON.stringify({ success: true, id: resData.id }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+    )
+
+  } catch (error: any) {
+    console.error("Email sending error:", error)
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+    )
+  }
+})
