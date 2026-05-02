@@ -59,11 +59,17 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
       .eq("completed", false)
 
     // 3. Materials count
+    const { data: studentProfile } = await supabase
+      .from("StudentProfile")
+      .select("teacher_id")
+      .eq("id", profile.studentProfileId!)
+      .single()
+
     const { count: materials } = await supabase
-      .from("Task")
-      .select("id", { count: 'exact', head: true })
-      .eq("student_id", profile.studentProfileId!)
-      .not("content_id", "is", null)
+      .from("LibraryContent")
+      .select("*", { count: 'exact', head: true })
+      .eq("teacher_id", studentProfile?.teacher_id)
+      .eq("is_public", true)
 
     setStats({
       upcomingClasses: upcoming || 0,
@@ -110,18 +116,21 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
           value={stats.upcomingClasses} 
           icon={<Calendar className="w-6 h-6" />} 
           color="bg-slate-50 text-slate-600"
+          href="/dashboard/clases"
         />
         <StatCard 
           label="Tareas por Hacer" 
           value={stats.pendingTasks} 
           icon={<ClipboardList className="w-6 h-6" />} 
           color="bg-neutral-50 text-neutral-600"
+          href="/dashboard/tareas"
         />
         <StatCard 
           label="Material Asignado" 
           value={stats.totalMaterials} 
           icon={<BookOpen className="w-6 h-6" />} 
           color="bg-indigo-50 text-indigo-600"
+          href="/dashboard/biblioteca"
         />
       </div>
 
@@ -157,16 +166,24 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
   )
 }
 
-function StatCard({ label, value, icon, color }: any) {
-  return (
-    <div className="bg-white rounded-[32px] p-6 border border-neutral-100 shadow-sm flex items-center gap-5 hover:border-neutral-200 transition-colors">
+function StatCard({ label, value, icon, color, href }: any) {
+  const content = (
+    <>
       <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${color}`}>
         {icon}
       </div>
-      <div>
+      <div className="flex-1">
         <p className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">{label}</p>
         <p className="text-3xl font-black text-neutral-900">{value}</p>
       </div>
-    </div>
+      {href && <ChevronRight className="w-5 h-5 text-neutral-300 group-hover:text-neutral-600 transition-colors" />}
+    </>
   )
+
+  const className = "bg-white rounded-[32px] p-6 border border-neutral-100 shadow-sm flex items-center gap-5 hover:shadow-md hover:border-neutral-200 transition-all group cursor-pointer"
+
+  if (href) {
+    return <Link href={href} className={className}>{content}</Link>
+  }
+  return <div className={className}>{content}</div>
 }

@@ -68,32 +68,24 @@ export default function BibliotecaPage() {
 
   async function loadLibraryStudent(studentId: string) {
     setLoading(true)
-    // 1. Get IDs from Tasks
-    const { data: taskItems } = await supabase
-      .from("Task")
-      .select("content_id")
-      .eq("student_id", studentId)
-      .not("content_id", "is", null)
     
-    // 2. Get IDs from Notes of their classes
-    const { data: noteItems } = await supabase
-      .from("ClassNote")
-      .select("content_id, Class!inner(student_id)")
-      .eq("Class.student_id", studentId)
-      .not("content_id", "is", null)
+    // 1. Get the student's assigned teacher
+    const { data: student } = await supabase
+      .from("StudentProfile")
+      .select("teacher_id")
+      .eq("id", studentId)
+      .single()
 
-    const ids = Array.from(new Set([
-      ...(taskItems?.map(i => i.content_id) || []),
-      ...(noteItems?.map(i => i.content_id) || [])
-    ]))
-
-    if (ids.length > 0) {
+    // 2. Fetch public content for that teacher
+    if (student?.teacher_id) {
       const { data, error } = await supabase
         .from("LibraryContent")
         .select("*")
-        .in("id", ids)
+        .eq("teacher_id", student.teacher_id)
+        .eq("is_public", true)
         .order("created_at", { ascending: false })
-      if (data) setItems(data)
+
+      if (!error && data) setItems(data)
     }
     
     setLoading(false)
