@@ -149,6 +149,10 @@ export default function ClassDetailView({ classId }: { classId: string }) {
   async function addNote() {
     if (!newNote.content.trim()) return
     setSaving(true)
+    
+    // Asegurarnos de que el token de sesión esté fresco antes de escribir (evita errores tras inactividad prolongada)
+    await supabase.auth.getSession()
+
     const { error } = await supabase.from("ClassNote").insert({ 
       class_id: classId, 
       content: newNote.content.trim(),
@@ -168,6 +172,10 @@ export default function ClassDetailView({ classId }: { classId: string }) {
   async function addTask() {
     if (!newTask.title.trim()) return
     setSaving(true)
+
+    // Token refresh de seguridad
+    await supabase.auth.getSession()
+
     await supabase.from("Task").insert({
       class_id: classId, 
       student_id: cls?.student_id ?? null,

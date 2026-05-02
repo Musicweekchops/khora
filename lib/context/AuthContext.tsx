@@ -164,10 +164,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (mounted && loading) setLoading(false)
     })
 
+    // Listen for tab focus/visibility changes to force a session refresh
+    // This solves the issue of tokens expiring when the tab is inactive for a long time (e.g., during a 1-hour class)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        supabase.auth.getSession().catch(console.warn)
+      }
+    }
+    
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange)
+    }
+
     return () => {
       mounted = false
       clearTimeout(timeout)
       subscription.unsubscribe()
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange)
+      }
     }
   }, [router, fetchProfile])
 
