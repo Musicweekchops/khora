@@ -107,7 +107,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
 
     const { data: n } = await supabase
       .from("ClassNote")
-      .select("*, LibraryContent(title, url, type)")
+      .select("*, LibraryContent!ClassNote_content_id_fkey(title, url, type)")
       .eq("class_id", classId)
       .order("created_at", { ascending: false })
     if (n) setNotes(n as any)
@@ -149,13 +149,19 @@ export default function ClassDetailView({ classId }: { classId: string }) {
   async function addNote() {
     if (!newNote.content.trim()) return
     setSaving(true)
-    await supabase.from("ClassNote").insert({ 
+    const { error } = await supabase.from("ClassNote").insert({ 
       class_id: classId, 
       content: newNote.content.trim(),
       content_id: newNote.content_id || null
     })
-    setNewNote({ content: "", content_id: "" })
-    await loadAll()
+    
+    if (error) {
+      console.error("Error al guardar nota:", error)
+      alert("Hubo un error al guardar la nota. Revisa la consola para más detalles.")
+    } else {
+      setNewNote({ content: "", content_id: "" })
+      await loadAll()
+    }
     setSaving(false)
   }
 
