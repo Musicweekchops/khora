@@ -87,7 +87,7 @@ export default function Sidebar({ user }: SidebarProps) {
     <aside className="flex flex-col h-screen w-[240px] fixed left-0 top-0 z-50 bg-white border-r border-neutral-200/80">
       {/* Logo */}
       <div className="h-16 flex items-center gap-3 px-5 border-b border-neutral-100">
-        <div className="w-8 h-8 rounded-lg bg-neutral-900 flex items-center justify-center">
+        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${user.role === 'TEACHER' ? 'bg-violet-600 shadow-sm shadow-violet-200' : 'bg-neutral-900'}`}>
           <span className="text-white text-sm font-bold">K</span>
         </div>
         <div>
@@ -118,14 +118,18 @@ export default function Sidebar({ user }: SidebarProps) {
       </nav>
 
       {/* Profile */}
-      <div className="p-3 border-t border-neutral-100">
+      <div className="p-3 border-t border-neutral-100 bg-neutral-50/50">
         <div className="flex items-center gap-3 px-3 py-2 mb-1">
-          <div className="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center text-xs font-semibold text-neutral-600">
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${user.role === 'TEACHER' ? 'bg-violet-100 text-violet-700' : 'bg-neutral-200 text-neutral-700'}`}>
             {user.name.charAt(0).toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-medium text-neutral-900 truncate">{user.name}</p>
-            <p className="text-[11px] text-neutral-400 capitalize">{user.role.toLowerCase()}</p>
+            <p className="text-[13px] font-medium text-neutral-900 truncate leading-tight">{user.name}</p>
+            {user.role === 'TEACHER' ? (
+              <p className="text-[9px] font-black uppercase tracking-widest text-violet-600 mt-0.5 px-1.5 py-0.5 bg-violet-100/50 rounded inline-block">Profesor</p>
+            ) : (
+              <p className="text-[11px] text-neutral-400 capitalize mt-0.5">{user.role.toLowerCase()}</p>
+            )}
           </div>
         </div>
         <button

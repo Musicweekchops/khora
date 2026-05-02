@@ -5,6 +5,9 @@ import { Providers } from "./providers"
 export const metadata: Metadata = {
   title: "Khora — Gestión de Clases",
   description: "Plataforma de gestión para profesores de música",
+  icons: {
+    icon: "/favicon.svg",
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
