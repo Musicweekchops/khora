@@ -59,10 +59,22 @@ export default function StudentHomePage() {
       .eq("student_id", profile!.studentProfileId!)
       .eq("completed", false)
 
+    const { data: studentProfile } = await supabase
+      .from("StudentProfile")
+      .select("teacher_id")
+      .eq("id", profile!.studentProfileId!)
+      .single()
+
+    const { count: materials } = await supabase
+      .from("LibraryContent")
+      .select("*", { count: 'exact', head: true })
+      .eq("teacher_id", studentProfile?.teacher_id)
+      .eq("is_public", true)
+
     setStats({
       upcomingClasses: upcoming || 0,
       pendingTasks: tasks || 0,
-      totalMaterials: 0 // Will implement later
+      totalMaterials: materials || 0
     })
 
     setLoading(false)
@@ -102,18 +114,21 @@ export default function StudentHomePage() {
           value={stats.upcomingClasses} 
           icon={<Calendar className="w-6 h-6" />} 
           color="bg-blue-50 text-blue-600"
+          href="/dashboard/alumno/clases"
         />
         <StatCard 
           label="Tareas por Hacer" 
           value={stats.pendingTasks} 
           icon={<ClipboardList className="w-6 h-6" />} 
           color="bg-emerald-50 text-emerald-600"
+          href="/dashboard/alumno/tareas"
         />
         <StatCard 
           label="Material de Estudio" 
           value={stats.totalMaterials} 
           icon={<BookOpen className="w-6 h-6" />} 
           color="bg-violet-50 text-violet-600"
+          href="/dashboard/alumno/biblioteca"
         />
       </div>
 
@@ -149,16 +164,24 @@ export default function StudentHomePage() {
   )
 }
 
-function StatCard({ label, value, icon, color }: any) {
-  return (
-    <div className="bg-white rounded-[32px] p-6 border border-neutral-100 shadow-sm flex items-center gap-5">
+function StatCard({ label, value, icon, color, href }: any) {
+  const content = (
+    <>
       <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${color}`}>
         {icon}
       </div>
-      <div>
+      <div className="flex-1">
         <p className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">{label}</p>
         <p className="text-3xl font-black text-neutral-900">{value}</p>
       </div>
-    </div>
+      {href && <ChevronRight className="w-5 h-5 text-neutral-300 group-hover:text-neutral-600 transition-colors" />}
+    </>
   )
+
+  const className = "bg-white rounded-[32px] p-6 border border-neutral-100 shadow-sm flex items-center gap-5 hover:shadow-md hover:border-neutral-200 transition-all group"
+
+  if (href) {
+    return <Link href={href} className={className}>{content}</Link>
+  }
+  return <div className={className}>{content}</div>
 }
