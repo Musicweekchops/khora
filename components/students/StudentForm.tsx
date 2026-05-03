@@ -71,19 +71,29 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
 
         console.log("[StudentForm] Creating student via Edge Function:", email)
 
-        // Usamos la Edge Function oficial que utiliza Admin API para crear el usuario correctamente
-        const { data: edgeData, error: edgeErr } = await supabase.functions.invoke('create-student', {
-          body: {
+        // Usamos fetch nativo para evitar cuelgues del cliente de Supabase
+        const { data: sessionData } = await supabase.auth.getSession()
+        const token = sessionData?.session?.access_token
+
+        const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/create-student`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { "Authorization": `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
             email: email,
             password: initialPassword,
             name: form.name.trim(),
             phone: form.phone.trim() || null,
             teacher_id: profile.teacherProfileId
-          }
+          })
         })
 
-        if (edgeErr || edgeData?.error) {
-          console.error("[StudentForm] Edge Function Error:", edgeErr || edgeData?.error)
+        const edgeData = await res.json()
+
+        if (!res.ok || edgeData?.error) {
+          console.error("[StudentForm] Edge Function Error:", edgeData?.error)
           throw new Error(edgeData?.error || "No se pudo crear la cuenta del alumno")
         }
 
