@@ -151,8 +151,8 @@ export default function ClassDetailView({ classId }: { classId: string }) {
     if (!newNote.content.trim()) return
     setSaving(true)
     
-    // Asegurarnos de que el token de sesión esté fresco antes de escribir (evita errores tras inactividad prolongada)
-    await supabase.auth.getSession()
+    // Refrescar el token en segundo plano (no bloquea la UI)
+    supabase.auth.refreshSession().catch(() => {})
 
     const { error } = await supabase.from("ClassNote").insert({ 
       class_id: classId, 
@@ -174,8 +174,8 @@ export default function ClassDetailView({ classId }: { classId: string }) {
     if (!newTask.title.trim()) return
     setSaving(true)
 
-    // Token refresh de seguridad
-    await supabase.auth.getSession()
+    // Refrescar el token en segundo plano (no bloquea la UI)
+    supabase.auth.refreshSession().catch(() => {})
 
     const { error } = await supabase.from("Task").insert({
       class_id: classId, 
