@@ -168,7 +168,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // This solves the issue of tokens expiring when the tab is inactive for a long time (e.g., during a 1-hour class)
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        supabase.auth.getSession().catch(console.warn)
+        // Renovar el token activamente para que siempre esté fresco al volver a la pestaña
+        supabase.auth.refreshSession().catch(() => {
+          // Si falla el refresh, intentamos al menos leer la sesión
+          supabase.auth.getSession().catch(console.warn)
+        })
       }
     }
     

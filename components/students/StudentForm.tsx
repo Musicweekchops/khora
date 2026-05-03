@@ -12,7 +12,7 @@ interface StudentFormProps {
 
 export default function StudentForm({ mode, studentId }: StudentFormProps) {
   const router = useRouter()
-  const { profile } = useAuth()
+  const { profile, session } = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [form, setForm] = useState({
@@ -71,9 +71,8 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
 
         console.log("[StudentForm] Creating student via Edge Function:", email)
 
-        // Usamos fetch nativo para evitar cuelgues del cliente de Supabase
-        const { data: sessionData } = await supabase.auth.getSession()
-        const token = sessionData?.session?.access_token
+        // Usamos el token ya disponible en el contexto — sin llamar a getSession() para evitar lock contention
+        const token = session?.access_token
 
         const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/create-student`, {
           method: "POST",
