@@ -145,11 +145,11 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
                 <span className="text-xl font-black text-neutral-900 leading-none">{new Date(nextClass.date).getDate() + 1}</span>
               </div>
               <div>
-                <h4 className="text-xl font-black text-neutral-900 tracking-tight">Clase con {nextClass.TeacherProfile?.User?.name}</h4>
+                <h4 className="text-xl font-black text-neutral-900 tracking-tight">Próxima Clase</h4>
                 <div className="flex items-center gap-3 mt-1 text-sm text-neutral-500 font-medium">
                   <span className="flex items-center gap-1.5"><Clock className="w-4 h-4 opacity-40" /> {nextClass.start_time.slice(0,5)}</span>
                   <span className="w-1 h-1 rounded-full bg-neutral-200" />
-                  <span className="flex items-center gap-1.5"><Video className="w-4 h-4 opacity-40" /> {nextClass.modalidad}</span>
+                  <span className="flex items-center gap-1.5"><Video className="w-4 h-4 opacity-40" /> {nextClass.modalidad === "online" ? "Virtual" : "Presencial"}</span>
                 </div>
               </div>
             </div>
