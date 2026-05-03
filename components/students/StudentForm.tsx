@@ -101,8 +101,7 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
         console.log("[StudentForm] Student created with UID:", newUserId)
 
         // 1. Actualizar el StudentProfile con el resto de los campos del formulario
-        // El trigger handle_new_user ya creó la fila, ahora le pasamos los detalles.
-        const { error: profileErr } = await supabase
+        const { data: updatedProfile, error: profileErr } = await supabase
           .from("StudentProfile")
           .update({
             status: form.status,
@@ -114,12 +113,19 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
             emergency_phone: form.emergency_phone || null,
           })
           .eq("user_id", newUserId)
+          .select()
 
         if (profileErr) {
-          console.warn("[StudentForm] Profile update error:", profileErr)
-          // No lanzamos error fatal porque el usuario ya existe, 
-          // pero avisamos en consola.
+          console.error("[StudentForm] Profile update error:", profileErr)
+          throw new Error("Alumno creado, pero hubo un error al guardar sus detalles adicionales.")
         }
+        
+        if (!updatedProfile || updatedProfile.length === 0) {
+          console.error("[StudentForm] No rows updated. user_id:", newUserId)
+          throw new Error("Alumno creado, pero no se encontró su perfil para actualizar detalles.")
+        }
+
+        console.log("[StudentForm] Profile updated successfully:", updatedProfile)
 
         // 2. Buscar el ID del StudentProfile para redirigir al detalle
         const { data: sp } = await supabase
