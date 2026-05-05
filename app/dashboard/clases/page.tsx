@@ -108,14 +108,15 @@ export default function ClasesPage() {
   }, {} as Record<string, ClassRow[]>)
 
   return (
-    <div className="space-y-6 pb-20">
-      <div className="flex items-center justify-between">
+  return (
+    <div className="space-y-6 md:space-y-10 pb-20">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-black text-neutral-900 tracking-tight">Clases</h1>
-          <p className="text-neutral-500 font-medium mt-1">{classes.length} registradas</p>
+          <h1 className="text-2xl md:text-3xl font-black text-neutral-900 tracking-tight">Mis Clases</h1>
+          <p className="text-neutral-500 text-sm font-medium mt-1">{classes.length} registradas</p>
         </div>
         {profile?.role === "TEACHER" && (
-          <Link href="/dashboard/clases/nueva" className="px-6 py-3 bg-neutral-900 text-white rounded-2xl text-sm font-bold hover:bg-violet-600 transition-colors shadow-lg">
+          <Link href="/dashboard/clases/nueva" className="w-full sm:w-auto text-center px-6 py-3 bg-neutral-900 text-white rounded-2xl text-sm font-bold hover:bg-violet-600 transition-colors shadow-lg">
             + Nueva Clase
           </Link>
         )}
@@ -132,31 +133,31 @@ export default function ClasesPage() {
         <div className="space-y-10">
           {Object.entries(groupedClasses).map(([monthStr, monthClasses]) => (
             <div key={monthStr} className="space-y-4">
-              <h2 className="text-xl font-black text-neutral-800 flex items-center gap-3">
-                <span className="w-2 h-6 bg-violet-500 rounded-full" />
+              <h2 className="text-lg md:text-xl font-black text-neutral-800 flex items-center gap-3">
+                <span className="w-1.5 h-6 bg-violet-500 rounded-full" />
                 {monthStr}
               </h2>
               <div className="grid gap-3">
                 {monthClasses.map(c => (
                   <Link key={c.id} href={`/dashboard/clases/detalles?id=${c.id}`}>
-                    <div className="bg-white rounded-2xl border border-neutral-100 p-5 flex items-center gap-5 hover:shadow-md hover:border-violet-200 transition-all group cursor-pointer">
-                      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-50 to-violet-100 flex flex-col items-center justify-center border border-violet-100/50">
-                        <span className="text-[10px] font-black text-violet-600 uppercase tracking-widest">{new Date(c.date + "T12:00").toLocaleDateString("es-CL", { weekday: "short" })}</span>
-                        <span className="text-xl font-black text-violet-900 leading-none mt-0.5">{new Date(c.date + "T12:00").getDate()}</span>
+                    <div className="bg-white rounded-2xl border border-neutral-100 p-4 md:p-5 flex items-center gap-4 md:gap-5 hover:shadow-md hover:border-violet-200 transition-all group cursor-pointer">
+                      <div className="w-14 h-14 md:w-16 md:h-16 rounded-xl md:rounded-2xl bg-gradient-to-br from-violet-50 to-violet-100 flex flex-col items-center justify-center border border-violet-100/50 flex-shrink-0">
+                        <span className="text-[9px] font-black text-violet-600 uppercase tracking-widest">{new Date(c.date + "T12:00").toLocaleDateString("es-CL", { weekday: "short" })}</span>
+                        <span className="text-lg md:text-xl font-black text-violet-900 leading-none mt-0.5">{new Date(c.date + "T12:00").getDate()}</span>
                       </div>
-                      <div className="flex-1">
-                        <p className="font-bold text-neutral-900 group-hover:text-violet-600 transition-colors text-lg">{c.student_name}</p>
-                        <p className="text-sm text-neutral-500 font-medium flex items-center gap-2 mt-1">
-                          <span className="flex items-center gap-1 opacity-70">🕒 {formatTime(c.start_time)} – {formatTime(c.end_time)}</span>
-                          <span className="w-1 h-1 rounded-full bg-neutral-300" />
-                          <span className="flex items-center gap-1 opacity-70">{c.modalidad === "online" ? "💻 Virtual" : "🏠 Presencial"}</span>
-                        </p>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-neutral-900 group-hover:text-violet-600 transition-colors text-base md:text-lg truncate">{c.student_name}</p>
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mt-1">
+                          <span className="text-xs text-neutral-500 font-medium flex items-center gap-1 opacity-70">🕒 {formatTime(c.start_time)} – {formatTime(c.end_time)}</span>
+                          <span className="hidden sm:block w-1 h-1 rounded-full bg-neutral-300" />
+                          <span className="text-xs text-neutral-500 font-medium flex items-center gap-1 opacity-70">{c.modalidad === "online" ? "💻 Virtual" : "🏠 Presencial"}</span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-4">
-                        <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${statusColors[c.status] ?? "bg-neutral-100 text-neutral-500"}`}>
-                          {c.status === "SCHEDULED" ? "Programada" : c.status === "COMPLETED" ? "Completada" : "Cancelada"}
+                      <div className="flex flex-col items-end gap-2">
+                        <span className={`px-2.5 py-1 rounded-full text-[8px] md:text-[10px] font-black uppercase tracking-widest ${statusColors[c.status] ?? "bg-neutral-100 text-neutral-500"}`}>
+                          {c.status === "SCHEDULED" ? "Prog" : c.status === "COMPLETED" ? "OK" : "Can"}
                         </span>
-                        <div className="w-10 h-10 rounded-full bg-neutral-50 flex items-center justify-center group-hover:bg-violet-600 group-hover:text-white transition-colors text-neutral-400">
+                        <div className="hidden sm:flex w-8 h-8 rounded-full bg-neutral-50 items-center justify-center group-hover:bg-violet-600 group-hover:text-white transition-colors text-neutral-400">
                           →
                         </div>
                       </div>

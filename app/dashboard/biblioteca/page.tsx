@@ -171,17 +171,17 @@ export default function BibliotecaPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 md:space-y-8">
       {/* HEADER */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-black text-neutral-900 tracking-tight">Mi Biblioteca</h1>
-          <p className="text-neutral-500 font-medium mt-1">Materiales y recursos asignados a tus clases.</p>
+          <h1 className="text-2xl md:text-3xl font-black text-neutral-900 tracking-tight">Mi Biblioteca</h1>
+          <p className="text-neutral-500 text-sm font-medium mt-1">Materiales y recursos asignados a tus clases.</p>
         </div>
         {profile?.role === "TEACHER" && (
           <button 
             onClick={() => setShowForm(!showForm)}
-            className="kh-btn-primary flex items-center gap-2 px-6 py-3"
+            className="kh-btn-primary flex items-center justify-center gap-2 px-6 py-3 w-full sm:w-auto"
           >
             <Plus className="w-5 h-5" />
             <span>Nuevo Recurso</span>
@@ -191,22 +191,22 @@ export default function BibliotecaPage() {
 
       {/* FORM (Solo para Profesores) */}
       {showForm && profile?.role === "TEACHER" && (
-        <form onSubmit={handleSubmit} className="kh-card p-8 bg-white border-neutral-200 animate-in fade-in slide-in-from-top-4 duration-300 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <form onSubmit={handleSubmit} className="kh-card p-5 md:p-8 bg-white border-neutral-200 animate-in fade-in slide-in-from-top-4 duration-300 space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="space-y-4">
               <div>
-                <label className="kh-label pl-1 mb-2 block">Título del Recurso *</label>
+                <label className="kh-label pl-1 mb-1.5 block">Título del Recurso *</label>
                 <input required value={form.title} onChange={e => setForm(p => ({...p, title: e.target.value}))} className="kh-input" placeholder="Ej: Ejercicios de Independencia" />
               </div>
               <div>
-                <label className="kh-label pl-1 mb-2 block">Categoría</label>
+                <label className="kh-label pl-1 mb-1.5 block">Categoría</label>
                 <input value={form.category} onChange={e => setForm(p => ({...p, category: e.target.value}))} className="kh-input" placeholder="Ej: Técnica, Lectura, Repertorio" />
               </div>
             </div>
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="kh-label pl-1 mb-2 block">Tipo</label>
+                  <label className="kh-label pl-1 mb-1.5 block">Tipo</label>
                   <select value={form.type} onChange={e => setForm(p => ({...p, type: e.target.value}))} className="kh-input">
                     <option value="link">Enlace / Web</option>
                     <option value="video">Video (YouTube/Vimeo)</option>
@@ -215,7 +215,7 @@ export default function BibliotecaPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="kh-label pl-1 mb-2 block">
+                  <label className="kh-label pl-1 mb-1.5 block">
                     {['pdf', 'image', 'audio'].includes(form.type) ? "Seleccionar Archivo" : "URL / Link"}
                   </label>
                   {['pdf', 'image', 'audio'].includes(form.type) ? (
@@ -227,7 +227,7 @@ export default function BibliotecaPage() {
                         accept={form.type === 'pdf' ? '.pdf' : form.type === 'image' ? 'image/*' : 'audio/*'}
                       />
                       <div className={`kh-input flex items-center justify-between group-hover:border-violet-400 transition-colors ${file ? 'border-emerald-200 bg-emerald-50/30' : ''}`}>
-                        <span className="text-xs font-medium truncate max-w-[150px]">
+                        <span className="text-[10px] font-medium truncate max-w-[120px]">
                           {file ? file.name : "Subir archivo..."}
                         </span>
                         <CloudUpload className={`w-4 h-4 ${file ? 'text-emerald-500' : 'text-neutral-400'}`} />
@@ -239,14 +239,14 @@ export default function BibliotecaPage() {
                 </div>
               </div>
               <div>
-                <label className="kh-label pl-1 mb-2 block">Descripción (opcional)</label>
+                <label className="kh-label pl-1 mb-1.5 block">Descripción (opcional)</label>
                 <input value={form.description} onChange={e => setForm(p => ({...p, description: e.target.value}))} className="kh-input" placeholder="Notas sobre este material..." />
               </div>
             </div>
           </div>
-          <div className="flex justify-end gap-3 pt-6 border-t border-neutral-100">
-            <button type="button" onClick={() => setShowForm(false)} className="kh-btn-secondary px-6 py-2">Cancelar</button>
-            <button type="submit" disabled={saving} className="kh-btn-primary px-10 py-2">
+          <div className="flex flex-col sm:flex-row justify-end gap-3 pt-6 border-t border-neutral-100">
+            <button type="button" onClick={() => setShowForm(false)} className="kh-btn-secondary px-6 py-2.5 w-full sm:w-auto">Cancelar</button>
+            <button type="submit" disabled={saving} className="kh-btn-primary px-10 py-2.5 w-full sm:w-auto">
               {saving ? "Guardando..." : "✓ Crear Recurso"}
             </button>
           </div>

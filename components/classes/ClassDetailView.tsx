@@ -234,34 +234,28 @@ export default function ClassDetailView({ classId }: { classId: string }) {
   const sc = statusConfig[cls.status] ?? statusConfig.SCHEDULED
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       {/* HEADER */}
-      <div className="bg-white rounded-[40px] border border-neutral-100 p-8 shadow-sm">
+      <div className="bg-white rounded-3xl md:rounded-[40px] border border-neutral-100 p-5 md:p-8 shadow-sm">
         {/* Breadcrumb */}
-        <div className="flex items-center gap-3 text-sm mb-8">
-          <Link href="/dashboard/clases" className="p-2 hover:bg-neutral-50 rounded-xl transition-colors text-neutral-400 hover:text-violet-600">
-            <ChevronLeft className="w-5 h-5" />
+        <div className="flex flex-wrap items-center gap-2 text-[10px] md:text-sm mb-6 md:mb-8">
+          <Link href="/dashboard/clases" className="p-1.5 md:p-2 hover:bg-neutral-50 rounded-xl transition-colors text-neutral-400 hover:text-violet-600">
+            <ChevronLeft className="w-4 h-4 md:w-5 md:h-5" />
           </Link>
-          <div className="flex items-center gap-2 text-neutral-400 font-medium">
+          <div className="flex items-center gap-1 md:gap-2 text-neutral-400 font-medium">
             <span className="opacity-40">Clases</span>
             <span className="text-neutral-200">/</span>
-            <span className="text-neutral-900 font-bold">
+            <span className="text-neutral-900 font-bold truncate max-w-[100px] md:max-w-none">
               {new Date(cls.date + "T12:00").toLocaleDateString("es-CL", { day: "numeric", month: "short" })}
             </span>
           </div>
           {cls.student_id && profile?.role === 'TEACHER' && (
             <>
               <span className="text-neutral-200">·</span>
-              <Link href={`/dashboard/alumnos/detalles?id=${cls.student_id}`} className="text-violet-600 font-bold hover:underline flex items-center gap-1.5">
-                <User className="w-4 h-4 text-violet-400" />
+              <Link href={`/dashboard/alumnos/detalles?id=${cls.student_id}`} className="text-violet-600 font-bold hover:underline flex items-center gap-1 md:gap-1.5 truncate max-w-[120px] md:max-w-none">
+                <User className="w-3 h-3 md:w-4 md:h-4 text-violet-400" />
                 {cls.student_name}
               </Link>
-            </>
-          )}
-          {profile?.role === 'STUDENT' && (
-            <>
-              <span className="text-neutral-200">·</span>
-              <span className="text-neutral-400 font-medium italic">Clase con Profesor</span>
             </>
           )}
         </div>
@@ -269,37 +263,37 @@ export default function ClassDetailView({ classId }: { classId: string }) {
         {editing ? (
           /* ── EDIT MODE ── */
           <div className="space-y-6 animate-in fade-in duration-300">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-violet-50 text-violet-600 rounded-2xl flex items-center justify-center">
-                  <Edit3 className="w-6 h-6" />
+                <div className="w-10 h-10 md:w-12 md:h-12 bg-violet-50 text-violet-600 rounded-xl md:rounded-2xl flex items-center justify-center">
+                  <Edit3 className="w-5 h-5 md:w-6 md:h-6" />
                 </div>
-                <h2 className="text-2xl font-black text-neutral-900">Editar Clase</h2>
+                <h2 className="text-xl md:text-2xl font-black text-neutral-900">Editar Clase</h2>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => setEditing(false)} className="px-5 py-2.5 bg-neutral-100 text-neutral-600 rounded-2xl text-xs font-bold hover:bg-neutral-200 transition-colors">Cancelar</button>
-                <button onClick={saveEdit} disabled={savingEdit} className="px-6 py-2.5 bg-neutral-900 text-white rounded-2xl text-xs font-bold hover:bg-violet-600 transition-colors disabled:opacity-50 flex items-center gap-2">
-                  <Save className="w-4 h-4" />
-                  {savingEdit ? "Guardando..." : "Guardar Cambios"}
+                <button onClick={() => setEditing(false)} className="flex-1 sm:flex-none px-4 py-2 bg-neutral-100 text-neutral-600 rounded-xl text-[10px] font-bold hover:bg-neutral-200 transition-colors">Cancelar</button>
+                <button onClick={saveEdit} disabled={savingEdit} className="flex-1 sm:flex-none px-5 py-2.5 bg-neutral-900 text-white rounded-xl text-[10px] font-bold hover:bg-violet-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                  <Save className="w-3 h-3" />
+                  {savingEdit ? "..." : "Guardar"}
                 </button>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
-                <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-2 px-1">Fecha de Clase</label>
+                <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Fecha</label>
                 <input type="date" value={editForm.date} onChange={e => setEditForm(p => ({ ...p, date: e.target.value }))} className="field" />
               </div>
               <div>
-                <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-2 px-1">Hora Inicio</label>
+                <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Inicio</label>
                 <input type="time" value={editForm.start_time} onChange={e => setEditForm(p => ({ ...p, start_time: e.target.value }))} className="field" />
               </div>
               <div>
-                <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-2 px-1">Hora Fin</label>
+                <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Fin</label>
                 <input type="time" value={editForm.end_time} onChange={e => setEditForm(p => ({ ...p, end_time: e.target.value }))} className="field" />
               </div>
               <div>
-                <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-2 px-1">Asignar Alumno</label>
+                <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Alumno</label>
                 <select value={editForm.student_id} onChange={e => setEditForm(p => ({ ...p, student_id: e.target.value }))} className="field">
                   <option value="">Sin asignar</option>
                   {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -309,26 +303,26 @@ export default function ClassDetailView({ classId }: { classId: string }) {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-2 px-1">Modalidad</label>
-                <div className="grid grid-cols-2 gap-2 p-1.5 bg-neutral-100 rounded-[20px]">
+                <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Modalidad</label>
+                <div className="grid grid-cols-2 gap-2 p-1 bg-neutral-100 rounded-xl">
                   {(["online", "presencial"] as const).map(m => (
                     <button key={m} type="button" onClick={() => setEditForm(p => ({ ...p, modalidad: m }))}
-                      className={`py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${editForm.modalidad === m ? "bg-white text-violet-600 shadow-sm" : "text-neutral-400 hover:text-neutral-600"}`}>
-                      {m === "online" ? <Video className="w-4 h-4" /> : <MapPin className="w-4 h-4" />}
+                      className={`py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${editForm.modalidad === m ? "bg-white text-violet-600 shadow-sm" : "text-neutral-400 hover:text-neutral-600"}`}>
+                      {m === "online" ? <Video className="w-3.5 h-3.5" /> : <MapPin className="w-3.5 h-3.5" />}
                       {m}
                     </button>
                   ))}
                 </div>
               </div>
               <div>
-                <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-2 px-1">Estado de Clase</label>
-                <div className="grid grid-cols-3 gap-2 p-1.5 bg-neutral-100 rounded-[20px]">
+                <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Estado</label>
+                <div className="grid grid-cols-3 gap-1.5 p-1 bg-neutral-100 rounded-xl">
                   {(["SCHEDULED", "COMPLETED", "CANCELLED"] as const).map(s => (
                     <button key={s} type="button" onClick={() => setEditForm(p => ({ ...p, status: s }))}
-                      className={`py-3 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all ${
+                      className={`py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${
                         editForm.status === s ? statusConfig[s].color + " shadow-sm font-black" : "text-neutral-400 hover:text-neutral-600"
                       }`}>
-                      {statusConfig[s].label}
+                      {statusConfig[s].label.slice(0, 4)}
                     </button>
                   ))}
                 </div>
@@ -336,48 +330,48 @@ export default function ClassDetailView({ classId }: { classId: string }) {
             </div>
 
             {/* Danger zone */}
-            <div className="pt-6 border-t border-neutral-100 flex justify-between items-center">
-              <p className="text-[11px] text-neutral-400 font-bold uppercase tracking-tight">Zona de riesgo</p>
-              <button onClick={deleteClass} className="px-4 py-2 text-xs text-red-400 font-bold hover:bg-red-50 rounded-xl transition-all flex items-center gap-2">
-                <Trash2 className="w-4 h-4" />
-                Eliminar Clase
+            <div className="pt-4 border-t border-neutral-100 flex justify-between items-center">
+              <p className="text-[9px] text-neutral-400 font-bold uppercase tracking-tight">Riesgo</p>
+              <button onClick={deleteClass} className="px-3 py-1.5 text-[10px] text-red-400 font-bold hover:bg-red-50 rounded-lg transition-all flex items-center gap-1.5">
+                <Trash2 className="w-3.5 h-3.5" />
+                Eliminar
               </button>
             </div>
           </div>
         ) : (
           /* ── VIEW MODE ── */
           <div className="animate-in fade-in slide-in-from-bottom-2 duration-400">
-            <div className="flex items-start justify-between mb-8">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6 mb-8">
               <div>
-                <h1 className="text-4xl font-black text-neutral-900 tracking-tight capitalize">
+                <h1 className="text-2xl md:text-4xl font-black text-neutral-900 tracking-tight capitalize">
                   {new Date(cls.date + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}
                 </h1>
-                <div className="flex items-center gap-4 mt-2">
-                  <div className="flex items-center gap-1.5 text-neutral-500 font-bold">
-                    <Clock className="w-4 h-4 text-neutral-300" />
+                <div className="flex items-center gap-3 mt-2">
+                  <div className="flex items-center gap-1.5 text-xs md:text-sm text-neutral-500 font-bold">
+                    <Clock className="w-3.5 h-3.5 md:w-4 md:h-4 text-neutral-300" />
                     <span>{formatTime(cls.start_time)} – {formatTime(cls.end_time)}</span>
                   </div>
-                  <span className="w-1.5 h-1.5 rounded-full bg-neutral-200" />
-                  <div className="text-neutral-500 font-bold">{cls.duration} min</div>
+                  <span className="w-1 h-1 rounded-full bg-neutral-200" />
+                  <div className="text-xs md:text-sm text-neutral-500 font-bold">{cls.duration} min</div>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <div className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest border ${sc.color}`}>
-                  <sc.icon className="w-4 h-4" />
+              <div className="flex items-center gap-2 md:gap-3">
+                <div className={`flex items-center gap-1.5 px-3 py-2 md:px-5 md:py-2.5 rounded-xl md:rounded-2xl text-[9px] md:text-xs font-black uppercase tracking-widest border ${sc.color}`}>
+                  <sc.icon className="w-3.5 h-3.5 md:w-4 md:h-4" />
                   {sc.label}
                 </div>
                 {profile?.role === "TEACHER" && (
                   <button onClick={() => setEditing(true)}
-                    className="px-6 py-2.5 bg-neutral-900 text-white rounded-2xl text-sm font-bold hover:bg-violet-600 transition-all flex items-center gap-2 shadow-lg shadow-neutral-900/10">
-                    <Edit3 className="w-4 h-4" />
+                    className="flex-1 sm:flex-none px-4 py-2 md:px-6 md:py-2.5 bg-neutral-900 text-white rounded-xl md:rounded-2xl text-xs md:text-sm font-bold hover:bg-violet-600 transition-all flex items-center justify-center gap-2 shadow-lg shadow-neutral-900/10">
+                    <Edit3 className="w-3.5 h-3.5 md:w-4 md:h-4" />
                     Editar
                   </button>
                 )}
               </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <InfoBlock label="Alumno" icon={<User className="w-4 h-4 text-blue-400" />}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+              <InfoBlock label="Alumno" icon={<User className="w-3.5 h-3.5 text-blue-400" />}>
                 {cls.student_id ? (
                   profile?.role === 'TEACHER' ? (
                     <Link href={`/dashboard/alumnos/detalles?id=${cls.student_id}`} className="text-violet-600 font-black hover:underline">{cls.student_name}</Link>
@@ -388,15 +382,15 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                   <span className="text-neutral-400 font-bold">Sin asignar</span>
                 )}
               </InfoBlock>
-              <InfoBlock label="Horario" icon={<Clock className="w-4 h-4 text-amber-400" />}>
+              <InfoBlock label="Horario" icon={<Clock className="w-3.5 h-3.5 text-amber-400" />}>
                 <span className="font-black text-neutral-900">{formatTime(cls.start_time)} – {formatTime(cls.end_time)}</span>
               </InfoBlock>
-              <InfoBlock label="Duración" icon={<Calendar className="w-4 h-4 text-emerald-400" />}>
+              <InfoBlock label="Duración" icon={<Calendar className="w-3.5 h-3.5 text-emerald-400" />}>
                 <span className="font-black text-neutral-900">{cls.duration} min</span>
               </InfoBlock>
-              <InfoBlock label="Modalidad" icon={<MapPin className="w-4 h-4 text-rose-400" />}>
+              <InfoBlock label="Modalidad" icon={<MapPin className="w-3.5 h-3.5 text-rose-400" />}>
                 <span className="font-black text-neutral-900 flex items-center gap-2">
-                  {cls.modalidad === "online" ? <Video className="w-4 h-4" /> : <MapPin className="w-4 h-4" />}
+                  {cls.modalidad === "online" ? <Video className="w-3.5 h-3.5" /> : <MapPin className="w-3.5 h-3.5" />}
                   <span className="capitalize">{cls.modalidad}</span>
                 </span>
               </InfoBlock>

@@ -187,9 +187,3 @@ function StatCard({ label, value, icon, color, href }: any) {
   }
   return <div className={className}>{content}</div>
 }
-
-  if (href) {
-    return <Link href={href} className={className}>{content}</Link>
-  }
-  return <div className={className}>{content}</div>
-}
