@@ -117,6 +117,28 @@
     background: rgba(139, 92, 246, 0.2);
     color: var(--text-primary);
   }
+
+  /* ── Mobile Safe Areas ── */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+}
+
+/* ================================================================
+   MOBILE OPTIMIZATIONS
+   ================================================================ */
+
+@layer utilities {
+  .touch-none { touch-action: none; }
+  .tap-highlight-none { -webkit-tap-highlight-color: transparent; }
+  
+  /* Large touch targets for mobile */
+  .mobile-touch-target {
+    @apply min-h-[44px] min-w-[44px];
+  }
 }
 
 /* ================================================================

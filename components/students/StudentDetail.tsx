@@ -171,55 +171,56 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
   return (
     <div className="space-y-6">
       {/* HEADER */}
-      <div className="bg-white rounded-3xl border border-neutral-100 p-8">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-6">
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-violet-100 to-indigo-100 flex items-center justify-center text-3xl font-bold text-violet-600 shadow-inner">
+      <div className="bg-white rounded-2xl md:rounded-3xl border border-neutral-100 p-4 md:p-8">
+        <div className="flex flex-col md:flex-row items-start justify-between gap-6">
+          <div className="flex items-center gap-4 md:gap-6">
+            <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-gradient-to-br from-violet-100 to-indigo-100 flex items-center justify-center text-2xl md:text-3xl font-bold text-violet-600 shadow-inner">
               {student.user.name.charAt(0).toUpperCase()}
             </div>
             <div>
-              <h1 className="text-3xl font-black text-neutral-900 tracking-tight">{student.user.name}</h1>
-              <p className="text-neutral-500 font-medium">{student.user.email}</p>
-              {student.user.phone && <p className="text-neutral-400 text-sm mt-0.5">📞 {student.user.phone}</p>}
+              <h1 className="text-2xl md:text-3xl font-black text-neutral-900 tracking-tight">{student.user.name}</h1>
+              <p className="text-neutral-500 font-medium text-sm md:text-base">{student.user.email}</p>
+              {student.user.phone && <p className="text-neutral-400 text-xs md:text-sm mt-0.5">📞 {student.user.phone}</p>}
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 md:gap-3 w-full md:w-auto">
             {/* Status selector */}
             <select
               value={student.status}
               onChange={e => updateStatus(e.target.value)}
-              className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider border-0 outline-none cursor-pointer ${sc.bg} ${sc.color}`}
+              className={`flex-1 md:flex-none px-3 md:px-4 py-2 rounded-xl text-[10px] md:text-xs font-black uppercase tracking-wider border-0 outline-none cursor-pointer ${sc.bg} ${sc.color}`}
             >
               {Object.entries(statusConfig).map(([k, v]) => (
                 <option key={k} value={k}>{v.label}</option>
               ))}
             </select>
-            <button 
-              onClick={handleResetPassword}
-              title="Restablecer Contraseña"
-              className="p-2.5 bg-neutral-100 text-neutral-500 rounded-xl hover:bg-amber-100 hover:text-amber-700 transition-all flex items-center gap-2 text-sm font-bold"
-            >
-              <Lock className="w-4 h-4" />
-              <span className="hidden sm:inline">Clave</span>
-            </button>
-            <Link href={`/dashboard/alumnos/editar?id=${studentId}`} className="px-5 py-2.5 bg-neutral-100 text-neutral-700 rounded-xl text-sm font-bold hover:bg-neutral-200 transition-colors flex items-center gap-2">
-              <Edit3 className="w-4 h-4" />
-              <span className="hidden sm:inline">Editar</span>
-            </Link>
-            <button onClick={handleDelete} className="p-2.5 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors">
-              <Trash2 className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button 
+                onClick={handleResetPassword}
+                title="Restablecer Contraseña"
+                className="p-2.5 bg-neutral-100 text-neutral-500 rounded-xl hover:bg-amber-100 hover:text-amber-700 transition-all"
+              >
+                <Lock className="w-4 h-4" />
+              </button>
+              <Link href={`/dashboard/alumnos/editar?id=${studentId}`} className="p-2.5 md:px-5 md:py-2.5 bg-neutral-100 text-neutral-700 rounded-xl text-sm font-bold hover:bg-neutral-200 transition-colors flex items-center gap-2">
+                <Edit3 className="w-4 h-4" />
+                <span className="hidden sm:inline">Editar</span>
+              </Link>
+              <button onClick={handleDelete} className="p-2.5 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Quick stats */}
-        <div className="grid grid-cols-6 gap-4 mt-8">
-          <MiniStat label="Progreso del mes" value={`${monthCompleted}/${monthTotal}`} icon="↻" />
-          <MiniStat label="Días como alumno" value={String(daysSinceJoined)} icon="📅" />
-          <MiniStat label="Clases tomadas" value={String(completedClasses)} icon="📖" />
-          <MiniStat label="Tareas completadas" value={`${completedTasks}/${tasks.length}`} icon="✅" />
-          <MiniStat label="Total pagado" value={formatCurrency(totalPaid)} icon="💰" />
-          <MiniStat label="Modalidad" value={student.modalidad === "online" ? "Virtual" : "Presencial"} icon="🎓" />
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4 mt-8">
+          <MiniStat label="Mes" value={`${monthCompleted}/${monthTotal}`} icon="↻" />
+          <MiniStat label="Días" value={String(daysSinceJoined)} icon="📅" />
+          <MiniStat label="Clases" value={String(completedClasses)} icon="📖" />
+          <MiniStat label="Tareas" value={`${completedTasks}/${tasks.length}`} icon="✅" />
+          <MiniStat label="Pagado" value={formatCurrency(totalPaid)} icon="💰" />
+          <MiniStat label="Tipo" value={student.modalidad === "online" ? "Virtual" : "Casa"} icon="🎓" />
         </div>
       </div>
 
@@ -279,11 +280,12 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
         )}
 
         {activeTab === "classes" && (
-          <div className="bg-white rounded-3xl border border-neutral-100 overflow-hidden">
+          <div className="bg-white rounded-2xl md:rounded-3xl border border-neutral-100 overflow-hidden">
             {classes.length === 0 ? (
               <div className="p-12 text-center"><span className="text-4xl opacity-30 block mb-3">📖</span><p className="text-neutral-500 font-bold">Sin clases registradas</p></div>
             ) : (
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto scrollbar-thin">
+                <table className="w-full text-sm min-w-[600px] md:min-w-0">
                 <thead><tr className="border-b border-neutral-100 bg-neutral-50/50">
                   <th className="text-left px-6 py-4 text-xs font-bold text-neutral-400 uppercase tracking-widest">Fecha</th>
                   <th className="text-left px-6 py-4 text-xs font-bold text-neutral-400 uppercase tracking-widest">Horario</th>
@@ -329,16 +331,16 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
         )}
 
         {activeTab === "payments" && (
-          <div className="bg-white rounded-3xl border border-neutral-100 overflow-hidden">
+          <div className="bg-white rounded-2xl md:rounded-3xl border border-neutral-100 overflow-hidden">
             {payments.length === 0 ? (
               <div className="p-12 text-center"><span className="text-4xl opacity-30 block mb-3">💰</span><p className="text-neutral-500 font-bold">Sin pagos registrados</p></div>
             ) : (
-              <>
+              <div className="overflow-x-auto scrollbar-thin">
                 <div className="p-6 bg-gradient-to-r from-emerald-50 to-emerald-100/50 border-b border-emerald-100">
                   <p className="text-xs font-bold text-emerald-600 uppercase tracking-widest">Total Pagado</p>
                   <p className="text-3xl font-black text-emerald-700">{formatCurrency(totalPaid)}</p>
                 </div>
-                <table className="w-full text-sm">
+                <table className="w-full text-sm min-w-[400px] md:min-w-0">
                   <tbody>
                     {payments.map(p => (
                       <tr key={p.id} className="border-b border-neutral-50 hover:bg-neutral-50/50">

@@ -82,64 +82,96 @@ interface SidebarProps {
 export default function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname()
   const { signOut } = useAuth()
+  const navItems = user.role === 'TEACHER' ? TEACHER_NAV : STUDENT_NAV
 
   return (
-    <aside className="flex flex-col h-screen w-[240px] fixed left-0 top-0 z-50 bg-white border-r border-neutral-200/80">
-      {/* Logo */}
-      <div className="h-16 flex items-center gap-3 px-5 border-b border-neutral-100">
-        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${user.role === 'TEACHER' ? 'bg-violet-600 shadow-sm shadow-violet-200' : 'bg-neutral-900'}`}>
-          <span className="text-white text-sm font-bold">K</span>
+    <>
+      {/* Desktop Sidebar */}
+      <aside className="hidden md:flex flex-col h-screen w-[240px] fixed left-0 top-0 z-50 bg-white border-r border-neutral-200/80">
+        {/* Logo */}
+        <div className="h-16 flex items-center gap-3 px-5 border-b border-neutral-100">
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${user.role === 'TEACHER' ? 'bg-violet-600 shadow-sm shadow-violet-200' : 'bg-neutral-900'}`}>
+            <span className="text-white text-sm font-bold">K</span>
+          </div>
+          <div>
+            <h1 className="text-sm font-semibold text-neutral-900 tracking-tight leading-none">Khora</h1>
+            <p className="text-[10px] text-neutral-400 font-medium mt-0.5">Gestión de clases</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-sm font-semibold text-neutral-900 tracking-tight leading-none">Khora</h1>
-          <p className="text-[10px] text-neutral-400 font-medium mt-0.5">Gestión de clases</p>
-        </div>
-      </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto scrollbar-thin">
-        {(user.role === 'TEACHER' ? TEACHER_NAV : STUDENT_NAV).map(item => {
-          const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname?.startsWith(item.href))
-          return (
-            <Link key={item.name} href={item.href}>
-              <div className={`flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150 ${
-                isActive
-                  ? "bg-neutral-100 text-neutral-900"
-                  : "text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50"
-              }`}>
-                <span className={`transition-colors ${isActive ? "text-neutral-900" : "text-neutral-400"}`}>
-                  {item.icon}
-                </span>
-                <span>{item.name}</span>
-              </div>
-            </Link>
-          )
-        })}
+        {/* Navigation */}
+        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto scrollbar-thin">
+          {navItems.map(item => {
+            const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname?.startsWith(item.href))
+            return (
+              <Link key={item.name} href={item.href}>
+                <div className={`flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150 ${
+                  isActive
+                    ? "bg-neutral-100 text-neutral-900"
+                    : "text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50"
+                }`}>
+                  <span className={`transition-colors ${isActive ? "text-neutral-900" : "text-neutral-400"}`}>
+                    {item.icon}
+                  </span>
+                  <span>{item.name}</span>
+                </div>
+              </Link>
+            )
+          })}
+        </nav>
+
+        {/* Profile */}
+        <div className="p-3 border-t border-neutral-100 bg-neutral-50/50">
+          <div className="flex items-center gap-3 px-3 py-2 mb-1">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${user.role === 'TEACHER' ? 'bg-violet-100 text-violet-700' : 'bg-neutral-200 text-neutral-700'}`}>
+              {user.name.charAt(0).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-medium text-neutral-900 truncate leading-tight">{user.name}</p>
+              {user.role === 'TEACHER' ? (
+                <p className="text-[9px] font-black uppercase tracking-widest text-violet-600 mt-0.5 px-1.5 py-0.5 bg-violet-100/50 rounded inline-block">Profesor</p>
+              ) : (
+                <p className="text-[11px] text-neutral-400 capitalize mt-0.5">{user.role.toLowerCase()}</p>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={() => signOut()}
+            className="w-full flex items-center gap-2 px-3 py-2 text-neutral-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors text-[13px] font-medium"
+          >
+            {Icons.logout}
+            <span>Cerrar Sesión</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-t border-neutral-200/50 pb-safe">
+        <div className="flex items-center justify-around h-16 px-2">
+          {navItems.slice(0, 4).map(item => { // Limit to 4 items on mobile for space
+            const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname?.startsWith(item.href))
+            return (
+              <Link key={item.name} href={item.href} className="flex-1">
+                <div className={`flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+                  isActive ? "text-violet-600 scale-110" : "text-neutral-400"
+                }`}>
+                  <span className="mb-0.5">{item.icon}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-tighter">{item.name}</span>
+                </div>
+              </Link>
+            )
+          })}
+          {/* Mobile Profile/Menu Trigger */}
+          <Link href="/dashboard/ajustes" className="flex-1">
+             <div className={`flex flex-col items-center justify-center gap-1 ${pathname === '/dashboard/ajustes' ? "text-violet-600" : "text-neutral-400"}`}>
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold border ${pathname === '/dashboard/ajustes' ? "border-violet-600 bg-violet-50" : "border-neutral-300"}`}>
+                  {user.name.charAt(0).toUpperCase()}
+                </div>
+                <span className="text-[10px] font-bold uppercase tracking-tighter">Mí Perfil</span>
+             </div>
+          </Link>
+        </div>
       </nav>
-
-      {/* Profile */}
-      <div className="p-3 border-t border-neutral-100 bg-neutral-50/50">
-        <div className="flex items-center gap-3 px-3 py-2 mb-1">
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${user.role === 'TEACHER' ? 'bg-violet-100 text-violet-700' : 'bg-neutral-200 text-neutral-700'}`}>
-            {user.name.charAt(0).toUpperCase()}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-medium text-neutral-900 truncate leading-tight">{user.name}</p>
-            {user.role === 'TEACHER' ? (
-              <p className="text-[9px] font-black uppercase tracking-widest text-violet-600 mt-0.5 px-1.5 py-0.5 bg-violet-100/50 rounded inline-block">Profesor</p>
-            ) : (
-              <p className="text-[11px] text-neutral-400 capitalize mt-0.5">{user.role.toLowerCase()}</p>
-            )}
-          </div>
-        </div>
-        <button
-          onClick={() => signOut()}
-          className="w-full flex items-center gap-2 px-3 py-2 text-neutral-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors text-[13px] font-medium"
-        >
-          {Icons.logout}
-          <span>Cerrar Sesión</span>
-        </button>
-      </div>
-    </aside>
+    </>
   )
 }

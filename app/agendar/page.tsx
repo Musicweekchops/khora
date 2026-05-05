@@ -181,34 +181,34 @@ function PublicBookingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-50 py-16 px-4">
+    <div className="min-h-screen bg-neutral-50 py-8 md:py-16 px-4 pb-12">
       <div className="max-w-3xl mx-auto">
         {/* Header */}
-        <div className="text-center mb-12">
-          <div className="w-20 h-20 bg-violet-600 text-white rounded-3xl flex items-center justify-center text-3xl font-black mx-auto mb-6 shadow-xl shadow-violet-600/20">
+        <div className="text-center mb-10 md:mb-12">
+          <div className="w-16 h-16 md:w-20 md:h-20 bg-violet-600 text-white rounded-[20px] md:rounded-3xl flex items-center justify-center text-2xl md:text-3xl font-black mx-auto mb-6 shadow-xl shadow-violet-600/20">
             {teacher?.User?.name.charAt(0)}
           </div>
-          <h1 className="text-4xl font-black text-neutral-900 tracking-tight mb-2">Agenda con {teacher?.User?.name}</h1>
-          <p className="text-neutral-500 font-bold">Selecciona el servicio para ver horarios disponibles</p>
+          <h1 className="text-3xl md:text-4xl font-black text-neutral-900 tracking-tight mb-2">Agenda con {teacher?.User?.name}</h1>
+          <p className="text-neutral-500 font-bold text-sm md:text-base">Selecciona el servicio para ver horarios</p>
         </div>
 
         {!selected ? (
-          <div className="grid gap-4">
+          <div className="grid gap-3 md:gap-4">
             {classTypes.length === 0 ? (
-              <div className="kh-card p-20 text-center">
+              <div className="kh-card p-12 md:p-20 text-center">
                 <p className="text-neutral-400 font-bold italic">Este profesor no tiene servicios configurados todavía.</p>
               </div>
             ) : (
               classTypes.map(ct => (
-                <button key={ct.id} onClick={() => setSelected(ct)} className="group text-left p-1">
-                  <div className="kh-card p-8 flex items-center gap-6 group-hover:border-violet-500 group-hover:shadow-xl transition-all relative overflow-hidden">
-                    <span className="text-5xl">{ct.icon || "🎵"}</span>
+                <button key={ct.id} onClick={() => setSelected(ct)} className="group text-left p-0.5">
+                  <div className="kh-card p-5 md:p-8 flex items-center gap-4 md:gap-6 group-hover:border-violet-500 group-hover:shadow-xl transition-all relative overflow-hidden">
+                    <span className="text-4xl md:text-5xl">{ct.icon || "🎵"}</span>
                     <div className="flex-1">
-                      <h3 className="text-xl font-black text-neutral-900">{ct.name}</h3>
-                      <p className="text-neutral-400 font-bold mt-1 uppercase text-xs tracking-widest">{ct.duration} MINUTOS</p>
+                      <h3 className="text-lg md:text-xl font-black text-neutral-900">{ct.name}</h3>
+                      <p className="text-neutral-400 font-bold mt-0.5 uppercase text-[10px] tracking-widest">{ct.duration} MINUTOS</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-2xl font-black text-neutral-900">${ct.price.toLocaleString()}</p>
+                      <p className="text-xl md:text-2xl font-black text-neutral-900">${ct.price.toLocaleString()}</p>
                     </div>
                   </div>
                 </button>
@@ -218,25 +218,25 @@ function PublicBookingPage() {
         ) : (
           /* Step 2: Form & Slots */
           <div className="space-y-6">
-            <button onClick={() => setSelected(null)} className="text-xs font-black text-violet-600 uppercase tracking-widest flex items-center gap-2 hover:translate-x-[-4px] transition-transform">
+            <button onClick={() => setSelected(null)} className="text-[10px] font-black text-violet-600 uppercase tracking-widest flex items-center gap-2 hover:translate-x-[-4px] transition-transform ml-2">
               ← Volver a servicios
             </button>
 
-            <div className="kh-card p-0 overflow-hidden">
-              <div className="bg-neutral-900 p-8 text-white flex items-center justify-between">
+            <div className="kh-card p-0 overflow-hidden shadow-2xl border-none">
+              <div className="bg-neutral-900 p-6 md:p-8 text-white flex items-center justify-between">
                 <div>
-                  <p className="text-[10px] font-black text-neutral-500 uppercase tracking-widest mb-1">Servicio seleccionado</p>
-                  <h2 className="text-2xl font-black">{selected.icon} {selected.name}</h2>
+                  <p className="text-[9px] font-black text-neutral-500 uppercase tracking-widest mb-1">Servicio seleccionado</p>
+                  <h2 className="text-xl md:text-2xl font-black">{selected.icon} {selected.name}</h2>
                 </div>
                 <div className="text-right">
-                  <p className="text-2xl font-black">${selected.price.toLocaleString()}</p>
+                  <p className="text-xl md:text-2xl font-black">${selected.price.toLocaleString()}</p>
                 </div>
               </div>
 
-              <form onSubmit={handleSubmit} className="p-10 space-y-8">
+              <form onSubmit={handleSubmit} className="p-6 md:p-10 space-y-8">
                 <div className="space-y-6">
-                  <h3 className="font-black text-neutral-900 flex items-center gap-2"><span className="w-2 h-5 bg-violet-500 rounded-full" /> Tus Datos</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <h3 className="font-black text-neutral-900 flex items-center gap-2 text-sm md:text-base uppercase tracking-wider"><span className="w-1.5 h-4 bg-violet-500 rounded-full" /> Tus Datos</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                     <input required value={formData.name} onChange={e => setFormData(p => ({...p, name: e.target.value}))} className="kh-input" placeholder="Nombre completo" />
                     <input type="email" required value={formData.email} onChange={e => setFormData(p => ({...p, email: e.target.value}))} className="kh-input" placeholder="Email" />
                   </div>
@@ -244,16 +244,18 @@ function PublicBookingPage() {
                 </div>
 
                 <div className="space-y-6 pt-4 border-t border-neutral-100">
-                  <h3 className="font-black text-neutral-900 flex items-center gap-2"><span className="w-2 h-5 bg-emerald-500 rounded-full" /> Fecha y Hora</h3>
+                  <h3 className="font-black text-neutral-900 flex items-center gap-2 text-sm md:text-base uppercase tracking-wider"><span className="w-1.5 h-4 bg-emerald-500 rounded-full" /> Fecha y Hora</h3>
                   <input type="date" required value={formData.date} onChange={e => setFormData(p => ({...p, date: e.target.value}))} className="kh-input" min={new Date().toISOString().split("T")[0]} />
 
                   {formData.date && (
                     <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                      <label className="kh-label mb-3 block">Horas disponibles ({formatDate(formData.date)})</label>
+                      <label className="kh-label mb-3 block text-[10px]">Horas disponibles ({formatDate(formData.date)})</label>
                       {loadingSlots ? (
-                        <div className="flex gap-2"><div className="kh-skeleton w-20 h-10"/><div className="kh-skeleton w-20 h-10"/></div>
+                        <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
+                           <div className="kh-skeleton h-12"/><div className="kh-skeleton h-12"/><div className="kh-skeleton h-12"/>
+                        </div>
                       ) : availableSlots.length === 0 ? (
-                        <p className="p-6 bg-neutral-50 rounded-2xl text-center text-sm font-bold text-neutral-400 italic">No hay horarios disponibles.</p>
+                        <p className="p-8 bg-neutral-50 rounded-2xl text-center text-xs font-bold text-neutral-400 italic">No hay horarios para este día.</p>
                       ) : (
                         <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
                           {availableSlots.map(slot => (
@@ -261,8 +263,8 @@ function PublicBookingPage() {
                               key={slot}
                               type="button"
                               onClick={() => setSelectedSlot(slot)}
-                              className={`py-3 px-2 rounded-xl text-xs font-black transition-all ${
-                                selectedSlot === slot ? "bg-violet-600 text-white shadow-lg" : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+                              className={`py-3.5 px-2 rounded-xl text-xs font-black transition-all tap-highlight-none ${
+                                selectedSlot === slot ? "bg-violet-600 text-white shadow-lg scale-95" : "bg-neutral-100 text-neutral-600 active:bg-neutral-200"
                               }`}
                             >
                               {formatTime(slot)}
@@ -274,14 +276,14 @@ function PublicBookingPage() {
                   )}
                 </div>
 
-                {error && <div className="bg-red-50 text-red-700 p-4 rounded-2xl text-sm font-bold border border-red-200">⚠️ {error}</div>}
+                {error && <div className="bg-red-50 text-red-700 p-4 rounded-2xl text-xs font-bold border border-red-200">⚠️ {error}</div>}
 
                 <button 
                   type="submit" 
                   disabled={submitting || !selectedSlot} 
-                  className="w-full kh-btn-primary py-5 text-lg shadow-xl shadow-violet-600/20"
+                  className="w-full kh-btn-primary py-5 text-lg shadow-2xl shadow-violet-600/30 active:scale-[0.98] transition-transform"
                 >
-                  {submitting ? "Reservando..." : "🎵 Solicitar Reserva"}
+                  {submitting ? "Procesando..." : "🎵 Solicitar Reserva"}
                 </button>
               </form>
             </div>
