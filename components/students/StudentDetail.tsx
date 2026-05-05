@@ -308,7 +308,8 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
                   ))}
                 </tbody>
               </table>
-            )}
+            </div>
+          )}
           </div>
         )}
 
@@ -351,7 +352,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
                     ))}
                   </tbody>
                 </table>
-              </>
+              </div>
             )}
           </div>
         )}
