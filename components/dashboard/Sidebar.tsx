@@ -87,7 +87,7 @@ export default function Sidebar({ user }: SidebarProps) {
   return (
     <>
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col h-screen w-[240px] fixed left-0 top-0 z-50 bg-white border-r border-neutral-200/80">
+      <aside className="hidden lg:flex flex-col h-screen w-[240px] fixed left-0 top-0 z-50 bg-white border-r border-neutral-200/80">
         {/* Logo */}
         <div className="h-16 flex items-center gap-3 px-5 border-b border-neutral-100">
           <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${user.role === 'TEACHER' ? 'bg-violet-600 shadow-sm shadow-violet-200' : 'bg-neutral-900'}`}>
@@ -146,7 +146,7 @@ export default function Sidebar({ user }: SidebarProps) {
       </aside>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-t border-neutral-200/50 pb-safe">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-t border-neutral-200/50 pb-safe">
         <div className="flex items-center justify-around h-16 px-2">
           {navItems.slice(0, 4).map(item => { // Limit to 4 items on mobile for space
             const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname?.startsWith(item.href))
