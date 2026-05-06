@@ -27,6 +27,7 @@ import {
   PlayCircle
 } from "lucide-react"
 import VideoPlayer from "@/components/ui/VideoPlayer"
+import { useToast } from "@/components/ui/Toast"
 
 interface ClassData {
   id: string; date: string; start_time: string; end_time: string
@@ -48,6 +49,7 @@ interface LibraryItem { id: string; title: string; category: string }
 export default function ClassDetailView({ classId }: { classId: string }) {
   const router = useRouter()
   const { profile } = useAuth()
+  const { toast } = useToast()
   const [cls, setCls] = useState<ClassData | null>(null)
   const [notes, setNotes] = useState<Note[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
@@ -65,47 +67,80 @@ export default function ClassDetailView({ classId }: { classId: string }) {
   const [library, setLibrary] = useState<LibraryItem[]>([])
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => { loadAll() }, [classId])
+  useEffect(() => {
+    loadAll()
+
+    // ── REAL-TIME SUBSCRIPTION ──
+    // Subscribe to changes in notes and tasks for this specific class
+    const channel = supabase
+      .channel(`class-updates-${classId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'ClassNote', filter: `class_id=eq.${classId}` },
+        () => {
+          console.log('[Realtime] Note change detected, reloading...')
+          loadNotesAndTasks() 
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'Task', filter: `class_id=eq.${classId}` },
+        () => {
+          console.log('[Realtime] Task change detected, reloading...')
+          loadNotesAndTasks()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [classId])
 
   async function loadAll() {
     setLoading(true)
+    try {
+      const { data: c } = await supabase
+        .from("Class")
+        .select("id, date, start_time, end_time, status, modalidad, duration, student_id, teacher_id, StudentProfile ( User ( name, email ) )")
+        .eq("id", classId).single()
 
-    const { data: c } = await supabase
-      .from("Class")
-      .select("id, date, start_time, end_time, status, modalidad, duration, student_id, teacher_id, StudentProfile ( User ( name, email ) )")
-      .eq("id", classId).single()
+      if (c) {
+        const classData: ClassData = {
+          id: c.id, date: c.date, start_time: c.start_time, end_time: c.end_time,
+          status: c.status, modalidad: c.modalidad, duration: c.duration ?? 60,
+          student_name: (c as any).StudentProfile?.User?.name ?? "Sin asignar",
+          student_email: (c as any).StudentProfile?.User?.email,
+          student_id: c.student_id, teacher_id: c.teacher_id,
+        }
+        setCls(classData)
+        setEditForm({
+          date: classData.date, start_time: classData.start_time.slice(0, 5),
+          end_time: classData.end_time.slice(0, 5), student_id: classData.student_id ?? "",
+          modalidad: classData.modalidad, status: classData.status,
+        })
 
-    if (c) {
-      const classData: ClassData = {
-        id: c.id, date: c.date, start_time: c.start_time, end_time: c.end_time,
-        status: c.status, modalidad: c.modalidad, duration: c.duration ?? 60,
-        student_name: (c as any).StudentProfile?.User?.name ?? "Sin asignar",
-        student_email: (c as any).StudentProfile?.User?.email,
-        student_id: c.student_id, teacher_id: c.teacher_id,
+        const { data: st } = await supabase
+          .from("StudentProfile")
+          .select("id, User ( name )")
+          .eq("teacher_id", classData.teacher_id)
+        if (st) setStudents(st.map((s: any) => ({ id: s.id, name: s.User?.name ?? "—" })))
+
+        const { data: lib } = await supabase
+          .from("LibraryContent")
+          .select("id, title, category")
+          .eq("teacher_id", classData.teacher_id)
+          .order("category")
+        if (lib) setLibrary(lib)
       }
-      setCls(classData)
-      setEditForm({
-        date: classData.date, start_time: classData.start_time.slice(0, 5),
-        end_time: classData.end_time.slice(0, 5), student_id: classData.student_id ?? "",
-        modalidad: classData.modalidad, status: classData.status,
-      })
 
-      // Load students for this teacher
-      const { data: st } = await supabase
-        .from("StudentProfile")
-        .select("id, User ( name )")
-        .eq("teacher_id", classData.teacher_id)
-      if (st) setStudents(st.map((s: any) => ({ id: s.id, name: s.User?.name ?? "—" })))
-
-      // Load entire library for selection
-      const { data: lib } = await supabase
-        .from("LibraryContent")
-        .select("id, title, category")
-        .eq("teacher_id", classData.teacher_id)
-        .order("category")
-      if (lib) setLibrary(lib)
+      await loadNotesAndTasks()
+    } finally {
+      setLoading(false)
     }
+  }
 
+  async function loadNotesAndTasks() {
     const { data: n } = await supabase
       .from("ClassNote")
       .select("*, LibraryContent!ClassNote_content_id_fkey(title, url, type)")
@@ -119,8 +154,6 @@ export default function ClassDetailView({ classId }: { classId: string }) {
       .eq("class_id", classId)
       .order("created_at", { ascending: false })
     if (t) setTasks(t as any)
-
-    setLoading(false)
   }
 
   async function saveEdit() {
@@ -162,10 +195,11 @@ export default function ClassDetailView({ classId }: { classId: string }) {
     
     if (error) {
       console.error("Error al guardar nota:", error)
-      alert("Hubo un error al guardar la nota. Revisa la consola para más detalles.")
+      toast("Error al guardar la nota", "error")
     } else {
       setNewNote({ content: "", content_id: "" })
-      await loadAll()
+      toast("Nota guardada con éxito", "success")
+      await loadNotesAndTasks()
     }
     setSaving(false)
   }
@@ -186,25 +220,29 @@ export default function ClassDetailView({ classId }: { classId: string }) {
       content_id: newTask.content_id || null
     })
 
-    if (!error && cls?.student_email) {
-      // Trigger new task email
-      supabase.functions.invoke("send-email", {
-        body: {
-          to: cls.student_email,
-          type: "NEW_TASK",
-          params: {
-            studentName: cls.student_name,
-            taskTitle: newTask.title.trim(),
-            taskDescription: newTask.description.trim() || "",
-            assignedDate: new Date().toLocaleDateString("es-CL", { day: "numeric", month: "long" }),
-            link: window.location.origin + "/dashboard/tareas"
+    if (error) {
+      toast("Error al asignar tarea", "error")
+    } else {
+      toast("Tarea asignada correctamente", "success")
+      if (cls?.student_email) {
+        // Trigger new task email
+        supabase.functions.invoke("send-email", {
+          body: {
+            to: cls.student_email,
+            type: "NEW_TASK",
+            params: {
+              studentName: cls.student_name,
+              taskTitle: newTask.title.trim(),
+              taskDescription: newTask.description.trim() || "",
+              assignedDate: new Date().toLocaleDateString("es-CL", { day: "numeric", month: "long" }),
+              link: window.location.origin + "/dashboard/tareas"
+            }
           }
-        }
-      }).catch(err => console.error("Error sending task email:", err))
+        }).catch(err => console.error("Error sending task email:", err))
+      }
+      setNewTask({ title: "", description: "", content_id: "" })
+      await loadNotesAndTasks()
     }
-
-    setNewTask({ title: "", description: "", content_id: "" })
-    await loadAll()
     setSaving(false)
   }
 

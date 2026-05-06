@@ -59,48 +59,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // ---------------------------------------------------------------
   // Cargar perfil desde public.User
   // ---------------------------------------------------------------
-  const fetchProfile = useCallback(async (authUser: User): Promise<UserProfile | null> => {
-    try {
-      const { data, error } = await supabase
-        .from('User')
-        .select(`
-          id, email, name, phone, role,
-          TeacherProfile ( id ),
-          StudentProfile ( id )
-        `)
-        .eq('id', authUser.id)
-        .maybeSingle()
+  const fetchProfile = useCallback(async (authUser: User, retries = 3): Promise<UserProfile | null> => {
+    let attempt = 0
+    while (attempt < retries) {
+      try {
+        const { data, error } = await supabase
+          .from('User')
+          .select(`
+            id, email, name, phone, role,
+            TeacherProfile ( id ),
+            StudentProfile ( id )
+          `)
+          .eq('id', authUser.id)
+          .maybeSingle()
 
-      if (error) {
-        console.warn('[Auth] Profile query error:', error.message)
-        return null
+        if (error) throw error
+
+        if (data) {
+          const tp = Array.isArray(data.TeacherProfile) ? data.TeacherProfile[0] : data.TeacherProfile
+          const sp = Array.isArray(data.StudentProfile) ? data.StudentProfile[0] : data.StudentProfile
+
+          return {
+            id: data.id,
+            email: data.email,
+            name: data.name,
+            phone: data.phone,
+            role: data.role as 'TEACHER' | 'STUDENT',
+            teacherProfileId: tp?.id ?? null,
+            studentProfileId: sp?.id ?? null,
+          }
+        }
+        
+        // If no data, maybe it's too fast? retry
+        console.warn(`[Auth] No profile found for ${authUser.id}, attempt ${attempt + 1}/${retries}`)
+      } catch (e: any) {
+        console.error(`[Auth] fetchProfile error (attempt ${attempt + 1}/${retries}):`, e.message)
       }
-
-      if (!data) {
-        console.warn('[Auth] No User row found for', authUser.id)
-        return null
+      
+      attempt++
+      if (attempt < retries) {
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt)) // Backoff
       }
-
-      const tp = Array.isArray(data.TeacherProfile)
-        ? data.TeacherProfile[0]
-        : data.TeacherProfile
-      const sp = Array.isArray(data.StudentProfile)
-        ? data.StudentProfile[0]
-        : data.StudentProfile
-
-      return {
-        id: data.id,
-        email: data.email,
-        name: data.name,
-        phone: data.phone,
-        role: data.role as 'TEACHER' | 'STUDENT',
-        teacherProfileId: tp?.id ?? null,
-        studentProfileId: sp?.id ?? null,
-      }
-    } catch (e) {
-      console.error('[Auth] fetchProfile exception:', e)
-      return null
     }
+    return null
   }, [])
 
   // ---------------------------------------------------------------
@@ -122,12 +123,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       async (event, currentSession) => {
         if (!mounted) return
 
+        console.log(`[Auth] Event: ${event}`)
         setSession(currentSession)
         setUser(currentSession?.user ?? null)
 
         if (currentSession?.user) {
-          const p = await fetchProfile(currentSession.user)
-          if (mounted) setProfile(p)
+          // If we don't have a profile yet, or if it's a critical event, fetch it
+          if (!profile || event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'TOKEN_REFRESHED') {
+            const p = await fetchProfile(currentSession.user)
+            if (mounted) setProfile(p)
+          }
         } else {
           setProfile(null)
         }
@@ -140,10 +145,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     )
 
     // Trigger initial session check via the listener
-    // This is the safe way — it goes through onAuthStateChange
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       if (!mounted) return
-      // Only set if onAuthStateChange hasn't fired yet
       if (loading) {
         setSession(s)
         setUser(s?.user ?? null)
@@ -159,18 +162,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
     }).catch(err => {
-      // Lock errors are non-fatal — the listener will eventually fire
       console.warn('[Auth] getSession fallback error (non-fatal):', err.message)
       if (mounted && loading) setLoading(false)
     })
 
+    // ── PERSISTENCE HEARTBEAT ──
+    // Every 15 minutes, we touch the session to ensure it's alive and tokens are refreshed
+    const heartbeat = setInterval(() => {
+      if (mounted && user) {
+        console.log('[Auth] Periodic heartbeat refresh...')
+        supabase.auth.refreshSession().catch(err => {
+          console.warn('[Auth] Heartbeat refresh failed:', err.message)
+        })
+      }
+    }, 15 * 60 * 1000)
+
     // Listen for tab focus/visibility changes to force a session refresh
-    // This solves the issue of tokens expiring when the tab is inactive for a long time (e.g., during a 1-hour class)
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        // Renovar el token activamente para que siempre esté fresco al volver a la pestaña
+      if (document.visibilityState === 'visible' && user) {
         supabase.auth.refreshSession().catch(() => {
-          // Si falla el refresh, intentamos al menos leer la sesión
           supabase.auth.getSession().catch(console.warn)
         })
       }
@@ -183,12 +193,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       mounted = false
       clearTimeout(timeout)
+      clearInterval(heartbeat)
       subscription.unsubscribe()
       if (typeof document !== 'undefined') {
         document.removeEventListener('visibilitychange', handleVisibilityChange)
       }
     }
-  }, [router, fetchProfile])
+  }, [router, fetchProfile, profile, user, loading])
 
   // ---------------------------------------------------------------
   // Protección de rutas
