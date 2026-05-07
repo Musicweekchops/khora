@@ -51,10 +51,16 @@ function isPublicPath(pathname: string | null) {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
+  const profileRef = React.useRef<UserProfile | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const router = useRouter()
   const pathname = usePathname()
+
+  // Sincronizar Ref con State
+  useEffect(() => {
+    profileRef.current = profile
+  }, [profile])
 
   // ---------------------------------------------------------------
   // Cargar perfil desde public.User
@@ -106,7 +112,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // ---------------------------------------------------------------
   // Single source of truth: onAuthStateChange
-  // No separate getSession() call → prevents lock contention
   // ---------------------------------------------------------------
   useEffect(() => {
     let mounted = true
@@ -128,8 +133,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(currentSession?.user ?? null)
 
         if (currentSession?.user) {
-          // If we don't have a profile yet, or if it's a critical event, fetch it
-          if (!profile || event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'TOKEN_REFRESHED') {
+          // Si no tenemos perfil o es un evento crítico, cargarlo
+          if (!profileRef.current || event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'TOKEN_REFRESHED') {
             const p = await fetchProfile(currentSession.user)
             if (mounted) setProfile(p)
           }
@@ -199,7 +204,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         document.removeEventListener('visibilitychange', handleVisibilityChange)
       }
     }
-  }, [router, fetchProfile, profile, user, loading])
+  }, [router, fetchProfile])
 
   // ---------------------------------------------------------------
   // Protección de rutas
