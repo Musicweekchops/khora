@@ -186,9 +186,6 @@ export default function ClassDetailView({ classId }: { classId: string }) {
     setSaving(true)
     
     try {
-      // Refrescar el token en segundo plano
-      supabase.auth.refreshSession().catch(e => console.warn("Refresh failed:", e))
-
       const { error, data } = await supabase.from("ClassNote").insert({ 
         class_id: classId, 
         content: newNote.content.trim(),
@@ -216,42 +213,44 @@ export default function ClassDetailView({ classId }: { classId: string }) {
     if (!newTask.title.trim()) return
     setSaving(true)
 
-    // Refrescar el token en segundo plano (no bloquea la UI)
-    supabase.auth.refreshSession().catch(() => {})
+    try {
+      const { error, data } = await supabase.from("Task").insert({
+        class_id: classId, 
+        student_id: cls?.student_id ?? null,
+        teacher_id: cls?.teacher_id ?? null,
+        title: newTask.title.trim(), 
+        description: newTask.description.trim() || null,
+        content_id: newTask.content_id || null
+      }).select()
 
-    const { error } = await supabase.from("Task").insert({
-      class_id: classId, 
-      student_id: cls?.student_id ?? null,
-      teacher_id: cls?.teacher_id ?? null,
-      title: newTask.title.trim(), 
-      description: newTask.description.trim() || null,
-      content_id: newTask.content_id || null
-    })
-
-    if (error) {
-      toast("Error al asignar tarea", "error")
-    } else {
-      toast("Tarea asignada correctamente", "success")
-      if (cls?.student_email) {
-        // Trigger new task email
-        supabase.functions.invoke("send-email", {
-          body: {
-            to: cls.student_email,
-            type: "NEW_TASK",
-            params: {
-              studentName: cls.student_name,
-              taskTitle: newTask.title.trim(),
-              taskDescription: newTask.description.trim() || "",
-              assignedDate: new Date().toLocaleDateString("es-CL", { day: "numeric", month: "long" }),
-              link: window.location.origin + "/dashboard/tareas"
+      if (error) {
+        toast("Error al asignar tarea", "error")
+      } else {
+        toast("Tarea asignada correctamente", "success")
+        if (cls?.student_email) {
+          // Trigger new task email
+          supabase.functions.invoke("send-email", {
+            body: {
+              to: cls.student_email,
+              type: "NEW_TASK",
+              params: {
+                studentName: cls.student_name,
+                taskTitle: newTask.title.trim(),
+                taskDescription: newTask.description.trim() || "",
+                assignedDate: new Date().toLocaleDateString("es-CL", { day: "numeric", month: "long" }),
+                link: window.location.origin + "/dashboard/tareas"
+              }
             }
-          }
-        }).catch(err => console.error("Error sending task email:", err))
+          }).catch(err => console.error("Error sending task email:", err))
+        }
+        setNewTask({ title: "", description: "", content_id: "" })
+        await loadNotesAndTasks()
       }
-      setNewTask({ title: "", description: "", content_id: "" })
-      await loadNotesAndTasks()
+    } catch (err) {
+      toast("Error inesperado al guardar", "error")
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
   }
 
   async function toggleTask(taskId: string, completed: boolean) {
