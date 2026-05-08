@@ -171,38 +171,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (mounted && loading) setLoading(false)
     })
 
-    // ── PERSISTENCE HEARTBEAT ──
-    // Every 15 minutes, we touch the session to ensure it's alive and tokens are refreshed
-    const heartbeat = setInterval(() => {
-      if (mounted && user) {
-        console.log('[Auth] Periodic heartbeat refresh...')
-        supabase.auth.refreshSession().catch(err => {
-          console.warn('[Auth] Heartbeat refresh failed:', err.message)
-        })
-      }
-    }, 15 * 60 * 1000)
-
-    // Listen for tab focus/visibility changes to force a session refresh
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && user) {
-        supabase.auth.refreshSession().catch(() => {
-          supabase.auth.getSession().catch(console.warn)
-        })
-      }
-    }
-    
-    if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', handleVisibilityChange)
-    }
-
     return () => {
       mounted = false
       clearTimeout(timeout)
-      clearInterval(heartbeat)
       subscription.unsubscribe()
-      if (typeof document !== 'undefined') {
-        document.removeEventListener('visibilitychange', handleVisibilityChange)
-      }
     }
   }, [router, fetchProfile])
 
