@@ -74,7 +74,7 @@ export default function BibliotecaPage() {
       .from("StudentProfile")
       .select("teacher_id")
       .eq("id", studentId)
-      .single()
+      .maybeSingle()
 
     // 2. Fetch public content for that teacher
     if (student?.teacher_id) {

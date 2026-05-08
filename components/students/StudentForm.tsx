@@ -31,7 +31,7 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
       .from("StudentProfile")
       .select("*, User ( name, email, phone )")
       .eq("id", studentId)
-      .single()
+      .maybeSingle()
 
     if (error || !data) return setError("No se pudo cargar el alumno")
 
@@ -131,7 +131,7 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
           .from("StudentProfile")
           .select("id")
           .eq("user_id", newUserId)
-          .single()
+          .maybeSingle()
 
         if (sp) {
           router.push(`/dashboard/alumnos/detalles?id=${sp.id}`)
@@ -145,7 +145,7 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
           .from("StudentProfile")
           .select("user_id")
           .eq("id", studentId)
-          .single()
+          .maybeSingle()
 
         if (!sp) throw new Error("Perfil no encontrado")
 

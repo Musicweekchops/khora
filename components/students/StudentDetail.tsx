@@ -40,7 +40,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
     const { data: sp } = await supabase
       .from("StudentProfile")
       .select("*, User ( name, email, phone )")
-      .eq("id", studentId).single()
+      .eq("id", studentId).maybeSingle()
 
     if (sp) {
       setStudent({

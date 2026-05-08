@@ -56,7 +56,7 @@ export default function AvailabilitySettings({ teacherId }: { teacherId: string 
       .from("TeacherProfile")
       .select("slug")
       .eq("id", teacherId)
-      .single()
+      .maybeSingle()
     
     if (tp) setSlug(tp.slug || "")
 

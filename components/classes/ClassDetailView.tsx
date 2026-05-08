@@ -103,7 +103,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
       const { data: c } = await supabase
         .from("Class")
         .select("id, date, start_time, end_time, status, modalidad, duration, student_id, teacher_id, StudentProfile ( User ( name, email ) )")
-        .eq("id", classId).single()
+        .eq("id", classId).maybeSingle()
 
       if (c) {
         const classData: ClassData = {

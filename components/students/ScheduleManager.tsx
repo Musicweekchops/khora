@@ -62,7 +62,7 @@ export default function ScheduleManager({ studentId, teacherId }: Props) {
         modalidad: form.modalidad,
       })
       .select()
-      .single()
+      .maybeSingle()
 
     if (error) {
       setMessage("Error: " + error.message)

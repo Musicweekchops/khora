@@ -63,7 +63,7 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
       .from("StudentProfile")
       .select("teacher_id")
       .eq("id", profile.studentProfileId!)
-      .single()
+      .maybeSingle()
 
     const { count: materials } = await supabase
       .from("LibraryContent")
