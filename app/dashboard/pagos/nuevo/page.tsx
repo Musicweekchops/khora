@@ -41,9 +41,6 @@ export default function NuevoPagoPage() {
       if (!profile?.teacherProfileId) throw new Error("Sin perfil")
       if (!form.student_id) throw new Error("Selecciona un alumno")
 
-      // Refrescar token en segundo plano antes de escribir (no bloquea la UI)
-      supabase.auth.refreshSession().catch(() => {})
-
       const { error: insertErr } = await supabase.from("Payment").insert({
         student_id: form.student_id,
         teacher_id: profile.teacherProfileId,
