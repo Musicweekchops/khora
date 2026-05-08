@@ -182,26 +182,34 @@ export default function ClassDetailView({ classId }: { classId: string }) {
 
   async function addNote() {
     if (!newNote.content.trim()) return
+    console.log("[ClassDetail] addNote started", { classId, content: newNote.content })
     setSaving(true)
     
-    // Refrescar el token en segundo plano (no bloquea la UI)
-    supabase.auth.refreshSession().catch(() => {})
+    try {
+      // Refrescar el token en segundo plano
+      supabase.auth.refreshSession().catch(e => console.warn("Refresh failed:", e))
 
-    const { error } = await supabase.from("ClassNote").insert({ 
-      class_id: classId, 
-      content: newNote.content.trim(),
-      content_id: newNote.content_id || null
-    })
-    
-    if (error) {
-      console.error("Error al guardar nota:", error)
-      toast("Error al guardar la nota", "error")
-    } else {
-      setNewNote({ content: "", content_id: "" })
-      toast("Nota guardada con éxito", "success")
-      await loadNotesAndTasks()
+      const { error, data } = await supabase.from("ClassNote").insert({ 
+        class_id: classId, 
+        content: newNote.content.trim(),
+        content_id: newNote.content_id || null
+      }).select()
+      
+      if (error) {
+        console.error("Error al guardar nota (DB):", error)
+        toast(`Error: ${error.message}`, "error")
+      } else {
+        console.log("Nota guardada OK", data)
+        setNewNote({ content: "", content_id: "" })
+        toast("Nota guardada con éxito", "success")
+        await loadNotesAndTasks()
+      }
+    } catch (err: any) {
+      console.error("Error al guardar nota (Exception):", err)
+      toast("Error inesperado al guardar", "error")
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
   }
 
   async function addTask() {
