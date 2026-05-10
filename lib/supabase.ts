@@ -13,5 +13,5 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     lock: typeof document === 'undefined' 
       ? (_name: string, _acquireTimeout: number, fn: () => Promise<any>) => fn()
       : undefined,
-
+  }
 })
