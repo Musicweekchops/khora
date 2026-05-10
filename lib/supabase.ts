@@ -9,9 +9,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     detectSessionInUrl: true,
     // No-op lock solo en SSR para evitar advertencias de Web Locks API.
-    // En el navegador, permitimos el lock nativo para evitar desincronización de tokens.
-    lock: typeof document === 'undefined' 
-      ? (_name: string, _acquireTimeout: number, fn: () => Promise<any>) => fn()
-      : undefined,
+    // En el navegador, usamos el comportamiento por defecto de Supabase.
+    ...(typeof document === 'undefined' ? {
+      lock: (_name: string, _acquireTimeout: number, fn: () => Promise<any>) => fn()
+    } : {})
   }
 })
