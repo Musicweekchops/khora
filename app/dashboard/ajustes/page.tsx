@@ -16,7 +16,7 @@ import {
 } from "lucide-react"
 
 export default function AjustesPage() {
-  const { profile } = useAuth()
+  const { profile, signOut } = useAuth()
   const [loading, setLoading] = useState(false)
   const [showPass, setShowPass] = useState(false)
   
@@ -84,6 +84,14 @@ export default function AjustesPage() {
               Tu cuenta está protegida por Supabase Auth. Los datos de acceso se almacenan de forma encriptada.
             </p>
           </div>
+
+          <button
+            onClick={() => signOut()}
+            className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-red-50 text-red-600 rounded-[24px] text-xs font-black uppercase tracking-widest hover:bg-red-100 transition-colors border border-red-100"
+          >
+            <Lock className="w-4 h-4" />
+            Cerrar Sesión
+          </button>
         </div>
 
         {/* Right: Forms */}
