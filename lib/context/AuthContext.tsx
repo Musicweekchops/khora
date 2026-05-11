@@ -155,8 +155,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         initialCheckDone = true
 
         // 3. Redirecciones controladas
-        if (event === 'SIGNED_IN' && !sessionRef.current) {
-          router.push('/dashboard')
+        if (event === 'SIGNED_IN') {
+          // Si no había sesión, o si estamos en una ruta pública (como /login), redirigir
+          if (!sessionRef.current || isPublicPath(pathname)) {
+            router.push('/dashboard')
+          }
         }
         if (event === 'SIGNED_OUT') {
           router.push('/login')
