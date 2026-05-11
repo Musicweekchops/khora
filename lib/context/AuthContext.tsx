@@ -14,6 +14,7 @@ export interface UserProfile {
   name: string
   phone: string | null
   role: 'TEACHER' | 'STUDENT'
+  is_admin: boolean
   teacherProfileId: string | null
   studentProfileId: string | null
 }
@@ -75,7 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { data, error } = await supabase
           .from('User')
           .select(`
-            id, email, name, phone, role,
+            id, email, name, phone, role, is_admin,
             TeacherProfile ( id ),
             StudentProfile ( id )
           `)
@@ -94,6 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             name: data.name,
             phone: data.phone,
             role: data.role as 'TEACHER' | 'STUDENT',
+            is_admin: data.is_admin ?? false,
             teacherProfileId: tp?.id ?? null,
             studentProfileId: sp?.id ?? null,
           }

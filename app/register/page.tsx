@@ -5,19 +5,20 @@ import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 
 export default function RegisterPage() {
-  const [form, setForm] = useState({ name: "", email: "", password: "" })
+  const [form, setForm] = useState({ name: "", email: "", password: "", region: "" })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError("")
+    if (!form.region) return setError("Por favor, selecciona una región")
     setLoading(true)
 
     const { error: err } = await supabase.auth.signUp({
       email: form.email,
       password: form.password,
-      options: { data: { name: form.name, role: "TEACHER" } },
+      options: { data: { name: form.name, role: "TEACHER", region: form.region } },
     })
 
     if (err) {
@@ -60,6 +61,19 @@ export default function RegisterPage() {
             <div>
               <label className="kh-label">Contraseña</label>
               <input type="password" required minLength={6} value={form.password} onChange={e => set("password", e.target.value)} className="kh-input" placeholder="Mínimo 6 caracteres" />
+            </div>
+
+            <div>
+              <label className="kh-label">País / Región</label>
+              <select required value={form.region} onChange={e => set("region", e.target.value)} className="kh-input text-sm text-neutral-600 bg-white">
+                <option value="" disabled>Selecciona tu país</option>
+                <option value="Chile">Chile</option>
+                <option value="Argentina">Argentina</option>
+                <option value="México">México</option>
+                <option value="Colombia">Colombia</option>
+                <option value="España">España</option>
+                <option value="Otro">Otro</option>
+              </select>
             </div>
 
             <button type="submit" disabled={loading} className="kh-btn-primary w-full py-2.5 mt-2">

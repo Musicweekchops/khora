@@ -52,7 +52,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen bg-[#fafafa]">
-      <Sidebar user={{ name: profile.name, role: profile.role }} />
+      <Sidebar user={{ name: profile.name, role: profile.role, is_admin: profile.is_admin }} />
       <main className="flex-1 lg:ml-[240px] min-h-screen pb-20 lg:pb-0">
         <div className="p-4 lg:p-8 max-w-[1400px] mx-auto page-enter">
           {children}
