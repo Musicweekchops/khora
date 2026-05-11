@@ -57,10 +57,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
 
-  // Sincronizar Ref con State
+  const sessionRef = React.useRef<Session | null>(null)
+
+  // Sincronizar Refs con State
   useEffect(() => {
     profileRef.current = profile
-  }, [profile])
+    sessionRef.current = session
+  }, [profile, session])
 
   // ---------------------------------------------------------------
   // Cargar perfil desde public.User
@@ -96,7 +99,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
         
-        // If no data, maybe it's too fast? retry
         console.warn(`[Auth] No profile found for ${authUser.id}, attempt ${attempt + 1}/${retries}`)
       } catch (e: any) {
         console.error(`[Auth] fetchProfile error (attempt ${attempt + 1}/${retries}):`, e.message)
@@ -104,7 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       attempt++
       if (attempt < retries) {
-        await new Promise(resolve => setTimeout(resolve, 1000 * attempt)) // Backoff
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
       }
     }
     return null
@@ -115,11 +117,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // ---------------------------------------------------------------
   useEffect(() => {
     let mounted = true
+    let initialCheckDone = false
 
-    // Safety fallback: unlock UI after 5 seconds no matter what
     const timeout = setTimeout(() => {
       if (mounted && loading) {
-        console.warn('[Auth] Timeout — unlocking UI')
+        console.warn('⚠️ [Auth] Timeout — unlocking UI')
         setLoading(false)
       }
     }, 5000)
@@ -128,31 +130,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       async (event, currentSession) => {
         if (!mounted) return
 
-        console.log(`[Auth] Event: ${event}`)
+        console.log(`🔔 Auth event: ${event} | initialCheckDone: ${initialCheckDone}`)
+
+        // 1. Evitar recargas redundantes si es el mismo usuario (Token Refresh o tab focus)
+        if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') && 
+            sessionRef.current?.user?.id === currentSession?.user?.id) {
+          console.log(`⏸️ Ignorando ${event} - Mismo usuario (Token Refresh)`)
+          setSession(currentSession) // Solo actualizamos la sesión internamente
+          return
+        }
+
         setSession(currentSession)
         setUser(currentSession?.user ?? null)
 
+        // 2. Si hay usuario, cargar perfil SOLO si es necesario
         if (currentSession?.user) {
-          // Si no tenemos perfil o es un evento crítico, cargarlo
-          if (!profileRef.current || event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'TOKEN_REFRESHED') {
-            const p = await fetchProfile(currentSession.user)
-            if (mounted) setProfile(p)
-          }
+          const p = await fetchProfile(currentSession.user)
+          if (mounted) setProfile(p)
         } else {
-          setProfile(null)
+          if (mounted) setProfile(null)
         }
 
         if (mounted) setLoading(false)
+        initialCheckDone = true
 
-        if (event === 'SIGNED_IN') router.push('/dashboard')
-        if (event === 'SIGNED_OUT') router.push('/login')
+        // 3. Redirecciones controladas
+        if (event === 'SIGNED_IN' && !sessionRef.current) {
+          router.push('/dashboard')
+        }
+        if (event === 'SIGNED_OUT') {
+          router.push('/login')
+        }
       },
     )
 
-    // Trigger initial session check via the listener
+    // Trigger initial session check
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       if (!mounted) return
-      if (loading) {
+      if (loading && !initialCheckDone) {
         setSession(s)
         setUser(s?.user ?? null)
         if (s?.user) {
@@ -167,7 +182,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
     }).catch(err => {
-      console.warn('[Auth] getSession fallback error (non-fatal):', err.message)
+      console.warn('[Auth] getSession fallback error:', err.message)
       if (mounted && loading) setLoading(false)
     })
 
