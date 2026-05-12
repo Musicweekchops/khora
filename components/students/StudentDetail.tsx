@@ -11,7 +11,7 @@ import { Lock, Save, Trash2, Edit3 } from "lucide-react"
 interface StudentData {
   id: string; user_id: string; teacher_id: string; status: string; modalidad: string; lead_source: string
   preferred_day: string; preferred_time: string; emergency_contact: string; emergency_phone: string
-  lifetime_value: number; created_at: string
+  lifetime_value: number; created_at: string; collection_active: boolean
   user: { name: string; email: string; phone: string }
 }
 
@@ -49,6 +49,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
         preferred_day: sp.preferred_day ?? "", preferred_time: sp.preferred_time ?? "",
         emergency_contact: sp.emergency_contact ?? "", emergency_phone: sp.emergency_phone ?? "",
         lifetime_value: sp.lifetime_value ?? 0, created_at: sp.created_at,
+        collection_active: sp.collection_active ?? true,
         user: { name: sp.User?.name ?? "—", email: sp.User?.email ?? "—", phone: sp.User?.phone ?? "" },
       })
     }
@@ -105,6 +106,14 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
   async function updateStatus(newStatus: string) {
     await supabase.from("StudentProfile").update({ status: newStatus }).eq("id", studentId)
     setStudent(prev => prev ? { ...prev, status: newStatus } : prev)
+  }
+
+  async function toggleCollectionActive() {
+    if (!student) return
+    const newState = !student.collection_active
+    await supabase.from("StudentProfile").update({ collection_active: newState }).eq("id", studentId)
+    setStudent(prev => prev ? { ...prev, collection_active: newState } : prev)
+    toast.success(newState ? "Cobranza automática activada" : "Cobranza desactivada para este ciclo")
   }
 
   async function handleDelete() {
@@ -333,14 +342,30 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
 
         {activeTab === "payments" && (
           <div className="bg-white rounded-2xl md:rounded-3xl border border-neutral-100 overflow-hidden">
+            <div className="p-6 bg-gradient-to-r from-emerald-50 to-emerald-100/50 border-b border-emerald-100 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold text-emerald-600 uppercase tracking-widest">Total Pagado</p>
+                <p className="text-3xl font-black text-emerald-700">{formatCurrency(totalPaid)}</p>
+              </div>
+              <div className="flex flex-col items-end">
+                <p className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Automatización</p>
+                <button
+                  onClick={toggleCollectionActive}
+                  className={`px-4 py-2 rounded-xl text-xs font-black transition-all border flex items-center gap-2 ${
+                    student.collection_active
+                      ? "bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200"
+                      : "bg-neutral-100 text-neutral-500 border-neutral-200 hover:bg-neutral-200"
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${student.collection_active ? "bg-amber-500 animate-pulse" : "bg-neutral-400"}`} />
+                  {student.collection_active ? "Cobranza Activa (Desactivar)" : "Cobranza Pausada (Activar)"}
+                </button>
+              </div>
+            </div>
             {payments.length === 0 ? (
               <div className="p-12 text-center"><span className="text-4xl opacity-30 block mb-3">💰</span><p className="text-neutral-500 font-bold">Sin pagos registrados</p></div>
             ) : (
               <div className="overflow-x-auto scrollbar-thin">
-                <div className="p-6 bg-gradient-to-r from-emerald-50 to-emerald-100/50 border-b border-emerald-100">
-                  <p className="text-xs font-bold text-emerald-600 uppercase tracking-widest">Total Pagado</p>
-                  <p className="text-3xl font-black text-emerald-700">{formatCurrency(totalPaid)}</p>
-                </div>
                 <table className="w-full text-sm min-w-[400px] md:min-w-0">
                   <tbody>
                     {payments.map(p => (
