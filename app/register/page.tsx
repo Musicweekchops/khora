@@ -3,22 +3,31 @@
 import { useState } from "react"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
+import { CHILE_REGIONS } from "@/lib/chile-regions"
 
 export default function RegisterPage() {
-  const [form, setForm] = useState({ name: "", email: "", password: "", region: "" })
+  const [form, setForm] = useState({ name: "", email: "", password: "", region: "", comuna: "" })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+
+  // Obtener comunas basadas en la región seleccionada
+  const selectedRegionData = CHILE_REGIONS.find(r => r.region === form.region)
+  const availableComunas = selectedRegionData ? selectedRegionData.comunas : []
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError("")
     if (!form.region) return setError("Por favor, selecciona una región")
+    if (!form.comuna) return setError("Por favor, selecciona una comuna")
     setLoading(true)
+
+    // Guardamos la combinación como 'Comuna, Región' para no alterar la base de datos
+    const fullLocation = `${form.comuna}, ${form.region}`
 
     const { error: err } = await supabase.auth.signUp({
       email: form.email,
       password: form.password,
-      options: { data: { name: form.name, role: "TEACHER", region: form.region } },
+      options: { data: { name: form.name, role: "TEACHER", region: fullLocation } },
     })
 
     if (err) {
@@ -63,17 +72,40 @@ export default function RegisterPage() {
               <input type="password" required minLength={6} value={form.password} onChange={e => set("password", e.target.value)} className="kh-input" placeholder="Mínimo 6 caracteres" />
             </div>
 
-            <div>
-              <label className="kh-label">País / Región</label>
-              <select required value={form.region} onChange={e => set("region", e.target.value)} className="kh-input text-sm text-neutral-600 bg-white">
-                <option value="" disabled>Selecciona tu país</option>
-                <option value="Chile">Chile</option>
-                <option value="Argentina">Argentina</option>
-                <option value="México">México</option>
-                <option value="Colombia">Colombia</option>
-                <option value="España">España</option>
-                <option value="Otro">Otro</option>
-              </select>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="kh-label">Región</label>
+                <select 
+                  required 
+                  value={form.region} 
+                  onChange={e => {
+                    set("region", e.target.value)
+                    set("comuna", "") // Resetear comuna al cambiar región
+                  }} 
+                  className="kh-input text-[13px] text-neutral-600 bg-white truncate"
+                >
+                  <option value="" disabled>Selecciona...</option>
+                  {CHILE_REGIONS.map(r => (
+                    <option key={r.region} value={r.region}>{r.region}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="kh-label">Comuna</label>
+                <select 
+                  required 
+                  value={form.comuna} 
+                  onChange={e => set("comuna", e.target.value)} 
+                  className="kh-input text-[13px] text-neutral-600 bg-white truncate"
+                  disabled={!form.region}
+                >
+                  <option value="" disabled>Selecciona...</option>
+                  {availableComunas.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <button type="submit" disabled={loading} className="kh-btn-primary w-full py-2.5 mt-2">
