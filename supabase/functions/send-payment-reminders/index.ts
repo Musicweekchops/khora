@@ -84,28 +84,65 @@ serve(async (req) => {
           body: JSON.stringify({
             from: FROM_EMAIL,
             to: sUser.email,
-            subject: `Cobro Mensualidad - ${currentMonth.toUpperCase()}`,
+            subject: `Resumen de Mensualidad - ${currentMonth.toUpperCase()}`,
             html: `
-              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 30px 20px;">
-                <h1 style="color: #111; font-size: 24px; margin-bottom: 30px;">Hola ${sUser.name.split(' ')[0]},</h1>
+              <!DOCTYPE html>
+              <html>
+              <head>
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              </head>
+              <body style="margin: 0; padding: 40px 20px; background-color: #f4f4f5; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
                 
-                <p style="color: #444; font-size: 16px; line-height: 1.5; margin-bottom: 24px;">
-                  Tu mensualidad de <strong>${currentMonth}</strong> ya se encuentra disponible para pago.
-                </p>
+                <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 480px; margin: 0 auto; background-color: #ffffff; border-radius: 24px; box-shadow: 0 10px 40px -10px rgba(0,0,0,0.08); overflow: hidden;">
+                  
+                  <!-- HEADER (Accent Bar) -->
+                  <tr>
+                    <td style="height: 6px; background: linear-gradient(90deg, #8b5cf6, #3b82f6); width: 100%;"></td>
+                  </tr>
 
-                <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 30px;">
-                  <p style="color: #64748b; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 8px 0;">Total a pagar</p>
-                  <p style="color: #0f172a; font-size: 36px; font-weight: 900; margin: 0;">${feeFormatted}</p>
-                </div>
+                  <!-- MAIN CONTENT -->
+                  <tr>
+                    <td style="padding: 40px;">
+                      
+                      <!-- Icon / Avatar -->
+                      <div style="width: 48px; height: 48px; background-color: #f3f4f6; border-radius: 16px; text-align: center; line-height: 48px; font-size: 20px; margin-bottom: 24px; color: #8b5cf6; font-weight: bold;">
+                        💳
+                      </div>
 
-                <p style="color: #444; font-size: 16px; line-height: 1.5; margin-bottom: 30px;">
-                  Por favor, ponte en contacto con <strong>${teacherName}</strong> para realizar la transferencia.
-                </p>
+                      <h1 style="color: #09090b; font-size: 22px; font-weight: 800; margin: 0 0 8px 0; letter-spacing: -0.5px;">
+                        Hola ${sUser.name.split(' ')[0]}
+                      </h1>
+                      
+                      <p style="color: #52525b; font-size: 15px; line-height: 1.6; margin: 0 0 32px 0;">
+                        Tu resumen de cuenta de <strong>${currentMonth}</strong> ya está disponible.
+                      </p>
 
-                <p style="color: #888; font-size: 13px;">
-                  Si ya realizaste este pago, por favor ignora este mensaje.
-                </p>
-              </div>
+                      <!-- AMOUNT CARD -->
+                      <div style="background-color: #fafafa; border: 1px solid #e4e4e7; border-radius: 20px; padding: 24px; text-align: center; margin-bottom: 32px;">
+                        <p style="color: #71717a; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; margin: 0 0 8px 0;">Total a pagar</p>
+                        <p style="color: #18181b; font-size: 38px; font-weight: 900; margin: 0; letter-spacing: -1px;">${feeFormatted}</p>
+                      </div>
+
+                      <p style="color: #3f3f46; font-size: 14px; line-height: 1.6; margin: 0 0 24px 0; background-color: #fef2f2; border-left: 3px solid #ef4444; padding: 12px 16px; border-radius: 0 12px 12px 0;">
+                        Por favor, ponte en contacto con <strong>${teacherName}</strong> para gestionar la transferencia.
+                      </p>
+
+                      <!-- DIVIDER -->
+                      <hr style="border: none; border-top: 1px dashed #e4e4e7; margin: 32px 0;" />
+
+                      <!-- FOOTER -->
+                      <p style="color: #a1a1aa; font-size: 12px; line-height: 1.5; margin: 0; text-align: center;">
+                        Si ya realizaste el pago en las últimas horas, por favor ignora este mensaje.<br>
+                        <em>Enviado de forma segura y automática.</em>
+                      </p>
+
+                    </td>
+                  </tr>
+                </table>
+
+              </body>
+              </html>
             `,
           }),
         })

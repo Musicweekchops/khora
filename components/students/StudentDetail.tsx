@@ -11,7 +11,7 @@ import { Lock, Save, Trash2, Edit3 } from "lucide-react"
 interface StudentData {
   id: string; user_id: string; teacher_id: string; status: string; modalidad: string; lead_source: string
   preferred_day: string; preferred_time: string; emergency_contact: string; emergency_phone: string
-  lifetime_value: number; created_at: string; collection_active: boolean
+  lifetime_value: number; created_at: string; collection_active: boolean; monthly_fee: number
   user: { name: string; email: string; phone: string }
 }
 
@@ -30,6 +30,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
   const [activeTab, setActiveTab] = useState<"overview" | "schedule" | "classes" | "tasks" | "payments" | "notes">("overview")
   const [newNote, setNewNote] = useState("")
   const [addingNote, setAddingNote] = useState(false)
+  const [showPreviewModal, setShowPreviewModal] = useState(false)
 
   useEffect(() => { loadAll() }, [studentId])
 
@@ -49,7 +50,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
         preferred_day: sp.preferred_day ?? "", preferred_time: sp.preferred_time ?? "",
         emergency_contact: sp.emergency_contact ?? "", emergency_phone: sp.emergency_phone ?? "",
         lifetime_value: sp.lifetime_value ?? 0, created_at: sp.created_at,
-        collection_active: sp.collection_active ?? true,
+        collection_active: sp.collection_active ?? true, monthly_fee: sp.monthly_fee ?? 0,
         user: { name: sp.User?.name ?? "—", email: sp.User?.email ?? "—", phone: sp.User?.phone ?? "" },
       })
     }
@@ -349,19 +350,61 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
               </div>
               <div className="flex flex-col items-end">
                 <p className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Automatización</p>
-                <button
-                  onClick={toggleCollectionActive}
-                  className={`px-4 py-2 rounded-xl text-xs font-black transition-all border flex items-center gap-2 ${
-                    student.collection_active
-                      ? "bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200"
-                      : "bg-neutral-100 text-neutral-500 border-neutral-200 hover:bg-neutral-200"
-                  }`}
-                >
-                  <span className={`w-2 h-2 rounded-full ${student.collection_active ? "bg-amber-500 animate-pulse" : "bg-neutral-400"}`} />
-                  {student.collection_active ? "Cobranza Activa (Desactivar)" : "Cobranza Pausada (Activar)"}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowPreviewModal(true)}
+                    className="px-3 py-2 rounded-xl text-xs font-black transition-all border bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50 flex items-center gap-2"
+                  >
+                    👁️ Ver Correo
+                  </button>
+                  <button
+                    onClick={toggleCollectionActive}
+                    className={`px-4 py-2 rounded-xl text-xs font-black transition-all border flex items-center gap-2 ${
+                      student.collection_active
+                        ? "bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200"
+                        : "bg-neutral-100 text-neutral-500 border-neutral-200 hover:bg-neutral-200"
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-full ${student.collection_active ? "bg-amber-500 animate-pulse" : "bg-neutral-400"}`} />
+                    {student.collection_active ? "Cobranza Activa (Desactivar)" : "Cobranza Pausada (Activar)"}
+                  </button>
+                </div>
               </div>
             </div>
+
+            {/* PREVIEW MODAL */}
+            {showPreviewModal && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-900/50 backdrop-blur-sm">
+                <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200">
+                  <div className="flex justify-between items-center p-4 border-b border-neutral-100">
+                    <h3 className="font-black text-neutral-900">Vista Previa de Correo Automático</h3>
+                    <button onClick={() => setShowPreviewModal(false)} className="w-8 h-8 flex items-center justify-center bg-neutral-100 rounded-full text-neutral-500 hover:bg-neutral-200">✕</button>
+                  </div>
+                  <div className="bg-neutral-50 p-6 flex justify-center">
+                    {/* The Email UI */}
+                    <div className="w-full max-w-sm bg-white rounded-2xl shadow-sm border border-neutral-100 overflow-hidden text-left font-sans">
+                      <div className="h-1.5 bg-gradient-to-r from-violet-500 to-blue-500 w-full" />
+                      <div className="p-8">
+                        <div className="w-12 h-12 bg-neutral-100 rounded-xl flex items-center justify-center text-xl text-violet-500 font-bold mb-6">💳</div>
+                        <h1 className="text-xl font-black text-neutral-900 mb-2 tracking-tight">Hola {student.user.name.split(' ')[0]}</h1>
+                        <p className="text-sm text-neutral-600 mb-8 leading-relaxed">Tu resumen de cuenta de <strong>{new Date().toLocaleDateString("es-CL", { month: "long" })}</strong> ya está disponible.</p>
+                        
+                        <div className="bg-neutral-50 border border-neutral-200 rounded-2xl p-6 text-center mb-8">
+                          <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest mb-2">Total a pagar</p>
+                          <p className="text-3xl font-black text-neutral-900 tracking-tighter">${(student.monthly_fee || 0).toLocaleString("es-CL")}</p>
+                        </div>
+
+                        <div className="bg-red-50 border-l-2 border-red-500 p-3 rounded-r-xl mb-8">
+                          <p className="text-xs text-red-900 leading-relaxed">Por favor, ponte en contacto con tu profesor para gestionar la transferencia.</p>
+                        </div>
+                        <hr className="border-dashed border-neutral-200 mb-6" />
+                        <p className="text-[10px] text-center text-neutral-400">Si ya realizaste el pago, ignora este mensaje.<br/><em>Enviado automáticamente por Khora</em></p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             {payments.length === 0 ? (
               <div className="p-12 text-center"><span className="text-4xl opacity-30 block mb-3">💰</span><p className="text-neutral-500 font-bold">Sin pagos registrados</p></div>
             ) : (
