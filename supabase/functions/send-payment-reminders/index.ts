@@ -22,6 +22,7 @@ serve(async (req) => {
         collection_active,
         payment_frequency,
         payment_day,
+        monthly_fee,
         User!inner ( name, email ),
         TeacherProfile!inner ( business_name, User!inner(name) )
       `)
@@ -54,7 +55,7 @@ serve(async (req) => {
 
     if (payError) throw payError
 
-    // 3. Filtrar alumnos aplicables que NO han pagado este mes
+    // 3. Filtrar alumnos aplicables que NO han pagado este mes (Si ya pagó, se omite el mensaje)
     const paidStudentIds = new Set(payments?.map(p => p.student_id) || [])
     const unpaidStudents = applicableStudents.filter(s => !paidStudentIds.has(s.id))
 
@@ -70,9 +71,10 @@ serve(async (req) => {
       const teacher = Array.isArray(student.TeacherProfile) ? student.TeacherProfile[0] : student.TeacherProfile
       const tUser = Array.isArray(teacher.User) ? teacher.User[0] : teacher.User
       
-      const academyName = teacher.business_name || tUser.name
+      const teacherName = tUser.name
+      const feeFormatted = new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(student.monthly_fee || 0)
 
-      if (sUser?.email) {
+      if (sUser?.email && (student.monthly_fee || 0) > 0) {
         const resendRes = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: {
@@ -82,15 +84,27 @@ serve(async (req) => {
           body: JSON.stringify({
             from: FROM_EMAIL,
             to: sUser.email,
-            subject: `Recordatorio de Mensualidad - ${currentMonth.toUpperCase()} 💳`,
+            subject: `Cobro Mensualidad - ${currentMonth.toUpperCase()}`,
             html: `
-              <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eee; padding: 20px; border-radius: 10px;">
-                <h2 style="color: #333;">Hola ${sUser.name},</h2>
-                <p>Este es un recordatorio automático de <strong>${academyName}</strong>.</p>
-                <p>Te recordamos que la mensualidad correspondiente al mes de <strong>${currentMonth}</strong> ya se encuentra disponible para pago.</p>
-                <p>Por favor, ponte en contacto con tu profesor para gestionar la transferencia o pago en efectivo.</p>
-                <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
-                <p style="font-size: 12px; color: #888;">Este es un mensaje automatizado enviado a través de la plataforma Khora.</p>
+              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 30px 20px;">
+                <h1 style="color: #111; font-size: 24px; margin-bottom: 30px;">Hola ${sUser.name.split(' ')[0]},</h1>
+                
+                <p style="color: #444; font-size: 16px; line-height: 1.5; margin-bottom: 24px;">
+                  Tu mensualidad de <strong>${currentMonth}</strong> ya se encuentra disponible para pago.
+                </p>
+
+                <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 30px;">
+                  <p style="color: #64748b; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 8px 0;">Total a pagar</p>
+                  <p style="color: #0f172a; font-size: 36px; font-weight: 900; margin: 0;">${feeFormatted}</p>
+                </div>
+
+                <p style="color: #444; font-size: 16px; line-height: 1.5; margin-bottom: 30px;">
+                  Por favor, ponte en contacto con <strong>${teacherName}</strong> para realizar la transferencia.
+                </p>
+
+                <p style="color: #888; font-size: 13px;">
+                  Si ya realizaste este pago, por favor ignora este mensaje.
+                </p>
               </div>
             `,
           }),

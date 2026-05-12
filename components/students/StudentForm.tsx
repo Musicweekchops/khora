@@ -20,7 +20,7 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
     status: "PROSPECT", lead_source: "", modalidad: "online",
     preferred_day: "", preferred_time: "",
     emergency_contact: "", emergency_phone: "",
-    payment_frequency: "MONTHLY", payment_day: "5",
+    payment_frequency: "MONTHLY", payment_day: "5", monthly_fee: "0",
   })
 
   useEffect(() => {
@@ -50,6 +50,7 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
       emergency_phone: data.emergency_phone ?? "",
       payment_frequency: data.payment_frequency ?? "MONTHLY",
       payment_day: data.payment_day ? String(data.payment_day) : "5",
+      monthly_fee: data.monthly_fee ? String(data.monthly_fee) : "0",
     })
   }
 
@@ -115,6 +116,7 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
             emergency_phone: form.emergency_phone || null,
             payment_frequency: form.payment_frequency,
             payment_day: parseInt(form.payment_day) || 5,
+            monthly_fee: parseFloat(form.monthly_fee) || 0,
           })
           .eq("user_id", newUserId)
           .select()
@@ -171,6 +173,7 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
             emergency_phone: form.emergency_phone || null,
             payment_frequency: form.payment_frequency,
             payment_day: parseInt(form.payment_day) || 5,
+            monthly_fee: parseFloat(form.monthly_fee) || 0,
           })
           .eq("id", studentId)
       }
@@ -252,9 +255,14 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
                 <input type="number" min="1" max="31" value={form.payment_day} onChange={e => set("payment_day", e.target.value)} className="input-field" placeholder="Ej: 5" disabled={form.payment_frequency !== 'MONTHLY'} />
               </Field>
             </div>
-            <p className="text-[10px] text-neutral-400 font-bold uppercase tracking-wide mt-2 px-1">
+            <div className="mt-4">
+              <Field label="Monto a Cobrar ($)" icon="💰">
+                <input type="number" min="0" value={form.monthly_fee} onChange={e => set("monthly_fee", e.target.value)} className="input-field font-black text-emerald-600 text-lg" placeholder="Ej: 80000" />
+              </Field>
+            </div>
+            <p className="text-[10px] text-neutral-400 font-bold uppercase tracking-wide mt-3 px-1">
               {form.payment_frequency === 'MONTHLY' 
-                ? `El sistema enviará el recordatorio si estamos a día ${form.payment_day} o superior y no ha pagado.` 
+                ? `El sistema cobrará $${form.monthly_fee} los días ${form.payment_day}.` 
                 : 'Los correos automáticos están desactivados para modalidades no mensuales.'}
             </p>
           </Section>
