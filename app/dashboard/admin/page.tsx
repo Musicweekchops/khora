@@ -40,7 +40,7 @@ export default function AdminDashboardPage() {
       let totalStudents = 0;
       let totalRevenue = 0;
 
-      const formattedTeachers = teachers.filter((t: any) => !t.User?.is_admin).map((t: any) => {
+      const formattedTeachers = teachers.map((t: any) => {
         const studentCount = t.StudentProfile?.length || 0;
         // Payments might be associated directly to TeacherProfile if we query them like this,
         // but typically payments are related to Students. If Payment is linked to TeacherProfile,
