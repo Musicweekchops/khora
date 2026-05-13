@@ -203,10 +203,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Protección de rutas
   // ---------------------------------------------------------------
   useEffect(() => {
-    if (!loading && !user && !isPublicPath(pathname)) {
+    if (loading) return
+
+    // 1. Unauthenticated users trying to access private routes -> to /login
+    if (!user && !isPublicPath(pathname)) {
       router.push('/login')
     }
-  }, [user, loading, pathname, router])
+    
+    // 2. Authenticated users sitting on /login -> to dashboard
+    if (user && profile && isPublicPath(pathname)) {
+      router.push(profile.is_admin ? '/dashboard/admin' : '/dashboard')
+    }
+  }, [user, profile, loading, pathname, router])
 
   // ---------------------------------------------------------------
   // Sign out
