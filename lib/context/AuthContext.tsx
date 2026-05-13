@@ -159,7 +159,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // 4. Ping de presencia (avisa a la base de datos que estamos activos)
         if (currentSession?.user) {
-          supabase.rpc('ping_presence').catch(e => console.warn('Ping falló:', e.message))
+          supabase.rpc('ping_presence').then(({ error }) => {
+            if (error) console.warn('Ping falló:', error.message)
+          })
         }
 
         // 5. Redirecciones controladas
@@ -228,11 +230,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user) return
 
     // Ping inmediato al cargar la app
-    supabase.rpc('ping_presence').catch(e => console.warn('Ping falló:', e.message))
+    supabase.rpc('ping_presence').then(({ error }) => {
+      if (error) console.warn('Ping falló:', error.message)
+    })
 
     // Ping cada 4 minutos mientras tengan la pestaña abierta
     const interval = setInterval(() => {
-      supabase.rpc('ping_presence').catch(e => console.warn('Ping falló:', e.message))
+      supabase.rpc('ping_presence').then(({ error }) => {
+        if (error) console.warn('Ping falló:', error.message)
+      })
     }, 4 * 60 * 1000)
 
     return () => clearInterval(interval)
