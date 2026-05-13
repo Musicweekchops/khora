@@ -157,7 +157,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (mounted) setLoading(false)
         initialCheckDone = true
 
-        // 3. Redirecciones controladas
+        // 4. Ping de presencia (avisa a la base de datos que estamos activos)
+        if (currentSession?.user) {
+          supabase.rpc('ping_presence').catch(e => console.warn('Ping falló:', e.message))
+        }
+
+        // 5. Redirecciones controladas
         if (event === 'SIGNED_IN') {
           // Si no había sesión, o si estamos en una ruta pública (como /login), redirigir
           if (!sessionRef.current || isPublicPath(pathname)) {
