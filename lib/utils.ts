@@ -32,3 +32,19 @@ export function toDateStr(date: Date) {
   const d = String(date.getDate()).padStart(2, '0')
   return `${y}-${m}-${d}`
 }
+
+/** Converts a timestamp to "Hace X minutos / horas / días" or "En línea" */
+export function formatLastSeen(lastSeenAt: string | null | undefined): { label: string; isOnline: boolean } {
+  if (!lastSeenAt) return { label: 'Nunca conectado', isOnline: false }
+  const diff = Date.now() - new Date(lastSeenAt).getTime()
+  const minutes = Math.floor(diff / 60000)
+  const hours = Math.floor(diff / 3600000)
+  const days = Math.floor(diff / 86400000)
+
+  if (minutes < 5) return { label: 'En línea', isOnline: true }
+  if (minutes < 60) return { label: `Hace ${minutes} min`, isOnline: false }
+  if (hours < 24) return { label: `Hace ${hours}h`, isOnline: false }
+  if (days === 1) return { label: 'Ayer', isOnline: false }
+  if (days < 30) return { label: `Hace ${days} días`, isOnline: false }
+  return { label: new Date(lastSeenAt).toLocaleDateString('es-CL', { day: 'numeric', month: 'short' }), isOnline: false }
+}

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useAuth } from "@/lib/context/AuthContext"
 import { supabase } from "@/lib/supabase"
 import { formatCurrency } from "@/lib/utils"
+import LastSeenBadge from "@/components/ui/LastSeenBadge"
 
 interface AdminMetrics {
   totalTeachers: number;
@@ -29,7 +30,7 @@ export default function AdminDashboardPage() {
       const { data: teachers } = await supabase
         .from("TeacherProfile")
         .select(`
-          id, region, created_at, business_name,
+          id, region, created_at, business_name, user_id,
           User ( name, email, is_admin ),
           StudentProfile ( id ),
           Payment ( amount )
@@ -37,14 +38,21 @@ export default function AdminDashboardPage() {
         
       if (!teachers) return
 
+      // 2. Fetch last_seen for all teacher user IDs
+      const userIds = teachers.map((t: any) => t.user_id).filter(Boolean)
+      const { data: seenData } = await supabase
+        .from("user_last_seen")
+        .select("id, last_sign_in_at")
+        .in("id", userIds)
+
+      const seenMap: Record<string, string | null> = {}
+      for (const row of seenData ?? []) seenMap[row.id] = row.last_sign_in_at
+
       let totalStudents = 0;
       let totalRevenue = 0;
 
       const formattedTeachers = teachers.map((t: any) => {
         const studentCount = t.StudentProfile?.length || 0;
-        // Payments might be associated directly to TeacherProfile if we query them like this,
-        // but typically payments are related to Students. If Payment is linked to TeacherProfile,
-        // this array will contain them. Let's calculate safely.
         const teacherRevenue = (t.Payment || []).reduce((acc: number, p: any) => acc + (Number(p.amount) || 0), 0);
         
         totalStudents += studentCount;
@@ -52,16 +60,17 @@ export default function AdminDashboardPage() {
 
         return {
           id: t.id,
+          user_id: t.user_id,
           name: t.User?.name || 'Desconocido',
           email: t.User?.email || '',
           region: t.region || 'No especificada',
           students: studentCount,
           revenue: teacherRevenue,
-          businessName: t.business_name || '-'
+          businessName: t.business_name || '-',
+          last_seen_at: seenMap[t.user_id] ?? null,
         }
       })
 
-      // Sort by revenue descending
       formattedTeachers.sort((a, b) => b.revenue - a.revenue)
 
       setMetrics({
@@ -139,6 +148,7 @@ export default function AdminDashboardPage() {
             <thead>
               <tr className="border-b border-neutral-100">
                 <th className="pb-4 text-[10px] font-black uppercase tracking-widest text-neutral-400">Profesor</th>
+                <th className="pb-4 text-[10px] font-black uppercase tracking-widest text-neutral-400">Conexión</th>
                 <th className="pb-4 text-[10px] font-black uppercase tracking-widest text-neutral-400">Región</th>
                 <th className="pb-4 text-[10px] font-black uppercase tracking-widest text-neutral-400">Alumnos</th>
                 <th className="pb-4 text-[10px] font-black uppercase tracking-widest text-neutral-400">Facturación</th>
@@ -148,16 +158,24 @@ export default function AdminDashboardPage() {
             <tbody className="divide-y divide-neutral-50">
               {metrics?.teachersData.map((t, idx) => (
                 <tr key={t.id} className="hover:bg-neutral-50/50 transition-colors">
-                  <td className="py-4">
+                  <td className="py-4 pr-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-violet-100 text-violet-700 font-bold flex items-center justify-center text-xs">
-                        {t.name.charAt(0).toUpperCase()}
+                      <div className="relative flex-shrink-0">
+                        <div className="w-8 h-8 rounded-full bg-violet-100 text-violet-700 font-bold flex items-center justify-center text-xs">
+                          {t.name.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="absolute -bottom-0.5 -right-0.5">
+                          <LastSeenBadge lastSeenAt={t.last_seen_at} size="sm" />
+                        </span>
                       </div>
                       <div>
                         <p className="text-sm font-bold text-neutral-900">{t.name}</p>
                         <p className="text-[11px] text-neutral-400">{t.email}</p>
                       </div>
                     </div>
+                  </td>
+                  <td className="py-4 pr-4">
+                    <LastSeenBadge lastSeenAt={t.last_seen_at} size="md" />
                   </td>
                   <td className="py-4">
                     <span className="bg-neutral-100 text-neutral-600 text-[10px] font-bold px-2 py-1 rounded-md uppercase">

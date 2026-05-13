@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/context/AuthContext"
+import LastSeenBadge from "@/components/ui/LastSeenBadge"
 
 interface Student {
   id: string
@@ -12,6 +13,8 @@ interface Student {
   name: string
   email: string
   phone: string
+  user_id: string
+  last_seen_at: string | null
 }
 
 export default function StudentsList() {
@@ -31,19 +34,31 @@ export default function StudentsList() {
     try {
       const { data, error } = await supabase
         .from("StudentProfile")
-        .select(`id, status, modalidad, User ( name, email, phone )`)
+        .select(`id, status, modalidad, user_id, User ( name, email, phone )`)
         .eq("teacher_id", teacherId)
         .order("created_at", { ascending: false })
 
       if (error) throw error
 
+      // Fetch last_seen from the public view
+      const userIds = (data ?? []).map((s: any) => s.user_id).filter(Boolean)
+      const { data: seenData } = await supabase
+        .from("user_last_seen")
+        .select("id, last_sign_in_at")
+        .in("id", userIds)
+
+      const seenMap: Record<string, string | null> = {}
+      for (const row of seenData ?? []) seenMap[row.id] = row.last_sign_in_at
+
       const mapped = (data ?? []).map((s: any) => ({
         id: s.id,
+        user_id: s.user_id,
         status: s.status ?? "PROSPECT",
         modalidad: s.modalidad ?? "online",
         name: s.User?.name ?? "—",
         email: s.User?.email ?? "—",
         phone: s.User?.phone ?? "",
+        last_seen_at: seenMap[s.user_id] ?? null,
       }))
 
       setStudents(mapped)
@@ -127,12 +142,21 @@ export default function StudentsList() {
           {filtered.map(s => (
             <Link key={s.id} href={`/dashboard/alumnos/detalles?id=${s.id}`}>
               <div className="bg-white rounded-2xl border border-neutral-100 p-5 flex items-center gap-4 hover:shadow-md hover:border-violet-200 transition-all group">
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-violet-100 to-indigo-100 flex items-center justify-center text-lg font-bold text-violet-600">
-                  {s.name.charAt(0).toUpperCase()}
+                {/* Avatar with online dot */}
+                <div className="relative flex-shrink-0">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-violet-100 to-indigo-100 flex items-center justify-center text-lg font-bold text-violet-600">
+                    {s.name.charAt(0).toUpperCase()}
+                  </div>
+                  <span className="absolute -bottom-0.5 -right-0.5">
+                    <LastSeenBadge lastSeenAt={s.last_seen_at} size="sm" />
+                  </span>
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-neutral-900 group-hover:text-violet-600 transition-colors">{s.name}</p>
-                  <p className="text-sm text-neutral-500">{s.email}</p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <p className="text-sm text-neutral-500 truncate">{s.email}</p>
+                    <LastSeenBadge lastSeenAt={s.last_seen_at} size="md" />
+                  </div>
                 </div>
                 <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${statusColors[s.status] ?? statusColors.PROSPECT}`}>
                   {statusLabels[s.status] ?? s.status}

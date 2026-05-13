@@ -7,11 +7,12 @@ import { formatCurrency, formatDate, formatTime } from "@/lib/utils"
 import ScheduleManager from "@/components/students/ScheduleManager"
 import { toast } from "sonner"
 import { Lock, Save, Trash2, Edit3 } from "lucide-react"
+import LastSeenBadge from "@/components/ui/LastSeenBadge"
 
 interface StudentData {
   id: string; user_id: string; teacher_id: string; status: string; modalidad: string; lead_source: string
   preferred_day: string; preferred_time: string; emergency_contact: string; emergency_phone: string
-  lifetime_value: number; created_at: string; collection_active: boolean; monthly_fee: number
+  lifetime_value: number; created_at: string; collection_active: boolean; monthly_fee: number; last_seen_at: string | null
   user: { name: string; email: string; phone: string }
 }
 
@@ -51,8 +52,21 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
         emergency_contact: sp.emergency_contact ?? "", emergency_phone: sp.emergency_phone ?? "",
         lifetime_value: sp.lifetime_value ?? 0, created_at: sp.created_at,
         collection_active: sp.collection_active ?? true, monthly_fee: sp.monthly_fee ?? 0,
+        last_seen_at: null, // populated below
         user: { name: sp.User?.name ?? "—", email: sp.User?.email ?? "—", phone: sp.User?.phone ?? "" },
       })
+
+      // Fetch last_seen from the secure view
+      if (sp.user_id) {
+        const { data: seen } = await supabase
+          .from("user_last_seen")
+          .select("last_sign_in_at")
+          .eq("id", sp.user_id)
+          .maybeSingle()
+        if (seen) {
+          setStudent(prev => prev ? { ...prev, last_seen_at: seen.last_sign_in_at } : prev)
+        }
+      }
     }
 
     // Classes
@@ -189,7 +203,10 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
             </div>
             <div>
               <h1 className="text-2xl md:text-3xl font-black text-neutral-900 tracking-tight">{student.user.name}</h1>
-              <p className="text-neutral-500 font-medium text-sm md:text-base">{student.user.email}</p>
+              <div className="flex items-center gap-3 mt-1">
+                <p className="text-neutral-500 font-medium text-sm md:text-base">{student.user.email}</p>
+                <LastSeenBadge lastSeenAt={student.last_seen_at} size="md" />
+              </div>
               {student.user.phone && <p className="text-neutral-400 text-xs md:text-sm mt-0.5">📞 {student.user.phone}</p>}
             </div>
           </div>
