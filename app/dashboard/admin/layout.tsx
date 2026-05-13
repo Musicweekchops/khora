@@ -14,17 +14,24 @@ const ADMIN_NAV = [
 ]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { profile, loading, signOut } = useAuth()
+  const { profile, loading, signOut, user } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
 
   useEffect(() => {
-    if (!loading && (!profile || !profile.is_admin)) {
+    // Only redirect if:
+    // 1. Auth is done loading
+    // 2. We have a confirmed user session (not just a timeout with null profile)
+    // 3. That user is definitively NOT an admin
+    if (!loading && user && profile && !profile.is_admin) {
       router.replace("/dashboard")
     }
-  }, [profile, loading, router])
+    // If loading=false but profile=null and user=null, the main AuthContext
+    // will redirect to /login — we don't need to do anything here.
+  }, [profile, loading, user, router])
 
-  if (loading) {
+  // Show loading while auth is in progress OR while we have a user but no profile yet
+  if (loading || (user && !profile)) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-neutral-950">
         <div className="flex flex-col items-center gap-4">
@@ -36,6 +43,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <div key={d} className="w-1.5 h-1.5 rounded-full bg-rose-500/50 animate-bounce" style={{ animationDelay: `${d}ms` }} />
             ))}
           </div>
+          <p className="text-neutral-600 text-xs font-medium mt-2">Verificando acceso…</p>
         </div>
       </div>
     )

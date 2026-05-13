@@ -146,9 +146,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(currentSession?.user ?? null)
 
         // 2. Si hay usuario, cargar perfil SOLO si es necesario
+        let fetchedProfile = null
         if (currentSession?.user) {
-          const p = await fetchProfile(currentSession.user)
-          if (mounted) setProfile(p)
+          fetchedProfile = await fetchProfile(currentSession.user)
+          if (mounted) setProfile(fetchedProfile)
         } else {
           if (mounted) setProfile(null)
         }
@@ -160,10 +161,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (event === 'SIGNED_IN') {
           // Si no había sesión, o si estamos en una ruta pública (como /login), redirigir
           if (!sessionRef.current || isPublicPath(pathname)) {
-            // Admins get their own dashboard
-            const freshProfile = await fetchProfile(currentSession.user)
-            if (mounted) setProfile(freshProfile)
-            router.push(freshProfile?.is_admin ? '/dashboard/admin' : '/dashboard')
+            router.push(fetchedProfile?.is_admin ? '/dashboard/admin' : '/dashboard')
           }
         }
         if (event === 'SIGNED_OUT') {
