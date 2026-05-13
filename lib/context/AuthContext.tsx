@@ -222,6 +222,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user, profile, loading, pathname, router])
 
   // ---------------------------------------------------------------
+  // Presencia (Heartbeat) en Tiempo Real
+  // ---------------------------------------------------------------
+  useEffect(() => {
+    if (!user) return
+
+    // Ping inmediato al cargar la app
+    supabase.rpc('ping_presence').catch(e => console.warn('Ping falló:', e.message))
+
+    // Ping cada 4 minutos mientras tengan la pestaña abierta
+    const interval = setInterval(() => {
+      supabase.rpc('ping_presence').catch(e => console.warn('Ping falló:', e.message))
+    }, 4 * 60 * 1000)
+
+    return () => clearInterval(interval)
+  }, [user])
+
+  // ---------------------------------------------------------------
   // Sign out
   // ---------------------------------------------------------------
   const signOut = useCallback(async () => {
