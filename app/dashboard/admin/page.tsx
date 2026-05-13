@@ -286,8 +286,8 @@ export default function AdminDashboardPage() {
                     const max = Math.max(...Object.values(monthMap))
                     const h = Math.round((monthMap[m] / max) * 100)
                     return (
-                      <div key={m} className="flex-1 flex flex-col items-center gap-1">
-                        <div className="w-full bg-neutral-900 rounded-sm" style={{ height: `${h}%`, minHeight: 4 }} />
+                      <div key={m} className="flex-1 flex flex-col items-center justify-end gap-1 h-full">
+                        <div className="w-full bg-neutral-900 rounded-sm transition-all duration-500" style={{ height: `${h}%`, minHeight: 4 }} />
                         <span className="text-[9px] text-neutral-400 font-medium">{m.slice(0,3)}</span>
                       </div>
                     )
