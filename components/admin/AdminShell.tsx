@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect } from "react"
 import { useAuth } from "@/lib/context/AuthContext"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
