@@ -41,7 +41,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
     // Student profile
     const { data: sp } = await supabase
       .from("StudentProfile")
-      .select("*, User ( name, email, phone )")
+      .select("*, User ( name, email, phone, last_sign_in_at )")
       .eq("id", studentId).maybeSingle()
 
     if (sp) {
@@ -52,21 +52,9 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
         emergency_contact: sp.emergency_contact ?? "", emergency_phone: sp.emergency_phone ?? "",
         lifetime_value: sp.lifetime_value ?? 0, created_at: sp.created_at,
         collection_active: sp.collection_active ?? true, monthly_fee: sp.monthly_fee ?? 0,
-        last_seen_at: null, // populated below
+        last_seen_at: sp.User?.last_sign_in_at ?? null,
         user: { name: sp.User?.name ?? "—", email: sp.User?.email ?? "—", phone: sp.User?.phone ?? "" },
       })
-
-      // Fetch last_seen from the secure view
-      if (sp.user_id) {
-        const { data: seen } = await supabase
-          .from("user_last_seen")
-          .select("last_sign_in_at")
-          .eq("id", sp.user_id)
-          .maybeSingle()
-        if (seen) {
-          setStudent(prev => prev ? { ...prev, last_seen_at: seen.last_sign_in_at } : prev)
-        }
-      }
     }
 
     // Classes

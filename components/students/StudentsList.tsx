@@ -34,21 +34,11 @@ export default function StudentsList() {
     try {
       const { data, error } = await supabase
         .from("StudentProfile")
-        .select(`id, status, modalidad, user_id, User ( name, email, phone )`)
+        .select(`id, status, modalidad, user_id, User ( name, email, phone, last_sign_in_at )`)
         .eq("teacher_id", teacherId)
         .order("created_at", { ascending: false })
 
       if (error) throw error
-
-      // Fetch last_seen from the public view
-      const userIds = (data ?? []).map((s: any) => s.user_id).filter(Boolean)
-      const { data: seenData } = await supabase
-        .from("user_last_seen")
-        .select("id, last_sign_in_at")
-        .in("id", userIds)
-
-      const seenMap: Record<string, string | null> = {}
-      for (const row of seenData ?? []) seenMap[row.id] = row.last_sign_in_at
 
       const mapped = (data ?? []).map((s: any) => ({
         id: s.id,
@@ -58,7 +48,7 @@ export default function StudentsList() {
         name: s.User?.name ?? "—",
         email: s.User?.email ?? "—",
         phone: s.User?.phone ?? "",
-        last_seen_at: seenMap[s.user_id] ?? null,
+        last_seen_at: s.User?.last_sign_in_at ?? null,
       }))
 
       setStudents(mapped)

@@ -1,18 +1,37 @@
--- Crear una vista pública que exponga el last_sign_in_at de auth.users
--- La vista se ejecuta con permisos elevados (SECURITY DEFINER) de forma implícita
--- al conectar con el service role, pero la exponemos de forma selectiva.
+-- ================================================================
+-- MIGRACIÓN 015: Sincronizar last_sign_in_at de auth → public.User
+-- El rol 'authenticated' NO puede leer auth.users directamente.
+-- La solución es copiar el dato via trigger SECURITY DEFINER.
+-- ================================================================
 
-CREATE OR REPLACE VIEW public.user_last_seen AS
-SELECT
-  id,
-  last_sign_in_at,
-  -- Online: conectado en los últimos 5 minutos
-  (last_sign_in_at > now() - interval '5 minutes') AS is_online
-FROM auth.users;
+-- 1. Añadir la columna a la tabla pública
+ALTER TABLE public."User" ADD COLUMN IF NOT EXISTS last_sign_in_at TIMESTAMPTZ;
 
--- Dar acceso de lectura al rol autenticado
-GRANT SELECT ON public.user_last_seen TO authenticated;
-GRANT SELECT ON public.user_last_seen TO service_role;
+-- 2. Función que copia el timestamp al hacer login (se ejecuta como superuser)
+CREATE OR REPLACE FUNCTION public.sync_last_sign_in()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  UPDATE public."User"
+  SET last_sign_in_at = NEW.last_sign_in_at
+  WHERE id = NEW.id;
+  RETURN NEW;
+END;
+$$;
 
--- Activar RLS si aplica (las vistas no soportan RLS directamente, 
--- pero la política de la vista base lo hereda del service_role)
+-- 3. Trigger que se dispara cuando Supabase actualiza last_sign_in_at en auth.users
+DROP TRIGGER IF EXISTS on_auth_user_sign_in ON auth.users;
+CREATE TRIGGER on_auth_user_sign_in
+  AFTER UPDATE OF last_sign_in_at ON auth.users
+  FOR EACH ROW
+  WHEN (NEW.last_sign_in_at IS DISTINCT FROM OLD.last_sign_in_at)
+  EXECUTE FUNCTION public.sync_last_sign_in();
+
+-- 4. Backfill: copiar el valor actual para los usuarios ya existentes
+UPDATE public."User" u
+SET last_sign_in_at = a.last_sign_in_at
+FROM auth.users a
+WHERE a.id = u.id;

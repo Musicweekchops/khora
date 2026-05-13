@@ -31,22 +31,12 @@ export default function AdminDashboardPage() {
         .from("TeacherProfile")
         .select(`
           id, region, created_at, business_name, user_id,
-          User ( name, email, is_admin ),
+          User ( name, email, is_admin, last_sign_in_at ),
           StudentProfile ( id ),
           Payment ( amount )
         `)
         
       if (!teachers) return
-
-      // 2. Fetch last_seen for all teacher user IDs
-      const userIds = teachers.map((t: any) => t.user_id).filter(Boolean)
-      const { data: seenData } = await supabase
-        .from("user_last_seen")
-        .select("id, last_sign_in_at")
-        .in("id", userIds)
-
-      const seenMap: Record<string, string | null> = {}
-      for (const row of seenData ?? []) seenMap[row.id] = row.last_sign_in_at
 
       let totalStudents = 0;
       let totalRevenue = 0;
@@ -67,7 +57,7 @@ export default function AdminDashboardPage() {
           students: studentCount,
           revenue: teacherRevenue,
           businessName: t.business_name || '-',
-          last_seen_at: seenMap[t.user_id] ?? null,
+          last_seen_at: t.User?.last_sign_in_at ?? null,
         }
       })
 
