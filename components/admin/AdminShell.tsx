@@ -9,10 +9,6 @@ const NAV = [
   { section: "Plataforma", items: [
     { label: "Resumen", href: "/dashboard/admin", icon: "▣" },
   ]},
-  { section: "Gestión", items: [
-    { label: "Profesores", href: "/dashboard/admin/profesores", icon: "👤" },
-    { label: "Reportes", href: "/dashboard/admin/reportes", icon: "📊" },
-  ]},
   { section: "Sistema", items: [
     { label: "Ajustes", href: "/dashboard/admin/sistema", icon: "⚙" },
   ]},
