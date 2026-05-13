@@ -18,15 +18,26 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   const { profile, user, loading, signOut } = useAuth()
   const pathname = usePathname()
   const router = useRouter()
+  useEffect(() => {
+    // If auth check is done and user is either not logged in or not an admin, kick them out
+    if (!loading && (!user || (profile && !profile.is_admin))) {
+      router.replace("/dashboard")
+    }
+  }, [loading, user, profile, router])
 
-  if (loading || (user && !profile)) {
+  // Show spinner only while loading, or if we have a user but are still waiting for the profile
+  if (loading || (user && profile === null && loading)) {
     return (
       <div className="fixed inset-0 z-[60] bg-white flex items-center justify-center">
-        <div className="w-6 h-6 rounded-full border-2 border-neutral-200 border-t-neutral-800 animate-spin" />
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-6 h-6 rounded-full border-2 border-neutral-200 border-t-neutral-800 animate-spin" />
+          <p className="text-[11px] text-neutral-400 font-medium tracking-wide">Cargando...</p>
+        </div>
       </div>
     )
   }
 
+  // Safety net
   if (!profile?.is_admin) return null
 
   return (
