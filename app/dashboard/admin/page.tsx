@@ -67,16 +67,42 @@ export default function AdminDashboardPage() {
       const thisMonth = now.toISOString().slice(0, 7)
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
 
-      // Fetch teachers
-      const { data: raw } = await supabase
+      // Base query — only stable columns
+      const { data: raw, error } = await supabase
         .from("TeacherProfile")
-        .select(`id, region, created_at, user_id, is_suspended,
+        .select(`id, region, created_at, user_id,
           User ( name, email, last_sign_in_at, is_admin ),
-          StudentProfile ( id, status, monthly_fee ),
-          Payment ( amount, date ),
-          Class ( id, date )`)
+          StudentProfile ( id, status ),
+          Payment ( amount, date )`)
 
+      if (error) { console.error("[Admin] query error:", error.message); return }
       if (!raw) return
+
+      // Optional: monthly_fee (requires migration 014)
+      const { data: feeRows } = await supabase
+        .from("StudentProfile").select("id, teacher_id, monthly_fee")
+      const feeByTeacher: Record<string, number[]> = {}
+      for (const f of feeRows ?? []) {
+        const tid = f.teacher_id
+        if (!feeByTeacher[tid]) feeByTeacher[tid] = []
+        if (Number(f.monthly_fee ?? 0) > 0) feeByTeacher[tid].push(Number(f.monthly_fee))
+      }
+
+      // Optional: suspension flags (requires migration 016)
+      const { data: suspensions } = await supabase
+        .from("TeacherProfile").select("id, is_suspended")
+      const suspendMap: Record<string, boolean> = {}
+      for (const s of suspensions ?? []) suspendMap[s.id] = s.is_suspended ?? false
+
+      // Optional: class data for day-of-week analytics
+      const { data: classes } = await supabase
+        .from("Class").select("teacher_id, date")
+      const classMap: Record<string, any[]> = {}
+      for (const c of classes ?? []) {
+        if (!classMap[c.teacher_id]) classMap[c.teacher_id] = []
+        classMap[c.teacher_id].push(c)
+      }
+
 
       let totalStudents = 0, activeStudents = 0, totalRevenue = 0, revenueThisMonth = 0
       let totalFees = 0, feeCount = 0
@@ -95,13 +121,14 @@ export default function AdminDashboardPage() {
             .reduce((s: number, p: any) => s + Number(p.amount ?? 0), 0)
 
           // Avg fee
-          const fees = (t.StudentProfile ?? []).map((s: any) => Number(s.monthly_fee ?? 0)).filter((f: number) => f > 0)
+          const fees = feeByTeacher[t.id] ?? []
           const avgFee = fees.length ? fees.reduce((a: number, b: number) => a + b, 0) / fees.length : 0
           fees.forEach((f: number) => { totalFees += f; feeCount++ })
 
-          // Day of week from classes
+          // Day of week from separately-fetched classes
+          const teacherClasses = classMap[t.id] ?? []
           const classDays: Record<string, number> = {}
-          ;(t.Class ?? []).forEach((c: any) => {
+          teacherClasses.forEach((c: any) => {
             if (!c.date) return
             const day = DAYS_ES[new Date(c.date + "T12:00").getDay()]
             classDays[day] = (classDays[day] ?? 0) + 1
@@ -126,7 +153,8 @@ export default function AdminDashboardPage() {
             id: t.id, user_id: t.user_id, name: t.User?.name ?? "—", email: t.User?.email ?? "—",
             region: t.region ?? "No especificada", students: allStudents, activeStudents: active,
             revenue: rev, avgFee, last_seen_at: t.User?.last_sign_in_at ?? null, joinedAt: t.created_at,
-            is_suspended: t.is_suspended ?? false, classCount: (t.Class ?? []).length, topDay,
+            is_suspended: suspendMap[t.id] ?? false,
+            classCount: teacherClasses.length, topDay,
           }
         })
 
