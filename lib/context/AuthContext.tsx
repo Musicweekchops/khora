@@ -160,7 +160,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (event === 'SIGNED_IN') {
           // Si no había sesión, o si estamos en una ruta pública (como /login), redirigir
           if (!sessionRef.current || isPublicPath(pathname)) {
-            router.push('/dashboard')
+            // Admins get their own dashboard
+            const freshProfile = await fetchProfile(currentSession.user)
+            if (mounted) setProfile(freshProfile)
+            router.push(freshProfile?.is_admin ? '/dashboard/admin' : '/dashboard')
           }
         }
         if (event === 'SIGNED_OUT') {

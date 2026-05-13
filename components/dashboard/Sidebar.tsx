@@ -118,24 +118,6 @@ export default function Sidebar({ user }: SidebarProps) {
               </Link>
             )
           })}
-          
-          {user.is_admin && (
-            <>
-              <div className="my-2 px-3 text-[10px] font-black uppercase tracking-widest text-neutral-400">Panel de Control</div>
-              <Link href="/dashboard/admin">
-                <div className={`flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150 ${
-                  pathname?.startsWith('/dashboard/admin')
-                    ? "bg-rose-50 text-rose-600"
-                    : "text-neutral-500 hover:text-rose-600 hover:bg-rose-50"
-                }`}>
-                  <span className={`transition-colors ${pathname?.startsWith('/dashboard/admin') ? "text-rose-600" : "text-neutral-400"}`}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                  </span>
-                  <span>Super Admin</span>
-                </div>
-              </Link>
-            </>
-          )}
         </nav>
 
         {/* Profile */}
