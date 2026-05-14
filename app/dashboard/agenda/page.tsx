@@ -221,10 +221,10 @@ export default function AgendaPage() {
         {/* Time Grid */}
         <div className="max-h-[600px] overflow-y-auto scrollbar-thin">
           {HOURS.map(hour => (
-            <div key={hour} className="grid grid-cols-8 border-b border-neutral-50 min-h-[60px]">
+            <div key={hour} className="grid grid-cols-8 border-b border-neutral-50 h-[60px]">
               {/* Hour label */}
-              <div className="p-2 text-right pr-4 flex items-start justify-end">
-                <span className="text-xs font-bold text-neutral-300">{String(hour).padStart(2, "0")}:00</span>
+              <div className="p-2 text-right pr-4 flex items-start justify-end pointer-events-none">
+                <span className="text-xs font-bold text-neutral-300 -translate-y-3 bg-white px-1">{String(hour).padStart(2, "0")}:00</span>
               </div>
 
               {/* Day cells */}
@@ -237,35 +237,55 @@ export default function AgendaPage() {
                   <div
                     key={dayIdx}
                     onClick={() => slotClasses.length === 0 && handleSlotClick(day, hour)}
-                    className={`border-l border-neutral-50 p-1 relative cursor-pointer hover:bg-violet-50/30 transition-colors ${
+                    className={`border-l border-neutral-50 relative cursor-pointer hover:bg-violet-50/30 transition-colors group ${
                       isToday ? "bg-violet-50/20" : ""
                     }`}
                   >
-                    {slotClasses.map(cls => (
-                      <Link key={cls.id} href={cls.is_booking ? `/dashboard/crm` : `/dashboard/clases/detalles?id=${cls.id}`} onClick={e => e.stopPropagation()}>
-                        <div
-                          className={`rounded-lg p-2 text-xs mb-1 hover:shadow-md hover:scale-[1.02] transition-all cursor-pointer ${
-                            cls.status === "COMPLETED"
-                              ? "bg-emerald-50 border-l-emerald-400 text-emerald-700"
-                              : cls.is_booking 
-                                ? "bg-amber-50 border-l-amber-400 text-amber-700 border-2 border-dashed border-amber-200"
-                                : "bg-violet-50 border-l-violet-400 text-violet-700"
-                          }`}
-                          style={{ borderLeftWidth: "3px" }}
+                    {/* Hover indicator for creating classes */}
+                    <div className="absolute inset-0 opacity-0 group-hover:opacity-100 flex items-center justify-center text-violet-300 font-black text-2xl pb-2">+</div>
+
+                    {slotClasses.map(cls => {
+                      const startHr = parseInt(cls.start_time.split(":")[0])
+                      const startMins = parseInt(cls.start_time.split(":")[1] || "0")
+                      const endHr = parseInt(cls.end_time.split(":")[0])
+                      const endMins = parseInt(cls.end_time.split(":")[1] || "0")
+                      
+                      const durationMins = (endHr * 60 + endMins) - (startHr * 60 + startMins)
+                      const heightPx = Math.max(durationMins, 25) // 1 min = 1px, min 25px
+                      const topPx = startMins
+
+                      return (
+                        <Link 
+                          key={cls.id} 
+                          href={cls.is_booking ? `/dashboard/crm` : `/dashboard/clases/detalles?id=${cls.id}`} 
+                          onClick={e => e.stopPropagation()}
+                          className="absolute z-10 block"
+                          style={{
+                            top: `${topPx}px`,
+                            height: `${heightPx}px`,
+                            left: '2px',
+                            right: '2px'
+                          }}
                         >
-                          <div className="flex items-center justify-between gap-1">
-                            <p className="font-black truncate">{cls.student_name}</p>
-                            {cls.is_recurring && (
-                              <span className="text-[10px] opacity-70" title="Clase recurrente">↻</span>
-                            )}
-                            {cls.is_booking && (
-                              <span className="text-[10px] animate-pulse">🔔</span>
-                            )}
+                          <div
+                            className={`h-full rounded-md p-1.5 text-xs hover:shadow-lg hover:z-20 transition-all cursor-pointer overflow-hidden flex flex-col shadow-sm border ${
+                              cls.status === "COMPLETED"
+                                ? "bg-emerald-50/95 border-emerald-200 border-l-4 border-l-emerald-400 text-emerald-700"
+                                : cls.is_booking 
+                                  ? "bg-amber-50/95 border-amber-200 border-l-4 border-l-amber-400 text-amber-700 border-dashed"
+                                  : "bg-violet-50/95 border-violet-200 border-l-4 border-l-violet-400 text-violet-700"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-1 leading-tight">
+                              <p className="font-black truncate">{cls.student_name}</p>
+                              {cls.is_recurring && <span className="text-[9px] opacity-70 flex-shrink-0" title="Clase recurrente">↻</span>}
+                              {cls.is_booking && <span className="text-[9px] animate-pulse flex-shrink-0">🔔</span>}
+                            </div>
+                            <p className="opacity-70 text-[9px] font-medium mt-auto truncate">{formatTime(cls.start_time)} - {formatTime(cls.end_time)}</p>
                           </div>
-                          <p className="opacity-60">{formatTime(cls.start_time)}</p>
-                        </div>
-                      </Link>
-                    ))}
+                        </Link>
+                      )
+                    })}
                   </div>
                 )
               })}
