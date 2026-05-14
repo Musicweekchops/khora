@@ -8,6 +8,7 @@ import ScheduleManager from "@/components/students/ScheduleManager"
 import { toast } from "sonner"
 import { Lock, Save, Trash2, Edit3 } from "lucide-react"
 import LastSeenBadge from "@/components/ui/LastSeenBadge"
+import { RichText } from "@/components/ui/RichText"
 
 interface StudentData {
   id: string; user_id: string; teacher_id: string; status: string; modalidad: string; lead_source: string
@@ -463,7 +464,9 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
               <div className="bg-white rounded-3xl border p-12 text-center"><span className="text-4xl opacity-30 block mb-3">📋</span><p className="text-neutral-500 font-bold">Sin notas todavía</p></div>
             ) : notes.map(n => (
               <div key={n.id} className="bg-white rounded-2xl border border-neutral-100 p-5">
-                <p className="text-sm text-neutral-800 font-medium whitespace-pre-wrap">{n.content}</p>
+                <div onClick={e => e.stopPropagation()}>
+                  <RichText text={n.content} className="text-sm text-neutral-800 font-medium" />
+                </div>
                 <p className="text-xs text-neutral-400 mt-3">{new Date(n.created_at).toLocaleDateString("es-CL")} {n.class_date ? `· Clase del ${new Date(n.class_date + "T12:00").toLocaleDateString("es-CL")}` : ""}</p>
               </div>
             ))}

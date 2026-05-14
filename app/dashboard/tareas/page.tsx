@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/context/AuthContext"
 import { ClipboardList, CheckCircle2, Circle } from "lucide-react"
+import { RichText } from "@/components/ui/RichText"
 
 interface Task {
   id: string
@@ -123,9 +124,12 @@ function TaskCard({ task, onToggle }: { task: Task, onToggle: () => void }) {
           {task.title}
         </p>
         {task.description && (
-          <p className={`text-sm mt-1 ${task.completed ? 'text-neutral-400' : 'text-neutral-500'}`}>
-            {task.description}
-          </p>
+          <div onClick={e => e.stopPropagation()}>
+            <RichText 
+              text={task.description} 
+              className={`text-sm mt-1 ${task.completed ? 'text-neutral-400' : 'text-neutral-500'}`} 
+            />
+          </div>
         )}
       </div>
     </div>
