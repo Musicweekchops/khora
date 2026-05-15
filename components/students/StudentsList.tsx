@@ -101,12 +101,25 @@ export default function StudentsList() {
           <h1 className="text-3xl font-black text-neutral-900 tracking-tight">Alumnos</h1>
           <p className="text-neutral-500 font-medium mt-1">{students.length} registrados</p>
         </div>
-        <Link
-          href="/dashboard/alumnos/nuevo"
-          className="px-6 py-3 bg-neutral-900 text-white rounded-2xl text-sm font-bold hover:bg-violet-600 transition-colors shadow-lg"
-        >
-          + Nuevo Alumno
-        </Link>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => {
+              if (!profile?.teacherProfileId) return
+              const link = `${window.location.origin}/unirse/${profile.teacherProfileId}`
+              navigator.clipboard.writeText(link)
+              alert("¡Link de inscripción copiado al portapapeles! Envíalo por WhatsApp a tus nuevos alumnos.")
+            }}
+            className="px-6 py-3 bg-white border border-neutral-200 text-neutral-700 rounded-2xl text-sm font-bold hover:bg-neutral-50 hover:border-neutral-300 transition-colors shadow-sm flex items-center gap-2"
+          >
+            <span className="text-lg">🔗</span> Copiar Link
+          </button>
+          <Link
+            href="/dashboard/alumnos/nuevo"
+            className="px-6 py-3 bg-neutral-900 text-white rounded-2xl text-sm font-bold hover:bg-violet-600 transition-colors shadow-lg"
+          >
+            + Nuevo Alumno
+          </Link>
+        </div>
       </div>
 
       {/* Search */}
