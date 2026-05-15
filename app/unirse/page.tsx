@@ -73,6 +73,7 @@ function RegistrationForm() {
       const edgeData = await res.json()
 
       if (!res.ok || edgeData?.error) {
+        // Mostramos el error específico que viene de la base de datos si existe
         throw new Error(edgeData?.error || "Error al crear la cuenta. Intenta con otro correo.")
       }
 
@@ -102,6 +103,7 @@ function RegistrationForm() {
       }, 2000)
 
     } catch (err: any) {
+      // Capturamos el mensaje de error exacto para que el usuario sepa qué falló
       setError(err.message || "Ocurrió un error inesperado")
       setSubmitting(false)
     }
@@ -219,14 +221,13 @@ function RegistrationForm() {
                 </select>
               </div>
               <div>
-                <label className="block text-[11px] font-bold text-neutral-400 uppercase tracking-widest mb-1.5 ml-1">Horario</label>
-                <select value={form.preferred_time} onChange={e => set("preferred_time", e.target.value)} 
-                  className="w-full px-4 py-3.5 bg-neutral-50 border border-neutral-100 rounded-2xl outline-none focus:border-violet-400 text-sm font-bold appearance-none">
-                  <option value="">Cualquiera</option>
-                  <option value="Mañana">Mañana (09-12)</option>
-                  <option value="Tarde">Tarde (12-18)</option>
-                  <option value="Noche">Noche (18-22)</option>
-                </select>
+                <label className="block text-[11px] font-bold text-neutral-400 uppercase tracking-widest mb-1.5 ml-1">Horario estimado</label>
+                <input 
+                  type="time" 
+                  value={form.preferred_time} 
+                  onChange={e => set("preferred_time", e.target.value)} 
+                  className="w-full px-4 py-3.5 bg-neutral-50 border border-neutral-100 rounded-2xl outline-none focus:border-violet-400 text-sm font-bold appearance-none" 
+                />
               </div>
             </div>
           </div>
