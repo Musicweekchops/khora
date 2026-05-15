@@ -1,11 +1,14 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, Suspense } from "react"
 import { supabase } from "@/lib/supabase"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 
-export default function StudentRegistrationPage({ params }: { params: { teacherId: string } }) {
+function RegistrationForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const teacherId = searchParams.get("teacherId")
+  
   const [teacherName, setTeacherName] = useState("")
   const [loadingTeacher, setLoadingTeacher] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -24,14 +27,19 @@ export default function StudentRegistrationPage({ params }: { params: { teacherI
 
   useEffect(() => {
     async function loadTeacher() {
-      const { data, error } = await supabase
+      if (!teacherId) {
+        setError("El enlace de inscripción no contiene información del profesor.")
+        setLoadingTeacher(false)
+        return
+      }
+
+      const { data, error: fetchError } = await supabase
         .from("TeacherProfile")
         .select("User ( name )")
-        .eq("id", params.teacherId)
+        .eq("id", teacherId)
         .maybeSingle()
       
       if (data?.User) {
-        // Handle array or object for User relation safely
         const name = Array.isArray(data.User) ? data.User[0]?.name : data.User.name
         setTeacherName(name)
       } else {
@@ -40,17 +48,16 @@ export default function StudentRegistrationPage({ params }: { params: { teacherI
       setLoadingTeacher(false)
     }
     loadTeacher()
-  }, [params.teacherId])
+  }, [teacherId])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.name || !form.email || !form.password) return
+    if (!form.name || !form.email || !form.password || !teacherId) return
     
     setSubmitting(true)
     setError("")
 
     try {
-      // 1. Create account via our existing Edge Function 
       const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/create-student`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -59,7 +66,7 @@ export default function StudentRegistrationPage({ params }: { params: { teacherI
           password: form.password.trim(),
           name: form.name.trim(),
           phone: form.phone.trim() || null,
-          teacher_id: params.teacherId
+          teacher_id: teacherId
         })
       })
 
@@ -71,14 +78,13 @@ export default function StudentRegistrationPage({ params }: { params: { teacherI
 
       const newUserId = edgeData.userId
 
-      // 2. Update Student Profile with extra form data
       const { error: profileErr } = await supabase
         .from("StudentProfile")
         .update({
           modalidad: form.modalidad,
           preferred_day: form.preferred_day || null,
           preferred_time: form.preferred_time || null,
-          status: "PROSPECT" // They start as a prospect until the teacher assigns fee
+          status: "PROSPECT"
         })
         .eq("user_id", newUserId)
 
@@ -86,14 +92,13 @@ export default function StudentRegistrationPage({ params }: { params: { teacherI
 
       setSuccess(true)
       
-      // Auto-login after successful registration
       await supabase.auth.signInWithPassword({
         email: form.email.trim().toLowerCase(),
         password: form.password.trim()
       })
       
       setTimeout(() => {
-        router.push("/dashboard/tareas") // Redirect student to their new dashboard
+        router.push("/dashboard/tareas")
       }, 2000)
 
     } catch (err: any) {
@@ -138,7 +143,6 @@ export default function StudentRegistrationPage({ params }: { params: { teacherI
 
   return (
     <div className="min-h-screen bg-neutral-50 flex flex-col p-4 md:p-8">
-      {/* Khora Logo Header */}
       <div className="max-w-md w-full mx-auto flex justify-center mb-8 pt-4">
         <div className="w-12 h-12 bg-neutral-900 rounded-2xl flex items-center justify-center shadow-lg">
           <span className="text-white font-black text-xl">K</span>
@@ -234,5 +238,17 @@ export default function StudentRegistrationPage({ params }: { params: { teacherI
         </form>
       </div>
     </div>
+  )
+}
+
+export default function StudentRegistrationPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-neutral-50 flex items-center justify-center p-4">
+        <div className="w-12 h-12 border-4 border-violet-100 border-t-violet-600 rounded-full animate-spin" />
+      </div>
+    }>
+      <RegistrationForm />
+    </Suspense>
   )
 }

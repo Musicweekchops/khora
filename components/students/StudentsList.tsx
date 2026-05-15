@@ -105,7 +105,7 @@ export default function StudentsList() {
           <button 
             onClick={() => {
               if (!profile?.teacherProfileId) return
-              const link = `${window.location.origin}/unirse/${profile.teacherProfileId}`
+              const link = `${window.location.origin}/unirse?teacherId=${profile.teacherProfileId}`
               navigator.clipboard.writeText(link)
               alert("¡Link de inscripción copiado al portapapeles! Envíalo por WhatsApp a tus nuevos alumnos.")
             }}
