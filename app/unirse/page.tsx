@@ -58,9 +58,17 @@ function RegistrationForm() {
     setError("")
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/create-student`, {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+      // 1. Create account via our existing Edge Function 
+      const res = await fetch(`${supabaseUrl}/functions/v1/create-student`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "apikey": anonKey || "",
+          "Authorization": `Bearer ${anonKey}`
+        },
         body: JSON.stringify({
           email: form.email.trim().toLowerCase(),
           password: form.password.trim(),
