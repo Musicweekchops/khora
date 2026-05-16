@@ -448,6 +448,7 @@ export default function BibliotecaPage() {
                 <div className="bg-white border border-dashed border-neutral-200 rounded-3xl p-10 text-center">
                   <p className="text-neutral-500 font-medium">No hay recursos en esta lista.</p>
                 </div>
+              ) : (
                 <DragDropContext onDragEnd={handleDragEnd}>
                   <Droppable droppableId="library-list">
                     {(provided) => (
