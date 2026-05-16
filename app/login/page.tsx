@@ -52,7 +52,12 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="kh-label">Contraseña</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="kh-label mb-0">Contraseña</label>
+                <Link href="/recuperar" className="text-xs text-neutral-500 hover:text-neutral-900 font-medium transition-colors">
+                  ¿Olvidaste tu contraseña?
+                </Link>
+              </div>
               <input type="password" required value={password} onChange={e => setPassword(e.target.value)} className="kh-input" placeholder="••••••••" />
             </div>
 
