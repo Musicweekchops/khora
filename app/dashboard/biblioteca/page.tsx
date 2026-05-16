@@ -15,8 +15,10 @@ import {
   ExternalLink,
   BookOpen,
   Upload,
-  CloudUpload
+  CloudUpload,
+  GripVertical
 } from "lucide-react"
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd"
 
 interface Playlist {
   id: string
@@ -33,6 +35,7 @@ interface Content {
   url: string | null
   category: string
   playlist_id: string | null
+  order_index: number
   created_at: string
 }
 
@@ -77,7 +80,7 @@ export default function BibliotecaPage() {
   async function loadLibraryTeacher(teacherId: string) {
     setLoading(true)
     const [resItems, resPlaylists] = await Promise.all([
-      supabase.from("LibraryContent").select("*").eq("teacher_id", teacherId).order("created_at", { ascending: false }),
+      supabase.from("LibraryContent").select("*").eq("teacher_id", teacherId).order("order_index", { ascending: true }).order("created_at", { ascending: false }),
       supabase.from("LibraryPlaylist").select("*").eq("teacher_id", teacherId).order("created_at", { ascending: false })
     ])
     
@@ -92,7 +95,7 @@ export default function BibliotecaPage() {
 
     if (student?.teacher_id) {
       const [resItems, resPlaylists] = await Promise.all([
-        supabase.from("LibraryContent").select("*").eq("teacher_id", student.teacher_id).eq("is_public", true).order("created_at", { ascending: false }),
+        supabase.from("LibraryContent").select("*").eq("teacher_id", student.teacher_id).eq("is_public", true).order("order_index", { ascending: true }).order("created_at", { ascending: false }),
         supabase.from("LibraryPlaylist").select("*").eq("teacher_id", student.teacher_id).order("created_at", { ascending: false })
       ])
 
@@ -101,6 +104,48 @@ export default function BibliotecaPage() {
     }
     
     setLoading(false)
+  }
+
+  async function handleDragEnd(result: any) {
+    if (!result.destination) return
+    if (profile?.role !== "TEACHER") return
+
+    const sourceIndex = result.source.index
+    const destinationIndex = result.destination.index
+    
+    if (sourceIndex === destinationIndex) return
+
+    // Solo reordenamos dentro del contexto actual (displayItems)
+    const activeItemsList = Array.from(displayItems)
+    const [reorderedItem] = activeItemsList.splice(sourceIndex, 1)
+    activeItemsList.splice(destinationIndex, 0, reorderedItem)
+
+    // Actualizamos los order_index
+    const updatedItems = activeItemsList.map((item, index) => ({
+      ...item,
+      order_index: index
+    }))
+
+    // Actualizamos UI optimísticamente
+    // Tenemos que mezclar displayItems actualizados con el resto de los items (los de otras playlists)
+    setItems(prevItems => {
+      const newItems = [...prevItems]
+      updatedItems.forEach(updatedItem => {
+        const i = newItems.findIndex(it => it.id === updatedItem.id)
+        if (i !== -1) newItems[i] = updatedItem
+      })
+      return newItems.sort((a, b) => a.order_index - b.order_index)
+    })
+
+    // Guardar en Supabase en background
+    const updates = updatedItems.map(item => ({
+      id: item.id,
+      order_index: item.order_index
+    }))
+    
+    for (const update of updates) {
+      await supabase.from("LibraryContent").update({ order_index: update.order_index }).eq("id", update.id)
+    }
   }
 
   async function handleCreatePlaylist(e: React.FormEvent) {
@@ -157,7 +202,8 @@ export default function BibliotecaPage() {
         url: finalUrl,
         file_path: filePath,
         category: form.category,
-        playlist_id: form.playlist_id || null
+        playlist_id: form.playlist_id || null,
+        order_index: items.length // Lo ponemos al final
       })
 
       if (!error) {
@@ -192,9 +238,10 @@ export default function BibliotecaPage() {
   const filteredPlaylists = playlists.filter(p => p.title.toLowerCase().includes(search.toLowerCase()))
   
   // Si estamos dentro de una playlist, solo mostramos sus items
-  let displayItems = items
+  let displayItems = items.sort((a, b) => a.order_index - b.order_index)
+  
   if (activePlaylist) {
-    displayItems = items.filter(i => i.playlist_id === activePlaylist)
+    displayItems = displayItems.filter(i => i.playlist_id === activePlaylist)
   } else {
     // Si NO estamos en una playlist, podemos decidir si mostrar TODO o solo los "sueltos"
     // Para simplificar, mostraremos solo los sueltos (sin playlist) en la raíz
@@ -401,50 +448,74 @@ export default function BibliotecaPage() {
                 <div className="bg-white border border-dashed border-neutral-200 rounded-3xl p-10 text-center">
                   <p className="text-neutral-500 font-medium">No hay recursos en esta lista.</p>
                 </div>
-              ) : (
-                <div className="bg-white border border-neutral-200 rounded-3xl overflow-hidden shadow-sm">
-                  <div className="divide-y divide-neutral-100">
-                    {displayItems.map(item => (
-                      <div key={item.id} className="p-4 sm:p-5 flex items-center gap-4 hover:bg-neutral-50/50 transition-colors group">
-                        {/* Ícono de Tipo */}
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                          item.type === 'video' ? 'bg-red-50 text-red-600' :
-                          item.type === 'pdf' ? 'bg-amber-50 text-amber-600' :
-                          item.type === 'audio' ? 'bg-sky-50 text-sky-600' :
-                          'bg-violet-50 text-violet-600'
-                        }`}>
-                          {typeIcons[item.type] || <LinkIcon className="w-4 h-4" />}
-                        </div>
+                <DragDropContext onDragEnd={handleDragEnd}>
+                  <Droppable droppableId="library-list">
+                    {(provided) => (
+                      <div 
+                        className="bg-white border border-neutral-200 rounded-3xl overflow-hidden shadow-sm"
+                        {...provided.droppableProps}
+                        ref={provided.innerRef}
+                      >
+                        <div className="divide-y divide-neutral-100">
+                          {displayItems.map((item, index) => (
+                            <Draggable key={item.id} draggableId={item.id} index={index} isDragDisabled={profile?.role !== "TEACHER" || search !== ""}>
+                              {(provided, snapshot) => (
+                                <div 
+                                  ref={provided.innerRef}
+                                  {...provided.draggableProps}
+                                  className={`p-4 sm:p-5 flex items-center gap-4 group transition-colors ${snapshot.isDragging ? 'bg-violet-50/80 shadow-lg scale-[1.01] z-50 rounded-2xl border border-violet-100' : 'hover:bg-neutral-50/50'}`}
+                                >
+                                  {/* Drag Handle */}
+                                  {profile?.role === "TEACHER" && !search && (
+                                    <div {...provided.dragHandleProps} className="text-neutral-300 hover:text-neutral-500 cursor-grab active:cursor-grabbing p-1 shrink-0">
+                                      <GripVertical className="w-5 h-5" />
+                                    </div>
+                                  )}
 
-                        {/* Info Principal */}
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-bold text-neutral-900 truncate">{item.title}</h4>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 bg-neutral-100 px-2 py-0.5 rounded-md">
-                              {item.category || item.type}
-                            </span>
-                            {item.description && <span className="text-xs text-neutral-500 truncate hidden sm:inline">{item.description}</span>}
-                          </div>
-                        </div>
+                                  {/* Ícono de Tipo */}
+                                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                                    item.type === 'video' ? 'bg-red-50 text-red-600' :
+                                    item.type === 'pdf' ? 'bg-amber-50 text-amber-600' :
+                                    item.type === 'audio' ? 'bg-sky-50 text-sky-600' :
+                                    'bg-violet-50 text-violet-600'
+                                  }`}>
+                                    {typeIcons[item.type] || <LinkIcon className="w-4 h-4" />}
+                                  </div>
 
-                        {/* Acciones */}
-                        <div className="flex items-center gap-3 shrink-0 pl-2">
-                          {item.url && (
-                            <a href={item.url} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-neutral-900 text-white text-xs font-bold rounded-xl hover:bg-violet-600 transition-colors">
-                              Ver
-                            </a>
-                          )}
-                          {profile?.role === "TEACHER" && (
-                            <button onClick={() => deleteItem(item.id)} className="p-2 text-neutral-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all opacity-0 group-hover:opacity-100">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
+                                  {/* Info Principal */}
+                                  <div className="flex-1 min-w-0">
+                                    <h4 className="font-bold text-neutral-900 truncate">{item.title}</h4>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                      <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 bg-neutral-100 px-2 py-0.5 rounded-md">
+                                        {item.category || item.type}
+                                      </span>
+                                      {item.description && <span className="text-xs text-neutral-500 truncate hidden sm:inline">{item.description}</span>}
+                                    </div>
+                                  </div>
+
+                                  {/* Acciones */}
+                                  <div className="flex items-center gap-3 shrink-0 pl-2">
+                                    {item.url && (
+                                      <a href={item.url} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-neutral-900 text-white text-xs font-bold rounded-xl hover:bg-violet-600 transition-colors">
+                                        Ver
+                                      </a>
+                                    )}
+                                    {profile?.role === "TEACHER" && (
+                                      <button onClick={() => deleteItem(item.id)} className="p-2 text-neutral-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all opacity-0 group-hover:opacity-100">
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </Draggable>
+                          ))}
+                          {provided.placeholder}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                    )}
+                  </Droppable>
+                </DragDropContext>
             </div>
           )}
 
