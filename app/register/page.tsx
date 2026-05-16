@@ -4,6 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { CHILE_REGIONS } from "@/lib/chile-regions"
+import { Info } from "lucide-react"
 
 export default function RegisterPage() {
   const [form, setForm] = useState({ name: "", email: "", password: "", region: "", comuna: "" })
@@ -45,8 +46,19 @@ export default function RegisterPage() {
           <div className="w-10 h-10 rounded-xl bg-neutral-900 flex items-center justify-center mx-auto mb-5">
             <span className="text-white text-lg font-bold">K</span>
           </div>
-          <h1 className="text-xl font-semibold text-neutral-900 tracking-tight">Crear Cuenta</h1>
-          <p className="text-sm text-neutral-500 mt-1.5">Empieza a gestionar tus clases</p>
+          <h1 className="text-xl font-semibold text-neutral-900 tracking-tight">Registro de Profesores</h1>
+          <p className="text-sm text-neutral-500 mt-1.5">Crea tu cuenta para gestionar alumnos</p>
+        </div>
+
+        {/* Mensaje de advertencia para alumnos */}
+        <div className="mb-6 bg-blue-50 border border-blue-100 rounded-2xl p-4 flex gap-3 text-left">
+          <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+          <div>
+            <h3 className="text-sm font-bold text-blue-900">¿Eres estudiante?</h3>
+            <p className="text-xs text-blue-700 mt-1 leading-relaxed">
+              No debes crear tu cuenta aquí. Pídele a tu profesor que te envíe su <strong className="font-bold">enlace de invitación personal</strong> por WhatsApp para unirte a su clase.
+            </p>
+          </div>
         </div>
 
         <div className="kh-card p-6">
