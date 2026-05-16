@@ -517,6 +517,7 @@ export default function BibliotecaPage() {
                     )}
                   </Droppable>
                 </DragDropContext>
+              )}
             </div>
           )}
 
