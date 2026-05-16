@@ -38,11 +38,11 @@ const AuthContext = createContext<AuthContextType>({
 // -------------------------------------------------------------------
 // Rutas públicas
 // -------------------------------------------------------------------
-const PUBLIC_PATHS = ['/login', '/register', '/', '/agendar']
+const PUBLIC_PATHS = ['/login', '/register', '/', '/agendar', '/recuperar', '/actualizar-password', '/unirse']
 
 function isPublicPath(pathname: string | null) {
   if (!pathname) return false
-  const publicPaths = ['/login', '/register', '/', '/agendar']
+  const publicPaths = ['/login', '/register', '/', '/agendar', '/recuperar', '/actualizar-password', '/unirse']
   return publicPaths.some(p => pathname === p || pathname.startsWith('/agendar/'))
 }
 
