@@ -6,7 +6,10 @@ import { supabase } from "@/lib/supabase"
 import { CHILE_REGIONS } from "@/lib/chile-regions"
 import { Info } from "lucide-react"
 
+import { useRouter } from "next/navigation"
+
 export default function RegisterPage() {
+  const router = useRouter()
   const [form, setForm] = useState({ name: "", email: "", password: "", region: "", comuna: "" })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -25,7 +28,7 @@ export default function RegisterPage() {
     // Guardamos la combinación como 'Comuna, Región' para no alterar la base de datos
     const fullLocation = `${form.comuna}, ${form.region}`
 
-    const { error: err } = await supabase.auth.signUp({
+    const { error: err, data } = await supabase.auth.signUp({
       email: form.email,
       password: form.password,
       options: { data: { name: form.name, role: "TEACHER", region: fullLocation } },
@@ -34,6 +37,16 @@ export default function RegisterPage() {
     if (err) {
       setError(err.message)
       setLoading(false)
+    } else {
+      // Si el registro fue exitoso
+      if (data?.session) {
+        // Autologueo exitoso
+        router.push("/dashboard")
+      } else {
+        // Si Supabase requiere confirmación de correo (por defecto en algunos casos)
+        alert("¡Cuenta creada exitosamente! Revisa tu correo electrónico para confirmar, o intenta iniciar sesión.")
+        router.push("/login")
+      }
     }
   }
 
