@@ -242,29 +242,39 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
             </div>
           </Section>
 
-          <Section title="Facturación" accent="bg-sky-500">
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Frecuencia" icon="💳">
-                <select value={form.payment_frequency} onChange={e => set("payment_frequency", e.target.value)} className="input-field">
-                  <option value="MONTHLY">Mensual</option>
-                  <option value="WEEKLY">Semanal</option>
-                  <option value="PER_CLASS">Por Clase</option>
-                </select>
-              </Field>
-              <Field label="Día de Cobro" icon="📆">
-                <input type="number" min="1" max="31" value={form.payment_day} onChange={e => set("payment_day", e.target.value)} className="input-field" placeholder="Ej: 5" disabled={form.payment_frequency !== 'MONTHLY'} />
-              </Field>
+          <Section title="Facturación (Automatización de Cobros)" accent="bg-neutral-300">
+            <div className="relative">
+              {/* Overlay Próximamente */}
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/40 backdrop-blur-[1px] rounded-2xl">
+                <span className="bg-neutral-900 text-white text-xs font-black px-4 py-2 rounded-xl uppercase tracking-widest shadow-xl">
+                  Próximamente
+                </span>
+              </div>
+
+              {/* Contenido deshabilitado */}
+              <div className="opacity-40 pointer-events-none select-none grayscale">
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Frecuencia" icon="💳">
+                    <select value={form.payment_frequency} onChange={e => set("payment_frequency", e.target.value)} className="input-field">
+                      <option value="MONTHLY">Mensual</option>
+                      <option value="WEEKLY">Semanal</option>
+                      <option value="PER_CLASS">Por Clase</option>
+                    </select>
+                  </Field>
+                  <Field label="Día de Cobro" icon="📆">
+                    <input type="number" min="1" max="31" value={form.payment_day} onChange={e => set("payment_day", e.target.value)} className="input-field" placeholder="Ej: 5" disabled />
+                  </Field>
+                </div>
+                <div className="mt-4">
+                  <Field label="Monto a Cobrar ($)" icon="💰">
+                    <input type="number" min="0" value={form.monthly_fee} onChange={e => set("monthly_fee", e.target.value)} className="input-field font-black text-emerald-600 text-lg" placeholder="Ej: 80000" disabled />
+                  </Field>
+                </div>
+                <p className="text-[10px] text-neutral-400 font-bold uppercase tracking-wide mt-3 px-1">
+                  Los correos automáticos de cobranza se habilitarán en la próxima actualización.
+                </p>
+              </div>
             </div>
-            <div className="mt-4">
-              <Field label="Monto a Cobrar ($)" icon="💰">
-                <input type="number" min="0" value={form.monthly_fee} onChange={e => set("monthly_fee", e.target.value)} className="input-field font-black text-emerald-600 text-lg" placeholder="Ej: 80000" />
-              </Field>
-            </div>
-            <p className="text-[10px] text-neutral-400 font-bold uppercase tracking-wide mt-3 px-1">
-              {form.payment_frequency === 'MONTHLY' 
-                ? `El sistema cobrará $${form.monthly_fee} los días ${form.payment_day}.` 
-                : 'Los correos automáticos están desactivados para modalidades no mensuales.'}
-            </p>
           </Section>
         </div>
 
