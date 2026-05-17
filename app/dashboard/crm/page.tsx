@@ -74,18 +74,24 @@ export default function CRMPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-black text-neutral-900 tracking-tight">CRM Pipeline</h1>
           <p className="text-neutral-500 font-medium mt-1">{totalLeads} contactos · {conversionRate}% conversión</p>
         </div>
-        <Link href="/dashboard/alumnos/nuevo" className="w-full md:w-auto px-6 py-3 bg-neutral-900 text-white rounded-2xl text-sm font-bold hover:bg-violet-600 transition-colors shadow-lg text-center">
+        
+        {/* Desktop Button */}
+        <Link href="/dashboard/alumnos/nuevo" className="hidden md:inline-flex px-6 py-3 bg-neutral-900 text-white rounded-2xl text-sm font-bold hover:bg-violet-600 transition-colors shadow-lg">
           + Nuevo Lead
+        </Link>
+        {/* Mobile FAB-style icon button in header */}
+        <Link href="/dashboard/alumnos/nuevo" className="md:hidden w-12 h-12 flex items-center justify-center bg-neutral-900 text-white rounded-full hover:bg-violet-600 transition-colors shadow-lg text-xl font-bold flex-shrink-0">
+          +
         </Link>
       </div>
 
-      {/* Funnel summary */}
-      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+      {/* Funnel summary - Hidden on Mobile */}
+      <div className="hidden md:flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
         {COLUMNS.map(col => {
           const count = getLeadsForColumn(col.key).length
           return (
@@ -100,20 +106,28 @@ export default function CRMPage() {
       </div>
 
       {/* Mobile Tabs */}
-      <div className="md:hidden flex overflow-x-auto gap-2 pb-2 scrollbar-none snap-x">
-        {COLUMNS.map(col => (
-          <button
-            key={col.key}
-            onClick={() => setMobileTab(col.key)}
-            className={`flex-shrink-0 px-4 py-2.5 rounded-xl text-sm font-bold transition-all snap-start flex items-center gap-2 ${
-              mobileTab === col.key 
-                ? `bg-white border-2 ${col.color} text-neutral-900 shadow-sm` 
-                : "bg-neutral-50 border-2 border-transparent text-neutral-500 hover:bg-neutral-100"
-            }`}
-          >
-            <span>{col.icon}</span> {col.label}
-          </button>
-        ))}
+      <div className="md:hidden flex overflow-x-auto gap-2 pb-2 scrollbar-none snap-x px-1">
+        {COLUMNS.map(col => {
+          const count = getLeadsForColumn(col.key).length
+          const isSelected = mobileTab === col.key
+          return (
+            <button
+              key={col.key}
+              onClick={() => setMobileTab(col.key)}
+              className={`flex-shrink-0 px-4 py-2 rounded-full text-xs font-bold transition-all snap-start flex items-center gap-2 border ${
+                isSelected 
+                  ? `bg-neutral-900 border-neutral-900 text-white shadow-md scale-105` 
+                  : "bg-white border-neutral-200 text-neutral-500 hover:bg-neutral-50"
+              }`}
+            >
+              <span>{col.icon}</span> 
+              <span>{col.label}</span>
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${isSelected ? "bg-neutral-700 text-white" : "bg-neutral-100 text-neutral-600"}`}>
+                {count}
+              </span>
+            </button>
+          )
+        })}
       </div>
 
       {/* Kanban Board */}
