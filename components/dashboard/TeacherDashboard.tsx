@@ -14,9 +14,16 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
   const [todayClasses, setTodayClasses] = useState<TodayClass[]>([])
   const [loading, setLoading] = useState(true)
 
+  const [showMobileMsg, setShowMobileMsg] = useState(true)
+
   useEffect(() => {
     if (profile.teacherProfileId) loadAll(profile.teacherProfileId)
   }, [profile.teacherProfileId])
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShowMobileMsg(false), 4500)
+    return () => clearTimeout(timer)
+  }, [])
 
   async function loadAll(teacherId: string) {
     try {
@@ -61,6 +68,22 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
 
   return (
     <div className="space-y-10">
+      {/* Mobile Library Warning */}
+      {showMobileMsg && (
+        <div className="lg:hidden fixed top-24 left-4 right-4 z-[60] animate-in fade-in slide-in-from-top-4 duration-500">
+          <div className="bg-neutral-900/95 backdrop-blur-xl text-white p-4 rounded-3xl shadow-2xl shadow-neutral-900/20 border border-neutral-700 flex items-start gap-3">
+            <span className="text-2xl">💻</span>
+            <div className="flex-1">
+              <p className="text-[13px] font-black tracking-tight leading-tight mb-0.5">Gestión de Biblioteca</p>
+              <p className="text-[11px] text-neutral-400 font-medium leading-snug">
+                Por seguridad de tus archivos, la subida de material solo está disponible desde la versión de computador.
+              </p>
+            </div>
+            <button onClick={() => setShowMobileMsg(false)} className="text-neutral-500 hover:text-white p-1">✕</button>
+          </div>
+        </div>
+      )}
+
       <div>
         <h1 className="text-3xl font-black text-neutral-900 tracking-tight">Panel de Control</h1>
         <p className="text-neutral-500 font-medium mt-1">Bienvenido, {profile.name}</p>
