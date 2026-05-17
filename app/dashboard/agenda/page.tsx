@@ -37,6 +37,7 @@ export default function AgendaPage() {
   const [showModal, setShowModal] = useState(false)
   const [showAvailModal, setShowAvailModal] = useState(false)
   const [selectedSlot, setSelectedSlot] = useState<{ date: string; hour: number } | null>(null)
+  const [mobileSelectedDate, setMobileSelectedDate] = useState(() => new Date())
   const [students, setStudents] = useState<{ id: string; name: string }[]>([])
 
   // Quick-add form state
@@ -202,8 +203,8 @@ export default function AgendaPage() {
         </div>
       </div>
 
-      {/* Calendar Grid */}
-      <div className="bg-white rounded-3xl border border-neutral-100 overflow-hidden shadow-sm">
+      {/* Calendar Grid - Desktop */}
+      <div className="hidden md:block bg-white rounded-3xl border border-neutral-100 overflow-hidden shadow-sm">
         {/* Day Headers */}
         <div className="grid grid-cols-8 border-b border-neutral-100">
           <div className="p-3 text-center text-xs font-bold text-neutral-300 uppercase">Hora</div>
@@ -291,6 +292,100 @@ export default function AgendaPage() {
               })}
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Calendar Grid - Mobile (iCal Style) */}
+      <div className="md:hidden space-y-4">
+        {/* Horizontal Week Strip */}
+        <div className="flex justify-between items-center bg-white p-2 rounded-3xl border border-neutral-100 shadow-sm">
+          {weekDays.map((day, i) => {
+            const isSelected = toDateStr(day) === toDateStr(mobileSelectedDate)
+            const isToday = toDateStr(day) === today
+            return (
+              <div 
+                key={i} 
+                onClick={() => setMobileSelectedDate(day)}
+                className={`flex flex-col items-center justify-center w-[13%] aspect-[3/4] rounded-2xl cursor-pointer transition-all ${
+                  isSelected ? "bg-violet-600 text-white shadow-md scale-105" : "hover:bg-neutral-50 text-neutral-600"
+                }`}
+              >
+                <span className={`text-[10px] font-bold uppercase tracking-widest ${isSelected ? "text-violet-200" : isToday ? "text-violet-600" : "text-neutral-400"}`}>
+                  {DAY_NAMES[day.getDay()].charAt(0)}
+                </span>
+                <span className={`text-lg font-black mt-0.5 ${isSelected ? "text-white" : isToday ? "text-violet-600" : "text-neutral-900"}`}>
+                  {day.getDate()}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Daily Timeline */}
+        <div className="bg-white rounded-3xl border border-neutral-100 overflow-hidden shadow-sm relative">
+          <div className="max-h-[60vh] overflow-y-auto scrollbar-none pb-12">
+            {HOURS.map(hour => {
+              const dayStr = toDateStr(mobileSelectedDate)
+              const slotClasses = getClassesForSlot(dayStr, hour)
+              const isToday = dayStr === today
+
+              return (
+                <div key={hour} className="flex border-b border-neutral-50 min-h-[70px] relative group">
+                  {/* Hour label */}
+                  <div className="w-16 flex-shrink-0 text-right pr-3 flex items-start justify-end pointer-events-none">
+                    <span className="text-xs font-bold text-neutral-400 -translate-y-3 bg-white px-1 mt-0.5">{String(hour).padStart(2, "0")}:00</span>
+                  </div>
+
+                  {/* Day cell */}
+                  <div 
+                    onClick={() => slotClasses.length === 0 && handleSlotClick(mobileSelectedDate, hour)}
+                    className={`flex-1 border-l border-neutral-50 relative cursor-pointer hover:bg-violet-50/30 transition-colors ${isToday ? "bg-violet-50/10" : ""}`}
+                  >
+                    <div className="absolute inset-0 opacity-0 group-hover:opacity-100 flex items-center justify-center text-violet-300 font-black text-2xl pb-2">+</div>
+                    
+                    {slotClasses.map(cls => {
+                      const startHr = parseInt(cls.start_time.split(":")[0])
+                      const startMins = parseInt(cls.start_time.split(":")[1] || "0")
+                      const endHr = parseInt(cls.end_time.split(":")[0])
+                      const endMins = parseInt(cls.end_time.split(":")[1] || "0")
+                      
+                      const durationMins = (endHr * 60 + endMins) - (startHr * 60 + startMins)
+                      const heightPx = Math.max(durationMins * 1.16, 45) // scale height slightly for mobile
+                      const topPx = startMins * 1.16
+
+                      return (
+                        <Link 
+                          key={cls.id} 
+                          href={cls.is_booking ? `/dashboard/crm` : `/dashboard/clases/detalles?id=${cls.id}`} 
+                          onClick={e => e.stopPropagation()}
+                          className="absolute z-10 block"
+                          style={{ top: `${topPx}px`, height: `${heightPx}px`, left: '4px', right: '12px' }}
+                        >
+                          <div className={`h-full rounded-2xl p-3 hover:shadow-lg hover:z-20 transition-all cursor-pointer overflow-hidden flex flex-col shadow-sm border ${
+                              cls.status === "COMPLETED"
+                                ? "bg-emerald-50 border-emerald-200 border-l-4 border-l-emerald-500 text-emerald-800"
+                                : cls.is_booking 
+                                  ? "bg-amber-50 border-amber-200 border-l-4 border-l-amber-500 text-amber-800 border-dashed"
+                                  : "bg-violet-50 border-violet-200 border-l-4 border-l-violet-500 text-violet-800"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2 leading-tight">
+                              <p className="font-black text-[13px] tracking-tight truncate">{cls.student_name}</p>
+                              <p className="opacity-70 text-[10px] font-bold mt-0.5 flex-shrink-0">{formatTime(cls.start_time)}</p>
+                            </div>
+                            <div className="flex items-center gap-2 mt-auto pt-1">
+                               {cls.modalidad === "online" ? <span className="text-[9px] bg-white/60 px-1.5 py-0.5 rounded font-black uppercase tracking-wide">📹 Online</span> : <span className="text-[9px] bg-white/60 px-1.5 py-0.5 rounded font-black uppercase tracking-wide">🏠 Presencial</span>}
+                               {cls.is_recurring && <span className="text-[10px] opacity-70">↻</span>}
+                            </div>
+                          </div>
+                        </Link>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
       </div>
 

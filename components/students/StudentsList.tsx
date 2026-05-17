@@ -96,12 +96,12 @@ export default function StudentsList() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black text-neutral-900 tracking-tight">Alumnos</h1>
           <p className="text-neutral-500 font-medium mt-1">{students.length} registrados</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 w-full md:w-auto">
           <button 
             onClick={() => {
               if (!profile?.teacherProfileId) return
@@ -109,13 +109,15 @@ export default function StudentsList() {
               navigator.clipboard.writeText(link)
               alert("¡Link de inscripción copiado al portapapeles! Envíalo por WhatsApp a tus nuevos alumnos.")
             }}
-            className="px-6 py-3 bg-white border border-neutral-200 text-neutral-700 rounded-2xl text-sm font-bold hover:bg-neutral-50 hover:border-neutral-300 transition-colors shadow-sm flex items-center gap-2"
+            className="flex-1 md:flex-none px-4 md:px-6 py-3 bg-white border border-neutral-200 text-neutral-700 rounded-2xl text-sm font-bold hover:bg-neutral-50 hover:border-neutral-300 transition-colors shadow-sm flex items-center justify-center gap-2 whitespace-nowrap"
           >
-            <span className="text-lg">🔗</span> Copiar Link
+            <span className="text-lg">🔗</span> 
+            <span className="hidden sm:inline">Copiar Link</span>
+            <span className="sm:hidden">Link</span>
           </button>
           <Link
             href="/dashboard/alumnos/nuevo"
-            className="px-6 py-3 bg-neutral-900 text-white rounded-2xl text-sm font-bold hover:bg-violet-600 transition-colors shadow-lg"
+            className="flex-[2] md:flex-none px-4 md:px-6 py-3 bg-neutral-900 text-white rounded-2xl text-sm font-bold hover:bg-violet-600 transition-colors shadow-lg text-center whitespace-nowrap"
           >
             + Nuevo Alumno
           </Link>
