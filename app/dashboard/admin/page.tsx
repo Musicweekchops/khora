@@ -51,6 +51,7 @@ export default function AdminDashboardPage() {
   const [kpis, setKpis] = useState<KPIs | null>(null)
   const [teachers, setTeachers] = useState<TeacherRow[]>([])
   const [busy, setBusy] = useState(true)
+  const [search, setSearch] = useState("")
   const [sort, setSort] = useState<"revenue" | "students" | "usage">("revenue")
   const [selected, setSelected] = useState<TeacherRow | null>(null)
   const [confirm, setConfirm] = useState<{ action: "delete" | "suspend" | "unsuspend"; teacher: TeacherRow } | null>(null)
@@ -193,7 +194,8 @@ export default function AdminDashboardPage() {
     } finally { setActionBusy(false) }
   }
 
-  const sorted = [...teachers].sort((a, b) => {
+  const filtered = teachers.filter(t => t.name.toLowerCase().includes(search.toLowerCase()) || t.email.toLowerCase().includes(search.toLowerCase()))
+  const sorted = [...filtered].sort((a, b) => {
     if (sort === "revenue") return b.revenue - a.revenue
     if (sort === "students") return b.students - a.students
     return b.classCount - a.classCount
@@ -302,9 +304,16 @@ export default function AdminDashboardPage() {
 
                 {/* Table */}
                 <div className="bg-white border border-neutral-100 rounded-2xl shadow-sm overflow-hidden">
-                  <div className="px-6 py-4 border-b border-neutral-50 flex items-center justify-between">
-                    <h2 className="text-sm font-semibold text-neutral-900">Cuentas de profesores</h2>
-                    <div className="flex gap-1 bg-neutral-100 rounded-lg p-0.5">
+                  <div className="px-6 py-4 border-b border-neutral-50 flex items-center justify-between gap-4">
+                    <h2 className="text-sm font-semibold text-neutral-900 whitespace-nowrap">Cuentas de profesores</h2>
+                    <input 
+                      type="text" 
+                      placeholder="Buscar profesor..." 
+                      value={search} 
+                      onChange={e => setSearch(e.target.value)}
+                      className="text-sm px-3 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 w-full max-w-xs"
+                    />
+                    <div className="flex gap-1 bg-neutral-100 rounded-lg p-0.5 flex-shrink-0">
                       {(["revenue","students","usage"] as const).map(s => (
                         <button key={s} onClick={() => setSort(s)}
                           className={`px-3 py-1 text-[11px] font-medium rounded-md transition-all ${sort===s?"bg-white text-neutral-900 shadow-sm":"text-neutral-400"}`}>
@@ -313,7 +322,7 @@ export default function AdminDashboardPage() {
                       ))}
                     </div>
                   </div>
-                  <div className="divide-y divide-neutral-50">
+                  <div className="divide-y divide-neutral-50 max-h-[500px] overflow-y-auto">
                     {sorted.map((t, i) => {
                       const months = Math.floor((Date.now() - new Date(t.joinedAt).getTime()) / (1000*60*60*24*30))
                       const { label: seenLabel, isOnline } = formatLastSeen(t.last_seen_at)
