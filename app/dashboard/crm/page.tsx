@@ -140,12 +140,12 @@ export default function CRMPage() {
               key={col.key}
               onDragOver={handleDragOver}
               onDrop={e => handleDrop(e, col.key)}
-              className={`bg-neutral-50/50 rounded-2xl p-3 flex-col min-w-[300px] w-full md:w-[300px] xl:w-auto xl:flex-1 max-h-[calc(100vh-240px)] ${
+              className={`md:bg-neutral-50/50 md:rounded-2xl md:p-3 flex-col w-full md:min-w-[300px] xl:w-auto xl:flex-1 max-h-[calc(100vh-240px)] ${
                 mobileTab === col.key ? "flex" : "hidden md:flex"
               }`}
             >
               {/* Column Header */}
-              <div className={`flex-shrink-0 flex items-center gap-2 p-3 rounded-xl border-l-4 ${col.color} bg-white mb-3`}>
+              <div className={`hidden md:flex flex-shrink-0 items-center gap-2 p-3 rounded-xl border-l-4 ${col.color} bg-white mb-3`}>
                 <span>{col.icon}</span>
                 <span className="text-sm font-black text-neutral-900">{col.label}</span>
                 <span className="ml-auto bg-neutral-100 text-neutral-600 text-xs font-bold px-2 py-0.5 rounded-full">

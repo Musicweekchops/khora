@@ -181,25 +181,39 @@ export default function AgendaPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-black text-neutral-900 tracking-tight">Agenda</h1>
-          <p className="text-neutral-500 font-medium mt-1 capitalize">{monthYear}</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-black text-neutral-900 tracking-tight">Agenda</h1>
+            <p className="text-neutral-500 font-medium mt-1 capitalize">{monthYear}</p>
+          </div>
+          {/* Mobile Arrows */}
+          <div className="flex items-center gap-2 md:hidden">
+            <button onClick={prevWeek} className="w-10 h-10 bg-white border border-neutral-200 rounded-xl flex items-center justify-center text-neutral-600 hover:bg-neutral-50 transition-colors font-bold">
+              ←
+            </button>
+            <button onClick={nextWeek} className="w-10 h-10 bg-white border border-neutral-200 rounded-xl flex items-center justify-center text-neutral-600 hover:bg-neutral-50 transition-colors font-bold">
+              →
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setShowAvailModal(true)} className="kh-btn-secondary px-4 py-2 border border-violet-200 text-violet-600 flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          <button onClick={() => setShowAvailModal(true)} className="flex-1 md:flex-none kh-btn-secondary px-4 py-2 border border-violet-200 text-violet-600 flex items-center justify-center gap-2">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-            Disponibilidad
+            <span className="hidden sm:inline">Disponibilidad</span>
+            <span className="sm:hidden">Ajustes</span>
           </button>
-          <button onClick={goToday} className="px-4 py-2 bg-white border border-neutral-200 rounded-xl text-sm font-bold text-neutral-700 hover:bg-neutral-50 transition-colors">
+          <button onClick={goToday} className="flex-[0.5] md:flex-none px-4 py-2 bg-white border border-neutral-200 rounded-xl text-sm font-bold text-neutral-700 hover:bg-neutral-50 transition-colors text-center">
             Hoy
           </button>
-          <button onClick={prevWeek} className="w-10 h-10 bg-white border border-neutral-200 rounded-xl flex items-center justify-center text-neutral-600 hover:bg-neutral-50 transition-colors font-bold">
-            ←
-          </button>
-          <button onClick={nextWeek} className="w-10 h-10 bg-white border border-neutral-200 rounded-xl flex items-center justify-center text-neutral-600 hover:bg-neutral-50 transition-colors font-bold">
-            →
-          </button>
+          <div className="hidden md:flex items-center gap-2">
+            <button onClick={prevWeek} className="w-10 h-10 bg-white border border-neutral-200 rounded-xl flex items-center justify-center text-neutral-600 hover:bg-neutral-50 transition-colors font-bold">
+              ←
+            </button>
+            <button onClick={nextWeek} className="w-10 h-10 bg-white border border-neutral-200 rounded-xl flex items-center justify-center text-neutral-600 hover:bg-neutral-50 transition-colors font-bold">
+              →
+            </button>
+          </div>
         </div>
       </div>
 
@@ -298,7 +312,7 @@ export default function AgendaPage() {
       {/* Calendar Grid - Mobile (iCal Style) */}
       <div className="md:hidden space-y-4">
         {/* Horizontal Week Strip */}
-        <div className="flex justify-between items-center bg-white p-2 rounded-3xl border border-neutral-100 shadow-sm">
+        <div className="grid grid-cols-7 gap-1 bg-white p-2 rounded-3xl border border-neutral-100 shadow-sm w-full">
           {weekDays.map((day, i) => {
             const isSelected = toDateStr(day) === toDateStr(mobileSelectedDate)
             const isToday = toDateStr(day) === today
@@ -306,7 +320,7 @@ export default function AgendaPage() {
               <div 
                 key={i} 
                 onClick={() => setMobileSelectedDate(day)}
-                className={`flex flex-col items-center justify-center w-[13%] aspect-[3/4] rounded-2xl cursor-pointer transition-all ${
+                className={`flex flex-col items-center justify-center aspect-[3/4] rounded-xl sm:rounded-2xl cursor-pointer transition-all ${
                   isSelected ? "bg-violet-600 text-white shadow-md scale-105" : "hover:bg-neutral-50 text-neutral-600"
                 }`}
               >
