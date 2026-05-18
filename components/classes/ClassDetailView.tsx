@@ -24,7 +24,8 @@ import {
   ExternalLink,
   ChevronLeft,
   FileText,
-  PlayCircle
+  PlayCircle,
+  BookOpen
 } from "lucide-react"
 import VideoPlayer from "@/components/ui/VideoPlayer"
 import { useToast } from "@/components/ui/Toast"
@@ -35,16 +36,19 @@ interface ClassData {
   student_name: string; student_email?: string; student_id: string | null; teacher_id: string
 }
 interface Note { 
-  id: string; content: string; created_at: string; content_id?: string | null;
-  LibraryContent?: { title: string; url: string; type: string } | null
+  id: string; content: string; created_at: string; content_id?: string | null; playlist_id?: string | null;
+  LibraryContent?: { title: string; url: string; type: string } | null;
+  LibraryPlaylist?: { title: string; description: string | null } | null;
 }
 interface Task { 
   id: string; title: string; description: string | null; completed: boolean;
-  content_id?: string | null; created_at: string;
-  LibraryContent?: { title: string; url: string; type: string } | null
+  content_id?: string | null; playlist_id?: string | null; created_at: string;
+  LibraryContent?: { title: string; url: string; type: string } | null;
+  LibraryPlaylist?: { title: string; description: string | null } | null;
 }
 interface StudentOption { id: string; name: string }
 interface LibraryItem { id: string; title: string; category: string }
+interface Playlist { id: string; title: string; description: string | null }
 
 export default function ClassDetailView({ classId }: { classId: string }) {
   const router = useRouter()
@@ -62,9 +66,10 @@ export default function ClassDetailView({ classId }: { classId: string }) {
   const [savingEdit, setSavingEdit] = useState(false)
 
   // Notes & tasks
-  const [newNote, setNewNote] = useState({ content: "", content_id: "" })
-  const [newTask, setNewTask] = useState({ title: "", description: "", content_id: "" })
+  const [newNote, setNewNote] = useState({ content: "", attached_id: "" })
+  const [newTask, setNewTask] = useState({ title: "", description: "", attached_id: "" })
   const [library, setLibrary] = useState<LibraryItem[]>([])
+  const [playlists, setPlaylists] = useState<Playlist[]>([])
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -132,6 +137,13 @@ export default function ClassDetailView({ classId }: { classId: string }) {
           .eq("teacher_id", classData.teacher_id)
           .order("category")
         if (lib) setLibrary(lib)
+
+        const { data: pl } = await supabase
+          .from("LibraryPlaylist")
+          .select("id, title, description")
+          .eq("teacher_id", classData.teacher_id)
+          .order("title")
+        if (pl) setPlaylists(pl)
       }
 
       await loadNotesAndTasks()
@@ -143,14 +155,14 @@ export default function ClassDetailView({ classId }: { classId: string }) {
   async function loadNotesAndTasks() {
     const { data: n } = await supabase
       .from("ClassNote")
-      .select("*, LibraryContent!ClassNote_content_id_fkey(title, url, type)")
+      .select("*, LibraryContent!ClassNote_content_id_fkey(title, url, type), LibraryPlaylist!ClassNote_playlist_id_fkey(title, description)")
       .eq("class_id", classId)
       .order("created_at", { ascending: false })
     if (n) setNotes(n as any)
 
     const { data: t } = await supabase
       .from("Task")
-      .select("*, LibraryContent(title, url, type)")
+      .select("*, LibraryContent(title, url, type), LibraryPlaylist(title, description)")
       .eq("class_id", classId)
       .order("created_at", { ascending: false })
     if (t) setTasks(t as any)
@@ -185,11 +197,16 @@ export default function ClassDetailView({ classId }: { classId: string }) {
     console.log("[ClassDetail] addNote started", { classId, content: newNote.content })
     setSaving(true)
     
+    const isPlaylist = newNote.attached_id.startsWith("playlist_")
+    const contentId = !isPlaylist && newNote.attached_id ? newNote.attached_id.replace("item_", "") : null
+    const playlistId = isPlaylist ? newNote.attached_id.replace("playlist_", "") : null
+
     try {
       const { error, data } = await supabase.from("ClassNote").insert({ 
         class_id: classId, 
         content: newNote.content.trim(),
-        content_id: newNote.content_id || null
+        content_id: contentId,
+        playlist_id: playlistId
       }).select()
       
       if (error) {
@@ -197,7 +214,15 @@ export default function ClassDetailView({ classId }: { classId: string }) {
         toast(`Error: ${error.message}`, "error")
       } else {
         console.log("Nota guardada OK", data)
-        setNewNote({ content: "", content_id: "" })
+        if (cls?.student_id && (contentId || playlistId)) {
+          await supabase.from("StudentLibraryAccess").upsert({
+            student_id: cls.student_id,
+            content_id: contentId || null,
+            playlist_id: playlistId || null,
+            assigned_by: cls.teacher_id
+          }, { onConflict: contentId ? 'student_id,content_id' : 'student_id,playlist_id' }).catch(err => console.error("Error SLA:", err))
+        }
+        setNewNote({ content: "", attached_id: "" })
         toast("Nota guardada con éxito", "success")
         await loadNotesAndTasks()
       }
@@ -213,6 +238,10 @@ export default function ClassDetailView({ classId }: { classId: string }) {
     if (!newTask.title.trim()) return
     setSaving(true)
 
+    const isPlaylist = newTask.attached_id.startsWith("playlist_")
+    const contentId = !isPlaylist && newTask.attached_id ? newTask.attached_id.replace("item_", "") : null
+    const playlistId = isPlaylist ? newTask.attached_id.replace("playlist_", "") : null
+
     try {
       const { error, data } = await supabase.from("Task").insert({
         class_id: classId, 
@@ -220,13 +249,22 @@ export default function ClassDetailView({ classId }: { classId: string }) {
         teacher_id: cls?.teacher_id ?? null,
         title: newTask.title.trim(), 
         description: newTask.description.trim() || null,
-        content_id: newTask.content_id || null
+        content_id: contentId,
+        playlist_id: playlistId
       }).select()
 
       if (error) {
         toast("Error al asignar tarea", "error")
       } else {
         toast("Tarea asignada correctamente", "success")
+        if (cls?.student_id && (contentId || playlistId)) {
+          await supabase.from("StudentLibraryAccess").upsert({
+            student_id: cls.student_id,
+            content_id: contentId || null,
+            playlist_id: playlistId || null,
+            assigned_by: cls.teacher_id
+          }, { onConflict: contentId ? 'student_id,content_id' : 'student_id,playlist_id' }).catch(err => console.error("Error SLA:", err))
+        }
         if (cls?.student_email) {
           // Trigger new task email
           supabase.functions.invoke("send-email", {
@@ -243,7 +281,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
             }
           }).catch(err => console.error("Error sending task email:", err))
         }
-        setNewTask({ title: "", description: "", content_id: "" })
+        setNewTask({ title: "", description: "", attached_id: "" })
         await loadNotesAndTasks()
       }
     } catch (err) {
@@ -466,14 +504,25 @@ export default function ClassDetailView({ classId }: { classId: string }) {
               />
               <div className="flex items-center justify-between pt-4 border-t border-neutral-200/50">
                 <select 
-                  value={newNote.content_id}
-                  onChange={e => setNewNote(p => ({...p, content_id: e.target.value}))}
-                  className="bg-white border border-neutral-200 rounded-xl px-3 py-1.5 text-xs font-bold text-neutral-500 outline-none hover:border-violet-300"
+                  value={newNote.attached_id}
+                  onChange={e => setNewNote(p => ({...p, attached_id: e.target.value}))}
+                  className="bg-white border border-neutral-200 rounded-xl px-3 py-1.5 text-xs font-bold text-neutral-500 outline-none hover:border-violet-300 max-w-[200px] sm:max-w-xs truncate"
                 >
                   <option value="">📎 Sin material</option>
-                  {library.map(item => (
-                    <option key={item.id} value={item.id}>{item.title}</option>
-                  ))}
+                  {playlists.length > 0 && (
+                    <optgroup label="📁 Series Completas">
+                      {playlists.map(pl => (
+                        <option key={pl.id} value={`playlist_${pl.id}`}>📚 {pl.title}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {library.length > 0 && (
+                    <optgroup label="📄 Materiales Individuales">
+                      {library.map(item => (
+                        <option key={item.id} value={`item_${item.id}`}>🎵 {item.title}</option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
                 <button 
                   onClick={addNote} 
@@ -516,6 +565,20 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                     </div>
                   </div>
                 )}
+                {n.LibraryPlaylist && (
+                  <div className="mt-6 p-4 bg-indigo-50 rounded-2xl border border-indigo-100 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center text-indigo-600 font-bold">📚</div>
+                      <div>
+                        <p className="text-xs font-black text-indigo-900">{n.LibraryPlaylist.title}</p>
+                        <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Serie Completa</p>
+                      </div>
+                    </div>
+                    <Link href={`/dashboard/biblioteca?playlist=${n.playlist_id}`} className="px-3 py-1.5 bg-white text-indigo-600 rounded-xl font-bold text-xs hover:bg-indigo-600 hover:text-white transition-all shadow-sm flex items-center gap-1.5">
+                      Abrir Serie <ExternalLink className="w-3.5 h-3.5" />
+                    </Link>
+                  </div>
+                )}
                 <div className="flex items-center justify-between mt-6 pt-4 border-t border-neutral-50">
                   <p className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">
                     {new Date(n.created_at).toLocaleString("es-CL", { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
@@ -556,14 +619,25 @@ export default function ClassDetailView({ classId }: { classId: string }) {
               />
               <div className="flex items-center justify-between pt-4 border-t border-neutral-200/50">
                 <select 
-                  value={newTask.content_id}
-                  onChange={e => setNewTask(p => ({...p, content_id: e.target.value}))}
-                  className="bg-white border border-neutral-200 rounded-xl px-3 py-1.5 text-xs font-bold text-neutral-500 outline-none hover:border-emerald-300"
+                  value={newTask.attached_id}
+                  onChange={e => setNewTask(p => ({...p, attached_id: e.target.value}))}
+                  className="bg-white border border-neutral-200 rounded-xl px-3 py-1.5 text-xs font-bold text-neutral-500 outline-none hover:border-emerald-300 max-w-[200px] sm:max-w-xs truncate"
                 >
                   <option value="">📎 Material</option>
-                  {library.map(item => (
-                    <option key={item.id} value={item.id}>{item.title}</option>
-                  ))}
+                  {playlists.length > 0 && (
+                    <optgroup label="📁 Series Completas">
+                      {playlists.map(pl => (
+                        <option key={pl.id} value={`playlist_${pl.id}`}>📚 {pl.title}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {library.length > 0 && (
+                    <optgroup label="📄 Materiales Individuales">
+                      {library.map(item => (
+                        <option key={item.id} value={`item_${item.id}`}>🎵 {item.title}</option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
                 <button 
                   onClick={addTask} 
@@ -620,6 +694,20 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                         <ExternalLink className="w-4 h-4" />
                       </a>
                     </div>
+                  </div>
+                )}
+                {t.LibraryPlaylist && (
+                  <div className="mt-6 p-4 bg-indigo-50 rounded-2xl border border-indigo-100 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center text-indigo-600 font-bold">📚</div>
+                      <div>
+                        <p className="text-xs font-black text-indigo-900">{t.LibraryPlaylist.title}</p>
+                        <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Serie Completa</p>
+                      </div>
+                    </div>
+                    <Link href={`/dashboard/biblioteca?playlist=${t.playlist_id}`} className="px-3 py-1.5 bg-white text-indigo-600 rounded-xl font-bold text-xs hover:bg-indigo-600 hover:text-white transition-all shadow-sm flex items-center gap-1.5">
+                      Abrir Serie <ExternalLink className="w-3.5 h-3.5" />
+                    </Link>
                   </div>
                 )}
                 <div className="mt-4 pt-3 border-t border-neutral-50 flex justify-between items-center">

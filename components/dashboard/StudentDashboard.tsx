@@ -58,23 +58,28 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
       .eq("student_id", profile.studentProfileId!)
       .eq("completed", false)
 
-    // 3. Materials count
-    const { data: studentProfile } = await supabase
-      .from("StudentProfile")
-      .select("teacher_id")
-      .eq("id", profile.studentProfileId!)
-      .maybeSingle()
+    // 3. Materials count (explicitly allowed via SLA, Task, or Note)
+    const [slaRes, taskRes, noteRes] = await Promise.all([
+      supabase.from("StudentLibraryAccess").select("content_id, playlist_id").eq("student_id", profile.studentProfileId!),
+      supabase.from("Task").select("content_id, playlist_id").eq("student_id", profile.studentProfileId!),
+      supabase.from("ClassNote").select("content_id, playlist_id, Class!inner(student_id)").eq("Class.student_id", profile.studentProfileId!)
+    ])
 
-    const { count: materials } = await supabase
-      .from("LibraryContent")
-      .select("*", { count: 'exact', head: true })
-      .eq("teacher_id", studentProfile?.teacher_id)
-      .eq("is_public", true)
+    const allowedItems = new Set<string>()
+    const collectSet = (items: any[]) => {
+      items.forEach(item => {
+        if (item.playlist_id) allowedItems.add(`pl_${item.playlist_id}`)
+        if (item.content_id) allowedItems.add(`co_${item.content_id}`)
+      })
+    }
+    if (slaRes.data) collectSet(slaRes.data)
+    if (taskRes.data) collectSet(taskRes.data)
+    if (noteRes.data) collectSet(noteRes.data)
 
     setStats({
       upcomingClasses: upcoming || 0,
       pendingTasks: tasks || 0,
-      totalMaterials: materials || 0
+      totalMaterials: allowedItems.size
     })
 
     setLoading(false)

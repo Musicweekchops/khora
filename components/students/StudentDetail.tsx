@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase"
 import { formatCurrency, formatDate, formatTime } from "@/lib/utils"
 import ScheduleManager from "@/components/students/ScheduleManager"
 import { toast } from "sonner"
-import { Lock, Save, Trash2, Edit3 } from "lucide-react"
+import { Lock, Save, Trash2, Edit3, BookOpen, ExternalLink, Plus, PlayCircle, FileText } from "lucide-react"
 import LastSeenBadge from "@/components/ui/LastSeenBadge"
 import { RichText } from "@/components/ui/RichText"
 
@@ -29,10 +29,17 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
   const [payments, setPayments] = useState<PaymentRow[]>([])
   const [notes, setNotes] = useState<NoteRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<"overview" | "schedule" | "classes" | "tasks" | "payments" | "notes">("overview")
+  const [activeTab, setActiveTab] = useState<"overview" | "schedule" | "classes" | "tasks" | "payments" | "notes" | "materiales">("overview")
   const [newNote, setNewNote] = useState("")
   const [addingNote, setAddingNote] = useState(false)
   const [showPreviewModal, setShowPreviewModal] = useState(false)
+
+  // Materiales asignados
+  const [accessList, setAccessList] = useState<any[]>([])
+  const [library, setLibrary] = useState<any[]>([])
+  const [playlists, setPlaylists] = useState<any[]>([])
+  const [assignId, setAssignId] = useState("")
+  const [assigning, setAssigning] = useState(false)
 
   useEffect(() => { loadAll() }, [studentId])
 
@@ -99,7 +106,53 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
       id: n.id, content: n.content, created_at: n.created_at, class_date: n.Class?.date ?? "",
     })))
 
+    // Assigned materials & playlists
+    if (sp?.teacher_id) {
+      const [acc, lib, pl] = await Promise.all([
+        supabase.from("StudentLibraryAccess").select("id, created_at, LibraryContent(id, title, type, url), LibraryPlaylist(id, title, description)").eq("student_id", studentId),
+        supabase.from("LibraryContent").select("id, title, type").eq("teacher_id", sp.teacher_id).order("title"),
+        supabase.from("LibraryPlaylist").select("id, title").eq("teacher_id", sp.teacher_id).order("title")
+      ])
+      if (acc.data) setAccessList(acc.data)
+      if (lib.data) setLibrary(lib.data)
+      if (pl.data) setPlaylists(pl.data)
+    }
+
     setLoading(false)
+  }
+
+  async function handleAssignAccess() {
+    if (!assignId || !student) return
+    setAssigning(true)
+
+    const isPlaylist = assignId.startsWith("playlist_")
+    const contentId = !isPlaylist ? assignId.replace("item_", "") : null
+    const playlistId = isPlaylist ? assignId.replace("playlist_", "") : null
+
+    const { error } = await supabase.from("StudentLibraryAccess").upsert({
+      student_id: studentId,
+      content_id: contentId || null,
+      playlist_id: playlistId || null,
+      assigned_by: student.teacher_id
+    }, { onConflict: contentId ? 'student_id,content_id' : 'student_id,playlist_id' })
+
+    if (error) toast.error("Error al asignar: " + error.message)
+    else {
+      toast.success("Asignado exitosamente")
+      setAssignId("")
+      await loadAll()
+    }
+    setAssigning(false)
+  }
+
+  async function handleRemoveAccess(id: string) {
+    if (!confirm("¿Quitar acceso a este material o serie?")) return
+    const { error } = await supabase.from("StudentLibraryAccess").delete().eq("id", id)
+    if (error) toast.error("Error al quitar acceso")
+    else {
+      toast.success("Acceso removido")
+      setAccessList(prev => prev.filter(a => a.id !== id))
+    }
   }
 
   async function toggleTask(taskId: string, completed: boolean) {
@@ -179,6 +232,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
     { key: "tasks", label: `Tareas (${tasks.length})`, icon: "📝" },
     { key: "payments", label: `Pagos (${payments.length})`, icon: "💰" },
     { key: "notes", label: `Notas (${notes.length})`, icon: "📋" },
+    { key: "materiales", label: `Materiales (${accessList.length})`, icon: "📚" },
   ]
 
   return (
@@ -470,6 +524,89 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
                 <p className="text-xs text-neutral-400 mt-3">{new Date(n.created_at).toLocaleDateString("es-CL")} {n.class_date ? `· Clase del ${new Date(n.class_date + "T12:00").toLocaleDateString("es-CL")}` : ""}</p>
               </div>
             ))}
+          </div>
+        )}
+
+        {activeTab === "materiales" && (
+          <div className="bg-white rounded-[40px] border border-neutral-100 p-8 space-y-6 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <h3 className="font-black text-xl text-neutral-900 flex items-center gap-3">
+                <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center font-bold">📚</div>
+                Materiales y Series Asignadas
+              </h3>
+            </div>
+
+            <div className="bg-neutral-50 rounded-[32px] p-6 flex flex-col sm:flex-row items-center gap-4 border border-neutral-100">
+              <select 
+                value={assignId}
+                onChange={e => setAssignId(e.target.value)}
+                className="w-full sm:flex-1 bg-white border border-neutral-200 rounded-2xl px-4 py-3 text-sm font-bold text-neutral-700 outline-none hover:border-indigo-300"
+              >
+                <option value="">📎 Seleccionar Serie o Material para asignar...</option>
+                {playlists.length > 0 && (
+                  <optgroup label="📁 Series Completas">
+                    {playlists.map(pl => (
+                      <option key={pl.id} value={`playlist_${pl.id}`}>📚 {pl.title}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {library.length > 0 && (
+                  <optgroup label="📄 Materiales Individuales">
+                    {library.map(item => (
+                      <option key={item.id} value={`item_${item.id}`}>🎵 {item.title}</option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+              <button 
+                onClick={handleAssignAccess}
+                disabled={!assignId || assigning}
+                className="w-full sm:w-auto px-8 py-3 bg-neutral-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-indigo-600 disabled:opacity-30 flex items-center justify-center gap-2 shadow-lg shadow-neutral-900/10 transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                {assigning ? "Asignando..." : "Asignar Acceso"}
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {accessList.length === 0 ? (
+                <div className="text-center py-12 bg-neutral-50/50 rounded-[32px] border border-dashed border-neutral-200">
+                  <p className="text-sm text-neutral-400 font-bold italic">No hay series ni materiales asignados explícitamente</p>
+                </div>
+              ) : accessList.map(acc => (
+                <div key={acc.id} className="p-5 bg-white rounded-3xl border border-neutral-100 flex items-center justify-between group hover:shadow-md hover:border-indigo-100 transition-all">
+                  <div className="flex items-center gap-4">
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold ${acc.LibraryPlaylist ? 'bg-indigo-50 text-indigo-600' : 'bg-violet-50 text-violet-600'}`}>
+                      {acc.LibraryPlaylist ? "📚" : (acc.LibraryContent?.type === 'video' ? <PlayCircle className="w-5 h-5" /> : <FileText className="w-5 h-5" />)}
+                    </div>
+                    <div>
+                      <p className="font-black text-neutral-900 text-base">{acc.LibraryPlaylist ? acc.LibraryPlaylist.title : acc.LibraryContent?.title}</p>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-400 mt-0.5">
+                        {acc.LibraryPlaylist ? "Serie Completa" : acc.LibraryContent?.type} · Asignado el {new Date(acc.created_at).toLocaleDateString("es-CL")}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {acc.LibraryPlaylist ? (
+                      <Link href={`/dashboard/biblioteca?playlist=${acc.LibraryPlaylist.id}`} className="p-3 bg-neutral-50 text-neutral-700 rounded-2xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm">
+                        <ExternalLink className="w-4 h-4" />
+                      </Link>
+                    ) : (acc.LibraryContent?.url && (
+                      <a href={acc.LibraryContent.url} target="_blank" rel="noopener noreferrer" className="p-3 bg-neutral-50 text-neutral-700 rounded-2xl hover:bg-violet-600 hover:text-white transition-all shadow-sm">
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+                    ))}
+                    <button 
+                      onClick={() => handleRemoveAccess(acc.id)} 
+                      title="Quitar acceso"
+                      className="p-3 bg-red-50 text-red-600 rounded-2xl hover:bg-red-600 hover:text-white transition-all opacity-0 group-hover:opacity-100"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

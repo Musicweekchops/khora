@@ -94,13 +94,55 @@ export default function BibliotecaPage() {
     const { data: student } = await supabase.from("StudentProfile").select("teacher_id").eq("id", studentId).maybeSingle()
 
     if (student?.teacher_id) {
-      const [resItems, resPlaylists] = await Promise.all([
-        supabase.from("LibraryContent").select("*").eq("teacher_id", student.teacher_id).eq("is_public", true).order("order_index", { ascending: true }).order("created_at", { ascending: false }),
-        supabase.from("LibraryPlaylist").select("*").eq("teacher_id", student.teacher_id).order("created_at", { ascending: false })
+      // 1. Recopilar accesos explícitos (SLA, Tareas, Notas)
+      const [slaRes, taskRes, noteRes] = await Promise.all([
+        supabase.from("StudentLibraryAccess").select("content_id, playlist_id").eq("student_id", studentId),
+        supabase.from("Task").select("content_id, playlist_id").eq("student_id", studentId),
+        supabase.from("ClassNote").select("content_id, playlist_id, Class!inner(student_id)").eq("Class.student_id", studentId)
       ])
 
-      if (resItems.data) setItems(resItems.data)
-      if (resPlaylists.data) setPlaylists(resPlaylists.data)
+      const allowedPlaylistIds = new Set<string>()
+      const allowedContentIds = new Set<string>()
+
+      const collectIds = (items: any[]) => {
+        items.forEach(item => {
+          if (item.playlist_id) allowedPlaylistIds.add(item.playlist_id)
+          if (item.content_id) allowedContentIds.add(item.content_id)
+        })
+      }
+
+      if (slaRes.data) collectIds(slaRes.data)
+      if (taskRes.data) collectIds(taskRes.data)
+      if (noteRes.data) collectIds(noteRes.data)
+
+      const playlistIdsArr = Array.from(allowedPlaylistIds)
+      const contentIdsArr = Array.from(allowedContentIds)
+
+      // 2. Cargar únicamente las series permitidas
+      if (playlistIdsArr.length > 0) {
+        const { data: pl } = await supabase.from("LibraryPlaylist").select("*").eq("teacher_id", student.teacher_id).in("id", playlistIdsArr).order("created_at", { ascending: false })
+        if (pl) setPlaylists(pl)
+      } else {
+        setPlaylists([])
+      }
+
+      // 3. Cargar contenidos permitidos o pertenecientes a series permitidas
+      const filterConditions = []
+      if (contentIdsArr.length > 0) filterConditions.push(`id.in.(${contentIdsArr.join(',')})`)
+      if (playlistIdsArr.length > 0) filterConditions.push(`playlist_id.in.(${playlistIdsArr.join(',')})`)
+
+      if (filterConditions.length > 0) {
+        const { data: it } = await supabase
+          .from("LibraryContent")
+          .select("*")
+          .eq("teacher_id", student.teacher_id)
+          .or(filterConditions.join(','))
+          .order("order_index", { ascending: true })
+          .order("created_at", { ascending: false })
+        if (it) setItems(it)
+      } else {
+        setItems([])
+      }
     }
     
     setLoading(false)
