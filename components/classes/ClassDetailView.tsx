@@ -148,9 +148,11 @@ export default function ClassDetailView({ classId }: { classId: string }) {
           .eq("teacher_id", classData.teacher_id)
           .order("title")
         if (pl) setPlaylists(pl)
-      }
 
-      await loadNotesAndTasks(classData)
+        await loadNotesAndTasks(classData)
+      } else {
+        await loadNotesAndTasks(null)
+      }
     } finally {
       setLoading(false)
     }
