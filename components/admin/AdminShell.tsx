@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation"
 const NAV = [
   { section: "Plataforma", items: [
     { label: "Resumen", href: "/dashboard/admin", icon: "▣" },
+    { label: "Editar Landing", href: "/dashboard/admin/landing", icon: "✏" },
   ]},
   { section: "Sistema", items: [
     { label: "Ajustes", href: "/dashboard/admin/sistema", icon: "⚙" },

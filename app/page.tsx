@@ -12,7 +12,7 @@ export default function HomePage() {
       if (user) {
         router.push("/dashboard")
       } else {
-        window.location.href = "https://khora.cl"
+        router.push("/login")
       }
     }
   }, [user, loading, router])
