@@ -232,13 +232,13 @@ export default function AgendaPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-black text-neutral-900 tracking-tight">Agenda</h1>
-            <p className="text-neutral-500 font-medium mt-1 capitalize">{monthYear}</p>
+            <p className="hidden md:block text-neutral-500 font-medium mt-1 capitalize">{monthYear}</p>
           </div>
           {/* Mobile Arrows */}
           <div className="flex items-center gap-2 md:hidden">
@@ -480,7 +480,7 @@ export default function AgendaPage() {
         </div>
 
         {/* Daily Timeline without empty gaps */}
-        <div className="space-y-4 relative pl-4 pb-16">
+        <div className="space-y-4 relative pl-4 pb-36">
           {filteredClassesForDay.length > 0 && (
             <div className="absolute left-[34px] top-4 bottom-4 w-0.5 border-l-2 border-dashed border-neutral-200 pointer-events-none" />
           )}
@@ -551,7 +551,7 @@ export default function AgendaPage() {
         </div>
 
         {/* Sticky FAB button */}
-        <div className="fixed bottom-24 right-6 z-40">
+        <div className="fixed bottom-[110px] right-6 z-40">
           <button
             onClick={() => {
               setSelectedSlot({ date: toDateStr(mobileSelectedDate), hour: new Date().getHours() })

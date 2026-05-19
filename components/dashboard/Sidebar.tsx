@@ -161,8 +161,8 @@ export default function Sidebar({ user }: SidebarProps) {
       </aside>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-t border-neutral-200/50 pb-safe">
-        <div className="flex items-center justify-around h-16 px-2">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-t border-neutral-200/60 shadow-[0_-8px_24px_rgba(0,0,0,0.04)] pt-3 pb-[calc(env(safe-area-inset-bottom,16px)+6px)] px-2">
+        <div className="flex items-center justify-around">
           {navItems.slice(0, 4).map(item => { // Limit to 4 items on mobile for space
             const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname?.startsWith(item.href))
             return (
