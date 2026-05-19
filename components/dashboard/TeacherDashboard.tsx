@@ -134,9 +134,9 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
                     <p className="text-sm text-neutral-500">{formatTime(c.start_time)} – {formatTime(c.end_time)} · {c.modalidad === "online" ? "📹 Virtual" : "🏠 Presencial"}</p>
                   </div>
                   <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${
-                    c.status === "COMPLETED" ? "bg-emerald-100 text-emerald-700" : "bg-sky-100 text-sky-700"
+                    c.status === "COMPLETED" ? "bg-emerald-100 text-emerald-700" : c.status === "CONFIRMED" ? "bg-indigo-100 text-indigo-700" : "bg-sky-100 text-sky-700"
                   }`}>
-                    {c.status === "COMPLETED" ? "Completada" : "Programada"}
+                    {c.status === "COMPLETED" ? "Completada" : c.status === "CONFIRMED" ? "Confirmada" : "Programada"}
                   </span>
                   <span className="text-neutral-300 group-hover:text-violet-400 transition-colors">→</span>
                 </div>

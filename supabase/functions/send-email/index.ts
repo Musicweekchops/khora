@@ -38,6 +38,7 @@ serve(async (req) => {
       WELCOME: "¡Te damos la bienvenida a KHORA! 🎵",
       CLASS_CONFIRMATION: "¡Tu Clase de Música Está Confirmada! 🎵",
       CLASS_REMINDER: "Recordatorio: Tienes una clase de música programada 📅",
+      TEACHER_CLASS_CONFIRMED: "¡Clase Confirmada por tu Alumno! 🥁",
     }
 
     const finalSubject = subject || defaultSubjects[type as EmailType] || "Notificación de Khora"

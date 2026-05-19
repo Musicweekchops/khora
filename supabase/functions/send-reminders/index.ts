@@ -89,7 +89,7 @@ serve(async (req) => {
               teacherName: tUser.name,
               date: cls.date,
               time: cls.start_time.slice(0, 5),
-              link: "https://khora.cl/dashboard"
+              link: `https://khora.cl/confirmar-clase?id=${cls.id}`
             }),
           }),
         })

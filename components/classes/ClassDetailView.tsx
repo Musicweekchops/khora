@@ -443,6 +443,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
 
   const statusConfig: Record<string, { label: string; color: string; icon: any }> = {
     SCHEDULED: { label: "Programada", color: "bg-sky-50 text-sky-700 border-sky-100", icon: Calendar },
+    CONFIRMED: { label: "Confirmada", color: "bg-indigo-50 text-indigo-700 border-indigo-100", icon: CheckCircle2 },
     COMPLETED: { label: "Completada", color: "bg-emerald-50 text-emerald-700 border-emerald-100", icon: CheckCircle2 },
     CANCELLED: { label: "Cancelada", color: "bg-red-50 text-red-600 border-red-100", icon: Trash2 },
   }
@@ -531,8 +532,8 @@ export default function ClassDetailView({ classId }: { classId: string }) {
               </div>
               <div>
                 <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Estado</label>
-                <div className="grid grid-cols-3 gap-1.5 p-1 bg-neutral-100 rounded-xl">
-                  {(["SCHEDULED", "COMPLETED", "CANCELLED"] as const).map(s => (
+                <div className="grid grid-cols-4 gap-1.5 p-1 bg-neutral-100 rounded-xl">
+                  {(["SCHEDULED", "CONFIRMED", "COMPLETED", "CANCELLED"] as const).map(s => (
                     <button key={s} type="button" onClick={() => setEditForm(p => ({ ...p, status: s }))}
                       className={`py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${
                         editForm.status === s ? statusConfig[s].color + " shadow-sm font-black" : "text-neutral-400 hover:text-neutral-600"

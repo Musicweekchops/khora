@@ -89,6 +89,7 @@ export default function ClasesPage() {
 
   const statusColors: Record<string, string> = {
     SCHEDULED: "bg-sky-100 text-sky-700",
+    CONFIRMED: "bg-indigo-100 text-indigo-700",
     COMPLETED: "bg-emerald-100 text-emerald-700",
     CANCELLED: "bg-red-100 text-red-600",
   }
@@ -154,7 +155,7 @@ export default function ClasesPage() {
                       </div>
                       <div className="flex flex-col items-end gap-2">
                         <span className={`px-2.5 py-1 rounded-full text-[8px] md:text-[10px] font-black uppercase tracking-widest ${statusColors[c.status] ?? "bg-neutral-100 text-neutral-500"}`}>
-                          {c.status === "SCHEDULED" ? "Prog" : c.status === "COMPLETED" ? "OK" : "Can"}
+                          {c.status === "SCHEDULED" ? "Prog" : c.status === "CONFIRMED" ? "Conf" : c.status === "COMPLETED" ? "OK" : "Can"}
                         </span>
                         <div className="hidden sm:flex w-8 h-8 rounded-full bg-neutral-50 items-center justify-center group-hover:bg-violet-600 group-hover:text-white transition-colors text-neutral-400">
                           →
