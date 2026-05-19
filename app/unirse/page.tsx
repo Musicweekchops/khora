@@ -215,7 +215,7 @@ function RegistrationForm() {
               ))}
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-[11px] font-bold text-neutral-400 uppercase tracking-widest mb-1.5 ml-1">Día ideal</label>
                 <select value={form.preferred_day} onChange={e => set("preferred_day", e.target.value)} 
