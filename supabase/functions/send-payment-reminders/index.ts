@@ -10,6 +10,9 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseKey)
 
   try {
+    return new Response(JSON.stringify({ 
+      message: "El servicio de recordatorios de cobro automáticos está actualmente en pausa por pruebas." 
+    }), { headers: { "Content-Type": "application/json" }, status: 200 })
     const now = new Date()
     const currentMonth = now.toLocaleDateString("es-CL", { month: "long" })
     const startOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`
