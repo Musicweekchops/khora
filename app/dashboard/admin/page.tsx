@@ -20,6 +20,7 @@ interface KPIs {
   totalRevenue: number; revenueThisMonth: number
   avgStudentsPerTeacher: number; avgFeeAcrossPlatform: number
   mostActiveTeacher: string; topMonth: string
+  totalClasses: number
 }
 
 const DAYS_ES = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"]
@@ -162,6 +163,7 @@ export default function AdminDashboardPage() {
 
       const topMonth = Object.entries(_monthMap).sort((a,b) => b[1]-a[1])[0]?.[0] ?? "—"
       const mostActive = [...rows].sort((a,b) => (b.last_seen_at ?? "").localeCompare(a.last_seen_at ?? ""))[0]?.name ?? "—"
+      const totalClasses = classes?.length ?? 0
 
       setKpis({
         totalTeachers: rows.length, newThisMonth, totalStudents, activeStudents,
@@ -169,6 +171,7 @@ export default function AdminDashboardPage() {
         avgStudentsPerTeacher: rows.length ? Math.round(totalStudents / rows.length) : 0,
         avgFeeAcrossPlatform: feeCount ? Math.round(totalFees / feeCount) : 0,
         mostActiveTeacher: mostActive, topMonth,
+        totalClasses,
       })
       setTeachers(rows)
       setGeoMap(_geoMap)
@@ -249,7 +252,7 @@ export default function AdminDashboardPage() {
 
         {busy ? (
           <div className="space-y-4 animate-pulse">
-            <div className="grid grid-cols-4 gap-3">{[1,2,3,4].map(i => <div key={i} className="h-20 bg-white rounded-2xl"/>)}</div>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">{[1,2,3,4,5].map(i => <div key={i} className="h-20 bg-white rounded-2xl"/>)}</div>
             <div className="h-64 bg-white rounded-2xl"/>
           </div>
         ) : (
@@ -257,9 +260,10 @@ export default function AdminDashboardPage() {
             {/* KPIs row 1 — Volumen */}
             <section>
               <p className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-3">Volumen</p>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
                 <InsightCard label="Profesores registrados" value={String(kpis?.totalTeachers ?? 0)} sub={`+${kpis?.newThisMonth ?? 0} este mes`} />
                 <InsightCard label="Total de alumnos" value={String(kpis?.totalStudents ?? 0)} sub={`${kpis?.activeStudents ?? 0} activos`} />
+                <InsightCard label="Clases agendadas" value={String(kpis?.totalClasses ?? 0)} sub="en toda la plataforma" />
                 <InsightCard label="Facturación del mes" value={formatCurrency(kpis?.revenueThisMonth ?? 0)} sub={new Date().toLocaleDateString("es-CL",{month:"long"})} />
                 <InsightCard label="Volumen total" value={formatCurrency(kpis?.totalRevenue ?? 0)} sub="acumulado histórico" />
               </div>
