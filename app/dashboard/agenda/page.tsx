@@ -550,7 +550,7 @@ export default function AgendaPage() {
         </div>
 
         {/* Sticky FAB button */}
-        <div className="fixed bottom-6 right-6 z-40">
+        <div className="fixed bottom-24 right-6 z-40">
           <button
             onClick={() => {
               setSelectedSlot({ date: toDateStr(mobileSelectedDate), hour: new Date().getHours() })
@@ -570,7 +570,7 @@ export default function AgendaPage() {
       </div>
 
       {/* Summary */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="hidden md:grid grid-cols-3 gap-4">
         <div className="bg-gradient-to-br from-violet-500/10 to-violet-500/5 border border-violet-200 rounded-2xl p-5">
           <p className="text-xs font-bold text-violet-600 uppercase tracking-widest">Esta Semana</p>
           <p className="text-3xl font-black text-violet-700 mt-1">{classes.length}</p>

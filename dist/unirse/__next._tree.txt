@@ -1,3 +1,3 @@
-:HL["/_next/static/chunks/c79f4bfb5069b697.css","style"]
+:HL["/_next/static/chunks/dfbdcb02c159f9d4.css","style"]
 :HL["https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap","style"]
-0:{"buildId":"C8xd3CUaTpokj9BXGeX4C","tree":{"name":"","paramType":null,"paramKey":"","hasRuntimePrefetch":false,"slots":{"children":{"name":"unirse","paramType":null,"paramKey":"unirse","hasRuntimePrefetch":false,"slots":{"children":{"name":"__PAGE__","paramType":null,"paramKey":"__PAGE__","hasRuntimePrefetch":false,"slots":null,"isRootLayout":false}},"isRootLayout":false}},"isRootLayout":true},"staleTime":300}
+0:{"buildId":"hdUGmzK6x0YZSTpRC2w7t","tree":{"name":"","paramType":null,"paramKey":"","hasRuntimePrefetch":false,"slots":{"children":{"name":"unirse","paramType":null,"paramKey":"unirse","hasRuntimePrefetch":false,"slots":{"children":{"name":"__PAGE__","paramType":null,"paramKey":"__PAGE__","hasRuntimePrefetch":false,"slots":null,"isRootLayout":false}},"isRootLayout":false}},"isRootLayout":true},"staleTime":300}
