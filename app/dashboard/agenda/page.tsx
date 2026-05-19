@@ -40,6 +40,9 @@ export default function AgendaPage() {
   const [selectedSlot, setSelectedSlot] = useState<{ date: string; hour: number } | null>(null)
   const [mobileSelectedDate, setMobileSelectedDate] = useState(() => new Date())
   const [students, setStudents] = useState<{ id: string; name: string }[]>([])
+  const [currentMonthDate, setCurrentMonthDate] = useState(() => new Date())
+  const [searchTerm, setSearchTerm] = useState("")
+  const [filterTab, setFilterTab] = useState<"ALL" | "PENDING" | "COMPLETED">("ALL")
 
   // Quick-add form state
   const [quickForm, setQuickForm] = useState({ student_id: "", start_time: "10:00", end_time: "11:00", modalidad: "online" })
@@ -53,6 +56,30 @@ export default function AgendaPage() {
     })
   }, [weekStart])
 
+  const monthDays = useMemo(() => {
+    const year = currentMonthDate.getFullYear()
+    const month = currentMonthDate.getMonth()
+    const firstDay = new Date(year, month, 1)
+    const startDayOfWeek = firstDay.getDay()
+    const start = new Date(firstDay)
+    start.setDate(start.getDate() - startDayOfWeek)
+    
+    const days = []
+    for (let i = 0; i < 35; i++) {
+      const d = new Date(start)
+      d.setDate(d.getDate() + i)
+      days.push(d)
+    }
+    if (days[34].getMonth() === month && new Date(year, month + 1, 0).getDate() > days[34].getDate()) {
+      for (let i = 35; i < 42; i++) {
+        const d = new Date(start)
+        d.setDate(d.getDate() + i)
+        days.push(d)
+      }
+    }
+    return days
+  }, [currentMonthDate])
+
   useEffect(() => {
     console.log("[Agenda] Profile state:", { 
       hasProfile: !!profile, 
@@ -63,13 +90,16 @@ export default function AgendaPage() {
       loadClasses()
       loadStudents()
     }
-  }, [profile, weekStart])
+  }, [profile, weekStart, currentMonthDate])
 
   async function loadClasses() {
     setLoading(true)
     try {
-      const start = toDateStr(weekDays[0])
-      const end = toDateStr(weekDays[6])
+      const rangeStart = weekDays[0] < monthDays[0] ? weekDays[0] : monthDays[0]
+      const rangeEnd = weekDays[6] > monthDays[monthDays.length - 1] ? weekDays[6] : monthDays[monthDays.length - 1]
+
+      const start = toDateStr(rangeStart)
+      const end = toDateStr(rangeEnd)
 
       // Load actual classes
       const { data: classData, error: classErr } = await supabase
@@ -169,6 +199,27 @@ export default function AgendaPage() {
 
   const today = toDateStr(new Date())
   const monthYear = weekDays[3].toLocaleDateString("es-CL", { month: "long", year: "numeric" })
+
+  const hasClassesOnDay = (dayStr: string) => {
+    return classes.some(c => c.date === dayStr)
+  }
+
+  const filteredClassesForDay = useMemo(() => {
+    const dayStr = toDateStr(mobileSelectedDate)
+    return classes.filter(c => {
+      if (c.date !== dayStr) return false
+      
+      // Filter by Search term
+      if (searchTerm.trim() && !c.student_name.toLowerCase().includes(searchTerm.toLowerCase())) return false
+      
+      // Filter by Tab
+      if (filterTab === "PENDING") return c.is_booking
+      if (filterTab === "COMPLETED") return c.status === "COMPLETED"
+      if (filterTab === "ALL") return !c.is_booking // classes tab
+      
+      return true
+    })
+  }, [classes, mobileSelectedDate, searchTerm, filterTab])
 
   if (loading && classes.length === 0) {
     return (
@@ -311,96 +362,210 @@ export default function AgendaPage() {
       </div>
 
       {/* Calendar Grid - Mobile (iCal Style) */}
-      <div className="md:hidden space-y-4">
-        {/* Horizontal Week Strip */}
-        <div className="grid grid-cols-7 gap-1 bg-white p-2 rounded-3xl border border-neutral-100 shadow-sm w-full">
-          {weekDays.map((day, i) => {
-            const isSelected = toDateStr(day) === toDateStr(mobileSelectedDate)
-            const isToday = toDateStr(day) === today
-            return (
-              <div 
-                key={i} 
-                onClick={() => setMobileSelectedDate(day)}
-                className={`flex flex-col items-center justify-center aspect-[3/4] rounded-xl sm:rounded-2xl cursor-pointer transition-all ${
-                  isSelected ? "bg-violet-600 text-white shadow-md scale-105" : "hover:bg-neutral-50 text-neutral-600"
-                }`}
-              >
-                <span className={`text-[10px] font-bold uppercase tracking-widest ${isSelected ? "text-violet-200" : isToday ? "text-violet-600" : "text-neutral-400"}`}>
-                  {DAY_NAMES[day.getDay()].charAt(0)}
-                </span>
-                <span className={`text-lg font-black mt-0.5 ${isSelected ? "text-white" : isToday ? "text-violet-600" : "text-neutral-900"}`}>
-                  {day.getDate()}
-                </span>
-              </div>
-            )
-          })}
+      <div className="md:hidden space-y-5">
+        {/* Search bar */}
+        <div className="relative">
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400 text-sm">🔍</span>
+          <input 
+            type="text"
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            placeholder="Buscar por alumno..."
+            className="w-full pl-11 pr-4 py-3.5 bg-neutral-100 border border-neutral-200/60 rounded-2xl text-sm font-bold text-neutral-900 placeholder:text-neutral-400 outline-none focus:bg-white focus:border-violet-500 transition-all shadow-inner"
+          />
         </div>
 
-        {/* Daily Timeline */}
-        <div className="bg-white rounded-3xl border border-neutral-100 overflow-hidden shadow-sm relative">
-          <div className="max-h-[60vh] overflow-y-auto scrollbar-none pb-12">
-            {HOURS.map(hour => {
-              const dayStr = toDateStr(mobileSelectedDate)
-              const slotClasses = getClassesForSlot(dayStr, hour)
+        {/* Compact Monthly Grid Calendar */}
+        <div className="bg-white p-5 rounded-[32px] border border-neutral-100 shadow-sm space-y-4">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-sm font-black text-neutral-900 capitalize">
+              {currentMonthDate.toLocaleDateString("es-CL", { month: "long", year: "numeric" })}
+            </span>
+            <div className="flex gap-1.5">
+              <button 
+                onClick={() => {
+                  const d = new Date(currentMonthDate)
+                  d.setMonth(d.getMonth() - 1)
+                  setCurrentMonthDate(d)
+                }}
+                className="w-8 h-8 rounded-xl bg-neutral-50 border border-neutral-200/50 flex items-center justify-center text-xs font-black text-neutral-600 hover:bg-neutral-100 transition-all"
+              >
+                ←
+              </button>
+              <button 
+                onClick={() => {
+                  const d = new Date(currentMonthDate)
+                  d.setMonth(d.getMonth() + 1)
+                  setCurrentMonthDate(d)
+                }}
+                className="w-8 h-8 rounded-xl bg-neutral-50 border border-neutral-200/50 flex items-center justify-center text-xs font-black text-neutral-600 hover:bg-neutral-100 transition-all"
+              >
+                →
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-7 gap-1 text-center">
+            {DAY_NAMES.map(day => (
+              <span key={day} className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">{day.substring(0, 2)}</span>
+            ))}
+            {monthDays.map((day, idx) => {
+              const dayStr = toDateStr(day)
+              const isSelected = dayStr === toDateStr(mobileSelectedDate)
               const isToday = dayStr === today
+              const hasEvents = hasClassesOnDay(dayStr)
+              const isCurrentMonth = day.getMonth() === currentMonthDate.getMonth()
 
               return (
-                <div key={hour} className="flex border-b border-neutral-50 min-h-[70px] relative group">
-                  {/* Hour label */}
-                  <div className="w-16 flex-shrink-0 text-right pr-3 flex items-start justify-end pointer-events-none">
-                    <span className="text-xs font-bold text-neutral-400 -translate-y-3 bg-white px-1 mt-0.5">{String(hour).padStart(2, "0")}:00</span>
-                  </div>
-
-                  {/* Day cell */}
-                  <div 
-                    onClick={() => slotClasses.length === 0 && handleSlotClick(mobileSelectedDate, hour)}
-                    className={`flex-1 border-l border-neutral-50 relative cursor-pointer hover:bg-violet-50/30 transition-colors ${isToday ? "bg-violet-50/10" : ""}`}
-                  >
-                    <div className="absolute inset-0 opacity-0 group-hover:opacity-100 flex items-center justify-center text-violet-300 font-black text-2xl pb-2">+</div>
-                    
-                    {slotClasses.map(cls => {
-                      const startHr = parseInt(cls.start_time.split(":")[0])
-                      const startMins = parseInt(cls.start_time.split(":")[1] || "0")
-                      const endHr = parseInt(cls.end_time.split(":")[0])
-                      const endMins = parseInt(cls.end_time.split(":")[1] || "0")
-                      
-                      const durationMins = (endHr * 60 + endMins) - (startHr * 60 + startMins)
-                      const heightPx = Math.max(durationMins * 1.16, 45) // scale height slightly for mobile
-                      const topPx = startMins * 1.16
-
-                      return (
-                        <Link 
-                          key={cls.id} 
-                          href={cls.is_booking ? `/dashboard/crm` : `/dashboard/clases/detalles?id=${cls.id}`} 
-                          onClick={e => e.stopPropagation()}
-                          className="absolute z-10 block"
-                          style={{ top: `${topPx}px`, height: `${heightPx}px`, left: '4px', right: '12px' }}
-                        >
-                          <div className={`h-full rounded-2xl p-3 hover:shadow-lg hover:z-20 transition-all cursor-pointer overflow-hidden flex flex-col shadow-sm border ${
-                              cls.status === "COMPLETED"
-                                ? "bg-emerald-50 border-emerald-200 border-l-4 border-l-emerald-500 text-emerald-800"
-                                : cls.is_booking 
-                                  ? "bg-amber-50 border-amber-200 border-l-4 border-l-amber-500 text-amber-800 border-dashed"
-                                  : "bg-violet-50 border-violet-200 border-l-4 border-l-violet-500 text-violet-800"
-                            }`}
-                          >
-                            <div className="flex items-start justify-between gap-2 leading-tight">
-                              <p className="font-black text-[13px] tracking-tight truncate">{cls.student_name}</p>
-                              <p className="opacity-70 text-[10px] font-bold mt-0.5 flex-shrink-0">{formatTime(cls.start_time)}</p>
-                            </div>
-                            <div className="flex items-center gap-2 mt-auto pt-1">
-                               {cls.modalidad === "online" ? <span className="text-[9px] bg-white/60 px-1.5 py-0.5 rounded font-black uppercase tracking-wide">📹 Online</span> : <span className="text-[9px] bg-white/60 px-1.5 py-0.5 rounded font-black uppercase tracking-wide">🏠 Presencial</span>}
-                               {cls.is_recurring && <span className="text-[10px] opacity-70">↻</span>}
-                            </div>
-                          </div>
-                        </Link>
-                      )
-                    })}
-                  </div>
+                <div 
+                  key={idx}
+                  onClick={() => {
+                    setMobileSelectedDate(day)
+                    if (day.getMonth() !== currentMonthDate.getMonth()) {
+                      setCurrentMonthDate(new Date(day))
+                    }
+                  }}
+                  className={`aspect-square rounded-2xl flex flex-col items-center justify-center relative cursor-pointer transition-all ${
+                    isSelected 
+                      ? "bg-neutral-900 text-white shadow-md scale-105" 
+                      : isCurrentMonth 
+                        ? "hover:bg-neutral-50 text-neutral-800" 
+                        : "text-neutral-300 hover:bg-neutral-50/50"
+                  }`}
+                >
+                  <span className="text-sm font-black">{day.getDate()}</span>
+                  {hasEvents && (
+                    <span className={`w-1.5 h-1.5 rounded-full absolute bottom-1.5 ${isSelected ? "bg-white" : isToday ? "bg-violet-600" : "bg-neutral-400"}`} />
+                  )}
+                  {isToday && !isSelected && (
+                    <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-violet-600" />
+                  )}
                 </div>
               )
             })}
           </div>
+        </div>
+
+        {/* Dynamic Filter Tabs */}
+        <div className="flex border-b border-neutral-200/60 pb-1 gap-4 overflow-x-auto scrollbar-none">
+          {(["ALL", "PENDING", "COMPLETED"] as const).map(tab => {
+            const label = tab === "ALL" ? "Clases" : tab === "PENDING" ? "Solicitudes" : "Completadas"
+            const count = tab === "ALL" 
+              ? classes.filter(c => c.date === toDateStr(mobileSelectedDate) && !c.is_booking).length
+              : tab === "PENDING"
+                ? classes.filter(c => c.date === toDateStr(mobileSelectedDate) && c.is_booking).length
+                : classes.filter(c => c.date === toDateStr(mobileSelectedDate) && c.status === "COMPLETED").length
+            
+            const isSelected = filterTab === tab
+
+            return (
+              <button
+                key={tab}
+                onClick={() => setFilterTab(tab)}
+                className={`pb-2 text-xs font-black transition-all relative whitespace-nowrap flex items-center gap-1.5 ${
+                  isSelected ? "text-neutral-900 font-black" : "text-neutral-400 font-bold"
+                }`}
+              >
+                <span>{label}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold ${isSelected ? "bg-neutral-900 text-white" : "bg-neutral-100 text-neutral-500"}`}>
+                  {count}
+                </span>
+                {isSelected && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-neutral-900 rounded-full" />
+                )}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Daily Timeline without empty gaps */}
+        <div className="space-y-4 relative pl-4 pb-16">
+          {filteredClassesForDay.length > 0 && (
+            <div className="absolute left-[34px] top-4 bottom-4 w-0.5 border-l-2 border-dashed border-neutral-200 pointer-events-none" />
+          )}
+
+          {filteredClassesForDay.length === 0 ? (
+            <div className="bg-white rounded-[32px] border border-neutral-100 p-10 text-center shadow-sm">
+              <span className="text-3xl block mb-2">📅</span>
+              <p className="text-sm font-black text-neutral-900">Sin sesiones programadas</p>
+              <p className="text-xs text-neutral-400 font-medium mt-1">Presiona el botón flotante de abajo para agendar una clase.</p>
+              
+              <button
+                onClick={() => {
+                  setSelectedSlot({ date: toDateStr(mobileSelectedDate), hour: 10 })
+                  setQuickForm({
+                    student_id: "",
+                    start_time: "10:00",
+                    end_time: "11:00",
+                    modalidad: "online",
+                  })
+                  setShowModal(true)
+                }}
+                className="mt-4 px-6 py-2.5 bg-neutral-900 text-white rounded-full text-xs font-black uppercase tracking-wider hover:bg-violet-600 transition-all shadow-sm"
+              >
+                + Agendar Sesión
+              </button>
+            </div>
+          ) : (
+            filteredClassesForDay.map((cls) => {
+              let cardBg = "bg-violet-50/90 border-violet-100 hover:border-violet-200 text-violet-900 animate-in fade-in zoom-in duration-200"
+              let bulletColor = "bg-violet-500"
+              if (cls.status === "COMPLETED") {
+                cardBg = "bg-emerald-50/90 border-emerald-100 hover:border-emerald-200 text-emerald-900 animate-in fade-in zoom-in duration-200"
+                bulletColor = "bg-emerald-500"
+              } else if (cls.is_booking) {
+                cardBg = "bg-amber-50/90 border-amber-100 hover:border-amber-200 text-amber-900 border-dashed animate-in fade-in zoom-in duration-200"
+                bulletColor = "bg-amber-500"
+              }
+
+              return (
+                <div key={cls.id} className="flex gap-4 items-start relative group">
+                  <div className="flex flex-col items-center w-10 flex-shrink-0 pt-3">
+                    <span className="text-[10px] font-black text-neutral-400 uppercase tracking-tight">{cls.start_time.split(":")[0]} Hr</span>
+                    <div className={`w-3.5 h-3.5 rounded-full ${bulletColor} border-4 border-white shadow-sm mt-1 z-10`} />
+                  </div>
+
+                  <Link
+                    href={cls.is_booking ? `/dashboard/crm` : `/dashboard/clases/detalles?id=${cls.id}`}
+                    className="flex-1 min-w-0"
+                  >
+                    <div className={`rounded-[24px] border p-4 shadow-sm transition-all flex items-center justify-between gap-4 cursor-pointer hover:shadow-md ${cardBg}`}>
+                      <div className="min-w-0 flex-1">
+                        <h4 className="font-black text-sm md:text-base truncate">{cls.student_name}</h4>
+                        <p className="text-[10px] font-bold opacity-75 uppercase tracking-wider mt-1 flex items-center gap-1.5">
+                          <span>🕒 {formatTime(cls.start_time)} - {formatTime(cls.end_time)}</span>
+                          <span>•</span>
+                          <span>{cls.modalidad === "online" ? "📹 Virtual" : "🏠 Presencial"}</span>
+                        </p>
+                      </div>
+                      <div className="w-8 h-8 rounded-full bg-white/70 flex items-center justify-center text-neutral-500 hover:text-neutral-900 font-bold transition-all shadow-sm flex-shrink-0">
+                        →
+                      </div>
+                    </div>
+                  </Link>
+                </div>
+              )
+            })
+          )}
+        </div>
+
+        {/* Sticky FAB button */}
+        <div className="fixed bottom-6 right-6 z-40">
+          <button
+            onClick={() => {
+              setSelectedSlot({ date: toDateStr(mobileSelectedDate), hour: new Date().getHours() })
+              setQuickForm({
+                student_id: "",
+                start_time: "10:00",
+                end_time: "11:00",
+                modalidad: "online",
+              })
+              setShowModal(true)
+            }}
+            className="w-14 h-14 bg-neutral-900 text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-105 active:scale-95 transition-all text-2xl font-black shadow-neutral-900/40"
+          >
+            +
+          </button>
         </div>
       </div>
 
@@ -423,22 +588,108 @@ export default function AgendaPage() {
         </div>
       </div>
 
-      {/* Quick-Add Modal */}
+      {/* Quick-Add Modal / Bottom Drawer on Mobile */}
       {showModal && selectedSlot && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowModal(false)}>
-          <div className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
-            <h3 className="text-xl font-black text-neutral-900 mb-1">Nueva Clase</h3>
-            <p className="text-sm text-neutral-500 mb-6">
-              {new Date(selectedSlot.date + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}
-            </p>
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-0 md:p-4 animate-in fade-in duration-200" 
+          onClick={() => setShowModal(false)}
+        >
+          <div 
+            onClick={e => e.stopPropagation()} 
+            className="bg-white w-full md:max-w-md rounded-t-[40px] md:rounded-[32px] p-6 md:p-8 shadow-2xl flex flex-col max-h-[90vh] md:max-h-[95vh] overflow-y-auto animate-in slide-in-from-bottom md:slide-in-from-bottom-0 duration-300"
+          >
+            {/* Grab handle for drawer on mobile */}
+            <div className="w-12 h-1.5 bg-neutral-200 rounded-full mx-auto mb-4 md:hidden flex-shrink-0" />
+            
+            <div className="flex items-center justify-between mb-5 flex-shrink-0">
+              <div>
+                <h3 className="text-xl md:text-2xl font-black text-neutral-900 tracking-tight">Crear sesión</h3>
+                <p className="text-xs text-neutral-400 font-medium mt-0.5">Asigna una nueva sesión a tu alumno</p>
+              </div>
+              <button 
+                onClick={() => setShowModal(false)}
+                className="w-9 h-9 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-500 hover:text-neutral-900 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
 
             <div className="space-y-4">
+              {/* Date selection calendar inside modal */}
               <div>
-                <label className="block text-xs font-bold text-neutral-400 uppercase tracking-widest mb-2">Alumno</label>
+                <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-2 ml-1">Fecha de la sesión</label>
+                <div className="bg-neutral-50 border border-neutral-200/60 rounded-2xl p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-black text-neutral-700 capitalize">
+                      {new Date(selectedSlot.date + "T12:00").toLocaleDateString("es-CL", { month: "long", year: "numeric" })}
+                    </span>
+                    <div className="flex gap-1">
+                      <button 
+                        type="button" 
+                        onClick={() => {
+                          const d = new Date(selectedSlot.date + "T12:00")
+                          d.setDate(d.getDate() - 1)
+                          setSelectedSlot(p => p ? { ...p, date: toDateStr(d) } : null)
+                        }}
+                        className="w-6 h-6 bg-white border border-neutral-200 rounded-lg flex items-center justify-center text-[10px] hover:bg-neutral-50 font-bold"
+                      >
+                        ←
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={() => {
+                          const d = new Date(selectedSlot.date + "T12:00")
+                          d.setDate(d.getDate() + 1)
+                          setSelectedSlot(p => p ? { ...p, date: toDateStr(d) } : null)
+                        }}
+                        className="w-6 h-6 bg-white border border-neutral-200 rounded-lg flex items-center justify-center text-[10px] hover:bg-neutral-50 font-bold"
+                      >
+                        →
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* Visual day grid for current week in modal */}
+                  <div className="grid grid-cols-7 gap-1 text-center">
+                    {DAY_NAMES.map(n => <span key={n} className="text-[9px] font-bold text-neutral-400 uppercase">{n.charAt(0)}</span>)}
+                    {(() => {
+                      const activeDate = new Date(selectedSlot.date + "T12:00")
+                      const startOfWeek = new Date(activeDate)
+                      startOfWeek.setDate(activeDate.getDate() - activeDate.getDay())
+                      
+                      return Array.from({ length: 7 }).map((_, idx) => {
+                        const d = new Date(startOfWeek)
+                        d.setDate(startOfWeek.getDate() + idx)
+                        const isSelected = toDateStr(d) === selectedSlot.date
+                        const isToday = toDateStr(d) === today
+                        return (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => setSelectedSlot(p => p ? { ...p, date: toDateStr(d) } : null)}
+                            className={`aspect-square rounded-xl text-xs font-black flex flex-col items-center justify-center transition-all ${
+                              isSelected 
+                                ? "bg-neutral-900 text-white shadow-sm" 
+                                : "hover:bg-neutral-200/50 text-neutral-700"
+                            }`}
+                          >
+                            <span>{d.getDate()}</span>
+                            {isToday && !isSelected && <div className="w-1 h-1 bg-violet-600 rounded-full mt-0.5" />}
+                          </button>
+                        )
+                      })
+                    })()}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-2 ml-1">Alumno</label>
                 <select
                   value={quickForm.student_id}
                   onChange={e => setQuickForm(p => ({ ...p, student_id: e.target.value }))}
-                  className="w-full px-4 py-3 border border-neutral-200 rounded-xl outline-none focus:border-violet-400 text-sm font-bold"
+                  className="w-full px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl outline-none focus:border-violet-400 text-sm font-bold text-neutral-700 appearance-none bg-no-repeat bg-[right_1rem_center]"
+                  style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundSize: '1.25rem' }}
                 >
                   <option value="">Sin asignar</option>
                   {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -447,30 +698,39 @@ export default function AgendaPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-neutral-400 uppercase tracking-widest mb-2">Inicio</label>
+                  <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-2 ml-1">Inicio</label>
                   <input type="time" value={quickForm.start_time} onChange={e => setQuickForm(p => ({ ...p, start_time: e.target.value }))}
-                    className="w-full px-4 py-3 border border-neutral-200 rounded-xl outline-none focus:border-violet-400 text-sm font-bold" />
+                    className="w-full px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl outline-none focus:border-violet-400 text-sm font-bold text-neutral-700" />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-neutral-400 uppercase tracking-widest mb-2">Fin</label>
+                  <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-2 ml-1">Fin</label>
                   <input type="time" value={quickForm.end_time} onChange={e => setQuickForm(p => ({ ...p, end_time: e.target.value }))}
-                    className="w-full px-4 py-3 border border-neutral-200 rounded-xl outline-none focus:border-violet-400 text-sm font-bold" />
+                    className="w-full px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl outline-none focus:border-violet-400 text-sm font-bold text-neutral-700" />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 p-1 bg-neutral-100 rounded-xl">
+              <div className="grid grid-cols-2 gap-2 p-1.5 bg-neutral-100 rounded-2xl">
                 {(["online", "presencial"] as const).map(m => (
                   <button key={m} type="button" onClick={() => setQuickForm(p => ({ ...p, modalidad: m }))}
-                    className={`py-2.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${quickForm.modalidad === m ? "bg-white text-violet-600 shadow-sm" : "text-neutral-400"}`}>
+                    className={`py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${quickForm.modalidad === m ? "bg-white text-violet-600 shadow-sm" : "text-neutral-400"}`}>
                     {m === "online" ? "📹 Virtual" : "🏠 Presencial"}
                   </button>
                 ))}
               </div>
 
-              <div className="flex gap-3 pt-2">
-                <button onClick={() => setShowModal(false)} className="flex-1 py-3 bg-neutral-100 text-neutral-600 rounded-xl text-sm font-bold">Cancelar</button>
-                <button onClick={handleQuickCreate} disabled={saving} className="flex-1 py-3 bg-neutral-900 text-white rounded-xl text-sm font-bold hover:bg-violet-600 transition-colors disabled:opacity-50">
-                  {saving ? "Creando..." : "✓ Crear"}
+              <div className="flex gap-3 pt-3">
+                <button 
+                  onClick={() => setShowModal(false)} 
+                  className="flex-1 py-3.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-full text-xs font-black uppercase tracking-wider transition-all"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleQuickCreate} 
+                  disabled={saving} 
+                  className="flex-1 py-3.5 bg-neutral-900 hover:bg-violet-600 text-white rounded-full text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50 shadow-md shadow-neutral-900/10"
+                >
+                  {saving ? "Creando..." : "Agendar"}
                 </button>
               </div>
             </div>
