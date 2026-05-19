@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Search, X, Check, FileText, PlayCircle, BookOpen, ExternalLink, Link as LinkIcon } from "lucide-react"
 
 interface LibraryItem {
@@ -45,6 +45,18 @@ export default function LibraryPickerModal({
   const [search, setSearch] = useState("")
   const [selectedCategory, setSelectedCategory] = useState<string>("Todas")
   const [tempSelectedId, setTempSelectedId] = useState<string>(currentSelectedId || "")
+
+  // Lock body scroll when modal is open to prevent background scrolling
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden"
+    } else {
+      document.body.style.overflow = ""
+    }
+    return () => {
+      document.body.style.overflow = ""
+    }
+  }, [isOpen])
 
   // Extract unique categories from library
   const categories = useMemo(() => {
@@ -104,10 +116,10 @@ export default function LibraryPickerModal({
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
       <div 
         onClick={e => e.stopPropagation()} 
-        className="bg-white rounded-[32px] md:rounded-[40px] border border-neutral-100 shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
+        className="bg-white rounded-[24px] md:rounded-[32px] border border-neutral-100 shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden transition-all duration-300"
       >
         {/* HEADER */}
-        <div className="p-6 md:p-8 border-b border-neutral-100 flex items-center justify-between bg-neutral-50/50">
+        <div className="p-5 md:p-6 border-b border-neutral-100 flex items-center justify-between bg-neutral-50/50">
           <div>
             <h2 className="text-xl md:text-2xl font-black text-neutral-900 flex items-center gap-3">
               <span className="w-10 h-10 bg-violet-100 text-violet-600 rounded-2xl flex items-center justify-center text-lg">📚</span>
@@ -126,7 +138,7 @@ export default function LibraryPickerModal({
         </div>
 
         {/* SEARCH & TABS */}
-        <div className="p-6 md:px-8 border-b border-neutral-100 space-y-4 bg-white">
+        <div className="p-5 md:p-6 border-b border-neutral-100 space-y-4 bg-white">
           <div className="relative">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
             <input 
@@ -188,7 +200,7 @@ export default function LibraryPickerModal({
         </div>
 
         {/* CONTENT LIST */}
-        <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-3 bg-neutral-50/30 min-h-[250px]">
+        <div className="flex-1 overflow-y-auto p-5 md:p-6 space-y-3 bg-neutral-50/30 min-h-0">
           {activeTab === "playlists" ? (
             filteredPlaylists.length === 0 ? (
               <div className="text-center py-12">
@@ -274,7 +286,7 @@ export default function LibraryPickerModal({
         </div>
 
         {/* FOOTER */}
-        <div className="p-6 md:px-8 border-t border-neutral-100 bg-white flex items-center justify-between gap-4">
+        <div className="p-5 md:p-6 border-t border-neutral-100 bg-white flex items-center justify-between gap-4">
           {currentSelectedId ? (
             <button 
               onClick={handleClear}

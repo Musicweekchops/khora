@@ -162,8 +162,8 @@ export default function Sidebar({ user }: SidebarProps) {
 
       {/* Mobile Bottom Navigation */}
       <nav 
-        className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-t border-neutral-200/60 shadow-[0_-8px_24px_rgba(0,0,0,0.04)] pt-3 px-2"
-        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 16px) + 12px)' }}
+        className="lg:hidden fixed left-4 right-4 z-50 bg-white/95 backdrop-blur-md border border-neutral-200/60 shadow-[0_8px_32px_rgba(0,0,0,0.08)] py-3 px-2 rounded-2xl animate-in slide-in-from-bottom duration-300"
+        style={{ bottom: 'calc(env(safe-area-inset-bottom, 16px) + 12px)' }}
       >
         <div className="flex items-center justify-around">
           {navItems.slice(0, 4).map(item => { // Limit to 4 items on mobile for space

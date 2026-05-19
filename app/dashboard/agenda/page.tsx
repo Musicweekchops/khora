@@ -37,6 +37,19 @@ export default function AgendaPage() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [showAvailModal, setShowAvailModal] = useState(false)
+
+  // Lock body scroll when modals are active to prevent background scroll drifting
+  useEffect(() => {
+    if (showModal || showAvailModal) {
+      document.body.style.overflow = "hidden"
+    } else {
+      document.body.style.overflow = ""
+    }
+    return () => {
+      document.body.style.overflow = ""
+    }
+  }, [showModal, showAvailModal])
+
   const [selectedSlot, setSelectedSlot] = useState<{ date: string; hour: number } | null>(null)
   const [mobileSelectedDate, setMobileSelectedDate] = useState(() => new Date())
   const [students, setStudents] = useState<{ id: string; name: string }[]>([])
@@ -551,7 +564,10 @@ export default function AgendaPage() {
         </div>
 
         {/* Sticky FAB button */}
-        <div className="fixed bottom-[110px] right-6 z-40">
+        <div 
+          className="fixed right-6 z-40"
+          style={{ bottom: 'calc(env(safe-area-inset-bottom, 16px) + 88px)' }}
+        >
           <button
             onClick={() => {
               setSelectedSlot({ date: toDateStr(mobileSelectedDate), hour: new Date().getHours() })

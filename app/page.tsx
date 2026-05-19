@@ -9,7 +9,11 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!loading) {
-      router.push(user ? "/dashboard" : "/login")
+      if (user) {
+        router.push("/dashboard")
+      } else {
+        window.location.href = "https://khora.cl"
+      }
     }
   }, [user, loading, router])
 
