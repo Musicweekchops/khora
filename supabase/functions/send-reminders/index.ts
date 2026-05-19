@@ -8,7 +8,7 @@ const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")
 
 // El dominio desde donde enviarás. En modo de prueba con Resend, puedes usar "onboarding@resend.dev" 
 // pero solo podrás enviarte correos a ti mismo. Una vez verifiques tu dominio, cámbialo aquí.
-const FROM_EMAIL = "Khora <noreply@khora.cl>" 
+const FROM_EMAIL = "Khora <hola@khora.cl>" 
 
 serve(async (req) => {
   // Configuración de Supabase (usamos Service Role para ignorar RLS en este proceso de sistema)
