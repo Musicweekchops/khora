@@ -58,6 +58,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
   const [cls, setCls] = useState<ClassData | null>(null)
   const [notes, setNotes] = useState<Note[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
+  const [reviewTasks, setReviewTasks] = useState<Task[]>([])
   const [students, setStudents] = useState<StudentOption[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -149,13 +150,15 @@ export default function ClassDetailView({ classId }: { classId: string }) {
         if (pl) setPlaylists(pl)
       }
 
-      await loadNotesAndTasks()
+      await loadNotesAndTasks(classData)
     } finally {
       setLoading(false)
     }
   }
 
-  async function loadNotesAndTasks() {
+  async function loadNotesAndTasks(currentCls?: ClassData | null) {
+    const activeCls = currentCls || cls
+
     const { data: n } = await supabase
       .from("ClassNote")
       .select("*, LibraryContent!ClassNote_content_id_fkey(title, url, type), LibraryPlaylist!ClassNote_playlist_id_fkey(title, description)")
@@ -169,6 +172,36 @@ export default function ClassDetailView({ classId }: { classId: string }) {
       .eq("class_id", classId)
       .order("created_at", { ascending: false })
     if (t) setTasks(t as any)
+
+    if (activeCls && activeCls.student_id) {
+      const { data: siblingClasses } = await supabase
+        .from("Class")
+        .select("id, date, start_time")
+        .eq("student_id", activeCls.student_id)
+        .order("date", { ascending: false })
+        .order("start_time", { ascending: false })
+
+      let prevClassId: string | null = null
+      if (siblingClasses) {
+        const currentIndex = siblingClasses.findIndex(sc => sc.id === classId)
+        if (currentIndex !== -1 && currentIndex < siblingClasses.length - 1) {
+          prevClassId = siblingClasses[currentIndex + 1].id
+        }
+      }
+
+      if (prevClassId) {
+        const { data: revT } = await supabase
+          .from("Task")
+          .select("*, LibraryContent(title, url, type), LibraryPlaylist(title, description)")
+          .eq("class_id", prevClassId)
+          .order("created_at", { ascending: false })
+        if (revT) setReviewTasks(revT as any)
+      } else {
+        setReviewTasks([])
+      }
+    } else {
+      setReviewTasks([])
+    }
   }
 
   async function saveEdit() {
@@ -299,6 +332,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
   async function toggleTask(taskId: string, completed: boolean) {
     await supabase.from("Task").update({ completed: !completed }).eq("id", taskId)
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, completed: !completed } : t))
+    setReviewTasks(prev => prev.map(t => t.id === taskId ? { ...t, completed: !completed } : t))
   }
 
   async function deleteNote(noteId: string) {
@@ -309,6 +343,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
   async function deleteTask(taskId: string) {
     await supabase.from("Task").delete().eq("id", taskId)
     setTasks(prev => prev.filter(t => t.id !== taskId))
+    setReviewTasks(prev => prev.filter(t => t.id !== taskId))
   }
 
   if (loading) return <div className="animate-pulse space-y-4">{[1, 2].map(i => <div key={i} className="h-32 bg-white rounded-3xl" />)}</div>
@@ -490,7 +525,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
       {/* CONTENT: Notes & Tasks */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* NOTES */}
-        <div className="bg-white rounded-[40px] border border-neutral-100 p-8 space-y-6 shadow-sm">
+        <div className="bg-white rounded-3xl md:rounded-[40px] border border-neutral-100 p-5 md:p-8 space-y-6 shadow-sm">
           <h3 className="font-black text-xl text-neutral-900 flex items-center gap-3">
             <div className="w-10 h-10 bg-violet-50 text-violet-600 rounded-2xl flex items-center justify-center">
               <StickyNote className="w-5 h-5" />
@@ -592,7 +627,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                     {new Date(n.created_at).toLocaleString("es-CL", { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                   </p>
                   {profile?.role === 'TEACHER' && (
-                    <button onClick={() => deleteNote(n.id)} className="text-[10px] text-red-300 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-600 font-black uppercase tracking-widest">Eliminar</button>
+                    <button onClick={() => deleteNote(n.id)} className="text-[10px] text-red-400 md:opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-600 font-black uppercase tracking-widest">Eliminar</button>
                   )}
                 </div>
               </div>
@@ -601,73 +636,16 @@ export default function ClassDetailView({ classId }: { classId: string }) {
         </div>
 
         {/* TASKS */}
-        <div className="bg-white rounded-[40px] border border-neutral-100 p-8 space-y-6 shadow-sm">
+        <div className="bg-white rounded-3xl md:rounded-[40px] border border-neutral-100 p-5 md:p-8 space-y-8 shadow-sm">
           <h3 className="font-black text-xl text-neutral-900 flex items-center gap-3">
             <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center">
               <ClipboardList className="w-5 h-5" />
             </div>
-            Tareas Asignadas
+            Seguimiento de Tareas
           </h3>
 
-          {profile?.role === "TEACHER" && (
-            <div className="bg-neutral-50 rounded-[32px] p-6 space-y-4 border border-neutral-100">
-              <input 
-                type="text" 
-                value={newTask.title} 
-                onChange={e => setNewTask(p => ({ ...p, title: e.target.value }))}
-                placeholder="Título de la tarea..."
-                className="w-full bg-transparent border-0 outline-none text-base font-black text-neutral-900 placeholder:text-neutral-300" 
-              />
-              <textarea 
-                value={newTask.description} 
-                onChange={e => setNewTask(p => ({ ...p, description: e.target.value }))}
-                placeholder="Detalles opcionales…" 
-                rows={2}
-                className="w-full bg-transparent border-0 outline-none text-sm font-medium resize-none text-neutral-600" 
-              />
-              <div className="flex items-center justify-between pt-4 border-t border-neutral-200/50 gap-4">
-                <div className="flex items-center gap-2 min-w-0">
-                  <button 
-                    type="button"
-                    onClick={() => setModalTarget("task")}
-                    className={`px-4 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center gap-2 border transition-all truncate shadow-sm ${
-                      newTask.attached_id
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-                        : "bg-white text-neutral-600 border-neutral-200 hover:border-emerald-300 hover:text-neutral-900"
-                    }`}
-                  >
-                    <BookOpen className="w-4 h-4 flex-shrink-0" />
-                    <span className="truncate">{newTask.attached_id ? `📎 ${newTask.attached_title || "Material Adjunto"}` : "📎 Adjuntar Material"}</span>
-                  </button>
-                  {newTask.attached_id && (
-                    <button
-                      type="button"
-                      onClick={() => setNewTask(p => ({...p, attached_id: "", attached_title: "", attached_type: ""}))}
-                      className="p-2.5 text-neutral-400 hover:text-red-600 rounded-xl hover:bg-red-50 transition-all flex-shrink-0"
-                      title="Quitar adjunto"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-                <button 
-                  onClick={addTask} 
-                  disabled={!newTask.title.trim() || saving}
-                  className="px-6 py-2.5 bg-neutral-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-emerald-600 disabled:opacity-30 shadow-lg flex items-center gap-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  {saving ? "..." : "Asignar"}
-                </button>
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-3">
-            {tasks.length === 0 ? (
-              <div className="text-center py-12 bg-neutral-50/50 rounded-[32px] border border-dashed border-neutral-200">
-                <p className="text-sm text-neutral-400 font-bold italic">Sin tareas aún</p>
-              </div>
-            ) : tasks.map(t => (
+          {(() => {
+            const renderTaskItem = (t: Task, isReview: boolean) => (
               <div key={t.id} className="flex flex-col p-5 bg-white border border-neutral-100 rounded-3xl hover:shadow-md transition-all group">
                 <div className="flex items-start gap-4">
                   <button onClick={() => toggleTask(t.id, t.completed)}
@@ -681,7 +659,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                     {t.description && <p className="text-xs text-neutral-500 font-medium mt-1 uppercase tracking-tighter">{t.description}</p>}
                   </div>
                   {profile?.role === 'TEACHER' && (
-                    <button onClick={() => deleteTask(t.id)} className="text-neutral-300 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-500 p-1">
+                    <button onClick={() => deleteTask(t.id)} className="text-neutral-400 md:opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-500 p-1">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   )}
@@ -723,12 +701,101 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                 )}
                 <div className="mt-4 pt-3 border-t border-neutral-50 flex justify-between items-center">
                   <p className="text-[9px] font-black text-neutral-300 uppercase tracking-widest">
-                    Asignada el {new Date(t.created_at).toLocaleDateString("es-CL")}
+                    {isReview ? "Asignada la clase pasada" : `Asignada el ${new Date(t.created_at).toLocaleDateString("es-CL")}`}
                   </p>
                 </div>
               </div>
-            ))}
-          </div>
+            )
+
+            return (
+              <>
+                {/* SECTION 1: TASKS TO REVIEW TODAY */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between border-b border-neutral-100 pb-2">
+                    <h4 className="text-xs font-black text-neutral-400 uppercase tracking-widest">📋 Tareas para revisar hoy</h4>
+                    <span className="text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full font-black uppercase tracking-widest">De la clase anterior</span>
+                  </div>
+
+                  <div className="space-y-3">
+                    {reviewTasks.length === 0 ? (
+                      <div className="text-center py-6 bg-neutral-50/50 rounded-2xl border border-dashed border-neutral-200">
+                        <p className="text-xs text-neutral-400 font-bold italic">Sin tareas pendientes de la clase pasada</p>
+                      </div>
+                    ) : reviewTasks.map(t => renderTaskItem(t, true))}
+                  </div>
+                </div>
+
+                {/* SECTION 2: TASKS ASSIGNED TODAY */}
+                <div className="space-y-6 pt-4 border-t border-neutral-100">
+                  <div className="flex items-center justify-between border-b border-neutral-100 pb-2">
+                    <h4 className="text-xs font-black text-neutral-400 uppercase tracking-widest">✍️ Tareas asignadas hoy</h4>
+                    <span className="text-[10px] bg-violet-50 text-violet-700 px-2 py-0.5 rounded-full font-black uppercase tracking-widest">Para la clase siguiente</span>
+                  </div>
+
+                  {profile?.role === "TEACHER" && (
+                    <div className="bg-neutral-50 rounded-[32px] p-6 space-y-4 border border-neutral-100">
+                      <input 
+                        type="text" 
+                        value={newTask.title} 
+                        onChange={e => setNewTask(p => ({ ...p, title: e.target.value }))}
+                        placeholder="Título de la nueva tarea..."
+                        className="w-full bg-transparent border-0 outline-none text-base font-black text-neutral-900 placeholder:text-neutral-300" 
+                      />
+                      <textarea 
+                        value={newTask.description} 
+                        onChange={e => setNewTask(p => ({ ...p, description: e.target.value }))}
+                        placeholder="Detalles opcionales…" 
+                        rows={2}
+                        className="w-full bg-transparent border-0 outline-none text-sm font-medium resize-none text-neutral-600" 
+                      />
+                      <div className="flex items-center justify-between pt-4 border-t border-neutral-200/50 gap-4">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <button 
+                            type="button"
+                            onClick={() => setModalTarget("task")}
+                            className={`px-4 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center gap-2 border transition-all truncate shadow-sm ${
+                              newTask.attached_id
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                                : "bg-white text-neutral-600 border-neutral-200 hover:border-emerald-300 hover:text-neutral-900"
+                            }`}
+                          >
+                            <BookOpen className="w-4 h-4 flex-shrink-0" />
+                            <span className="truncate">{newTask.attached_id ? `📎 ${newTask.attached_title || "Material Adjunto"}` : "📎 Adjuntar Material"}</span>
+                          </button>
+                          {newTask.attached_id && (
+                            <button
+                              type="button"
+                              onClick={() => setNewTask(p => ({...p, attached_id: "", attached_title: "", attached_type: ""}))}
+                              className="p-2.5 text-neutral-400 hover:text-red-600 rounded-xl hover:bg-red-50 transition-all flex-shrink-0"
+                              title="Quitar adjunto"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                        <button 
+                          onClick={addTask} 
+                          disabled={!newTask.title.trim() || saving}
+                          className="px-6 py-2.5 bg-neutral-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-emerald-600 disabled:opacity-30 shadow-lg flex items-center gap-2"
+                        >
+                          <Plus className="w-4 h-4" />
+                          {saving ? "..." : "Asignar"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-3">
+                    {tasks.length === 0 ? (
+                      <div className="text-center py-8 bg-neutral-50/50 rounded-[32px] border border-dashed border-neutral-200">
+                        <p className="text-sm text-neutral-400 font-bold italic">No has asignado tareas en esta clase</p>
+                      </div>
+                    ) : tasks.map(t => renderTaskItem(t, false))}
+                  </div>
+                </div>
+              </>
+            )
+          })()}
         </div>
       </div>
 
