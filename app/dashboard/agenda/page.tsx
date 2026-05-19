@@ -61,8 +61,9 @@ export default function AgendaPage() {
     const month = currentMonthDate.getMonth()
     const firstDay = new Date(year, month, 1)
     const startDayOfWeek = firstDay.getDay()
+    const paddingDays = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1
     const start = new Date(firstDay)
-    start.setDate(start.getDate() - startDayOfWeek)
+    start.setDate(start.getDate() - paddingDays)
     
     const days = []
     for (let i = 0; i < 35; i++) {
@@ -406,8 +407,8 @@ export default function AgendaPage() {
           </div>
 
           <div className="grid grid-cols-7 gap-1 text-center">
-            {DAY_NAMES.map(day => (
-              <span key={day} className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">{day.substring(0, 2)}</span>
+            {["Lu", "Ma", "Mi", "Ju", "Vi", "Sá", "Do"].map(day => (
+              <span key={day} className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">{day}</span>
             ))}
             {monthDays.map((day, idx) => {
               const dayStr = toDateStr(day)
