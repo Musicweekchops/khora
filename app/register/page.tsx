@@ -10,7 +10,7 @@ import { useRouter } from "next/navigation"
 
 export default function RegisterPage() {
   const router = useRouter()
-  const [form, setForm] = useState({ name: "", email: "", password: "", region: "", comuna: "" })
+  const [form, setForm] = useState({ name: "", email: "", password: "", region: "", comuna: "", instrumento: "" })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
 
@@ -31,7 +31,7 @@ export default function RegisterPage() {
     const { error: err, data } = await supabase.auth.signUp({
       email: form.email,
       password: form.password,
-      options: { data: { name: form.name, role: "TEACHER", region: fullLocation } },
+      options: { data: { name: form.name, role: "TEACHER", region: fullLocation, instrumento: form.instrumento } },
     })
 
     if (err) {
@@ -131,6 +131,25 @@ export default function RegisterPage() {
                   ))}
                 </select>
               </div>
+            </div>
+
+            <div>
+              <label className="kh-label">Instrumento / Especialidad</label>
+              <select 
+                required 
+                value={form.instrumento} 
+                onChange={e => set("instrumento", e.target.value)} 
+                className="kh-input text-[13px] text-neutral-600 bg-white"
+              >
+                <option value="" disabled>Selecciona tu instrumento...</option>
+                <option value="Batería">🥁 Batería</option>
+                <option value="Piano / Teclado">🎹 Piano / Teclado</option>
+                <option value="Guitarra">🎸 Guitarra</option>
+                <option value="Bajo Eléctrico">🎸 Bajo Eléctrico</option>
+                <option value="Canto / Voz">🎤 Canto / Voz</option>
+                <option value="Producción Musical">🎚️ Producción Musical</option>
+                <option value="Otros">🎵 Otros</option>
+              </select>
             </div>
 
             <button type="submit" disabled={loading} className="kh-btn-primary w-full py-2.5 mt-2">

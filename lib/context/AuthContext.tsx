@@ -17,6 +17,7 @@ export interface UserProfile {
   is_admin: boolean
   teacherProfileId: string | null
   studentProfileId: string | null
+  instrumento?: string | null
 }
 
 interface AuthContextType {
@@ -77,7 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .from('User')
           .select(`
             id, email, name, phone, role, is_admin,
-            TeacherProfile ( id ),
+            TeacherProfile ( id, instrumento ),
             StudentProfile ( id )
           `)
           .eq('id', authUser.id)
@@ -98,6 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             is_admin: data.is_admin ?? false,
             teacherProfileId: tp?.id ?? null,
             studentProfileId: sp?.id ?? null,
+            instrumento: tp?.instrumento ?? null,
           }
         }
         

@@ -12,7 +12,7 @@ interface TeacherRow {
   id: string; user_id: string; name: string; email: string; region: string
   students: number; activeStudents: number; revenue: number; avgFee: number
   last_seen_at: string | null; joinedAt: string; is_suspended: boolean
-  classCount: number; topDay: string
+  classCount: number; topDay: string; instrumento: string | null
 }
 interface KPIs {
   totalTeachers: number; newThisMonth: number
@@ -71,7 +71,7 @@ export default function AdminDashboardPage() {
       // Base query — only stable columns
       const { data: raw, error } = await supabase
         .from("TeacherProfile")
-        .select(`id, region, created_at, user_id,
+        .select(`id, region, created_at, user_id, instrumento,
           User ( name, email, last_sign_in_at, is_admin ),
           StudentProfile ( id, status ),
           Payment ( amount, date )`)
@@ -156,6 +156,7 @@ export default function AdminDashboardPage() {
             revenue: rev, avgFee, last_seen_at: t.User?.last_sign_in_at ?? null, joinedAt: t.created_at,
             is_suspended: suspendMap[t.id] ?? false,
             classCount: teacherClasses.length, topDay,
+            instrumento: t.instrumento ?? null,
           }
         })
 
@@ -451,6 +452,38 @@ export default function AdminDashboardPage() {
                         <span className="text-[12px] font-medium text-neutral-800 text-right max-w-[55%]">{value}</span>
                       </div>
                     ))}
+
+                    {/* Instrument select */}
+                    <div className="pt-3 border-t border-neutral-100 space-y-1.5">
+                      <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">Especialidad / Instrumento</label>
+                      <select
+                        value={selected.instrumento || ""}
+                        onChange={async (e) => {
+                          const val = e.target.value
+                          const { error } = await supabase
+                            .from("TeacherProfile")
+                            .update({ instrumento: val || null })
+                            .eq("id", selected.id)
+
+                          if (error) {
+                            alert("Error al actualizar: " + error.message)
+                          } else {
+                            setTeachers(prev => prev.map(t => t.id === selected.id ? { ...t, instrumento: val || null } : t))
+                            setSelected(prev => prev ? { ...prev, instrumento: val || null } : null)
+                          }
+                        }}
+                        className="w-full text-xs font-bold bg-neutral-50 border border-neutral-100 rounded-xl px-3 py-2 outline-none focus:bg-white focus:border-violet-300 transition-all cursor-pointer"
+                      >
+                        <option value="">No especificado</option>
+                        <option value="Batería">🥁 Batería</option>
+                        <option value="Piano / Teclado">🎹 Piano / Teclado</option>
+                        <option value="Guitarra">🎸 Guitarra</option>
+                        <option value="Bajo Eléctrico">🎸 Bajo Eléctrico</option>
+                        <option value="Canto / Voz">🎤 Canto / Voz</option>
+                        <option value="Producción Musical">🎚️ Producción Musical</option>
+                        <option value="Otros">🎵 Otros</option>
+                      </select>
+                    </div>
 
                     <div className="pt-2 space-y-2 border-t border-neutral-100">
                       <button

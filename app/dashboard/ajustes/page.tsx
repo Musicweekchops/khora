@@ -25,6 +25,28 @@ export default function AjustesPage() {
     confirmPassword: ""
   })
 
+  const [instrumento, setInstrumento] = useState(profile?.instrumento || "")
+  const [savingInstrumento, setSavingInstrumento] = useState(false)
+
+  async function handleUpdateInstrumento(e: React.FormEvent) {
+    e.preventDefault()
+    if (!profile?.teacherProfileId) return
+    setSavingInstrumento(true)
+    
+    const { error } = await supabase
+      .from("TeacherProfile")
+      .update({ instrumento })
+      .eq("id", profile.teacherProfileId)
+
+    if (error) {
+      toast.error(error.message)
+    } else {
+      toast.success("Instrumento actualizado correctamente")
+      profile.instrumento = instrumento
+    }
+    setSavingInstrumento(false)
+  }
+
   async function handleUpdatePassword(e: React.FormEvent) {
     e.preventDefault()
     if (passForm.newPassword !== passForm.confirmPassword) {
@@ -108,8 +130,52 @@ export default function AjustesPage() {
               <InfoField label="Correo Electrónico" value={profile.email} icon={<Mail className="w-4 h-4" />} />
               <InfoField label="Rol de Usuario" value={profile.role === 'TEACHER' ? "Profesor" : "Alumno"} icon={<ShieldCheck className="w-4 h-4" />} />
               <InfoField label="Teléfono" value={profile.phone || "No registrado"} icon={<Phone className="w-4 h-4" />} />
+              {profile.role === 'TEACHER' && (
+                <InfoField label="Instrumento Principal" value={profile.instrumento || "No especificado"} icon={<span>🎸</span>} />
+              )}
             </div>
           </section>
+
+          {/* Instrument Section (Only for Teachers) */}
+          {profile.role === 'TEACHER' && (
+            <section className="bg-white rounded-[40px] border border-neutral-100 p-10 shadow-sm space-y-8">
+              <h3 className="text-xl font-black text-neutral-900 flex items-center gap-3">
+                <span className="text-lg">🎸</span>
+                Especialidad e Instrumento
+              </h3>
+              
+              <form onSubmit={handleUpdateInstrumento} className="space-y-6">
+                <div className="space-y-4">
+                  <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest px-1">Instrumento que enseñas</label>
+                  <select 
+                    value={instrumento}
+                    onChange={e => setInstrumento(e.target.value)}
+                    className="w-full bg-neutral-50 border border-neutral-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:bg-white focus:border-violet-300 transition-all appearance-none bg-no-repeat bg-[right_1.5rem_center]"
+                    style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundSize: '1.25rem' }}
+                    required
+                  >
+                    <option value="" disabled>Selecciona tu instrumento...</option>
+                    <option value="Batería">🥁 Batería</option>
+                    <option value="Piano / Teclado">🎹 Piano / Teclado</option>
+                    <option value="Guitarra">🎸 Guitarra</option>
+                    <option value="Bajo Eléctrico">🎸 Bajo Eléctrico</option>
+                    <option value="Canto / Voz">🎤 Canto / Voz</option>
+                    <option value="Producción Musical">🎚️ Producción Musical</option>
+                    <option value="Otros">🎵 Otros</option>
+                  </select>
+                </div>
+
+                <button 
+                  type="submit" 
+                  disabled={savingInstrumento || instrumento === profile.instrumento}
+                  className="w-full sm:w-auto px-10 py-4 bg-neutral-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-violet-600 transition-all shadow-xl disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+                >
+                  {savingInstrumento ? <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" /> : <Save className="w-4 h-4" />}
+                  Guardar Especialidad
+                </button>
+              </form>
+            </section>
+          )}
 
           {/* Security Section */}
           <section className="bg-white rounded-[40px] border border-neutral-100 p-10 shadow-sm space-y-8">
