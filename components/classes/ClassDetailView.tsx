@@ -29,6 +29,7 @@ import {
 } from "lucide-react"
 import VideoPlayer from "@/components/ui/VideoPlayer"
 import { useToast } from "@/components/ui/Toast"
+import LibraryPickerModal from "@/components/ui/LibraryPickerModal"
 
 interface ClassData {
   id: string; date: string; start_time: string; end_time: string
@@ -47,7 +48,7 @@ interface Task {
   LibraryPlaylist?: { title: string; description: string | null } | null;
 }
 interface StudentOption { id: string; name: string }
-interface LibraryItem { id: string; title: string; category: string }
+interface LibraryItem { id: string; title: string; category: string; type: string; url?: string }
 interface Playlist { id: string; title: string; description: string | null }
 
 export default function ClassDetailView({ classId }: { classId: string }) {
@@ -66,11 +67,12 @@ export default function ClassDetailView({ classId }: { classId: string }) {
   const [savingEdit, setSavingEdit] = useState(false)
 
   // Notes & tasks
-  const [newNote, setNewNote] = useState({ content: "", attached_id: "" })
-  const [newTask, setNewTask] = useState({ title: "", description: "", attached_id: "" })
+  const [newNote, setNewNote] = useState({ content: "", attached_id: "", attached_title: "", attached_type: "" })
+  const [newTask, setNewTask] = useState({ title: "", description: "", attached_id: "", attached_title: "", attached_type: "" })
   const [library, setLibrary] = useState<LibraryItem[]>([])
   const [playlists, setPlaylists] = useState<Playlist[]>([])
   const [saving, setSaving] = useState(false)
+  const [modalTarget, setModalTarget] = useState<"note" | "task" | null>(null)
 
   useEffect(() => {
     loadAll()
@@ -133,8 +135,9 @@ export default function ClassDetailView({ classId }: { classId: string }) {
 
         const { data: lib } = await supabase
           .from("LibraryContent")
-          .select("id, title, category")
+          .select("id, title, category, type, url")
           .eq("teacher_id", classData.teacher_id)
+          .order("category")
           .order("category")
         if (lib) setLibrary(lib)
 
@@ -222,7 +225,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
             assigned_by: cls.teacher_id
           }, { onConflict: contentId ? 'student_id,content_id' : 'student_id,playlist_id' }).catch(err => console.error("Error SLA:", err))
         }
-        setNewNote({ content: "", attached_id: "" })
+        setNewNote({ content: "", attached_id: "", attached_title: "", attached_type: "" })
         toast("Nota guardada con éxito", "success")
         await loadNotesAndTasks()
       }
@@ -281,7 +284,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
             }
           }).catch(err => console.error("Error sending task email:", err))
         }
-        setNewTask({ title: "", description: "", attached_id: "" })
+        setNewTask({ title: "", description: "", attached_id: "", attached_title: "", attached_type: "" })
         await loadNotesAndTasks()
       }
     } catch (err) {
@@ -502,28 +505,31 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                 rows={4}
                 className="w-full bg-transparent border-0 outline-none text-sm font-medium resize-none text-neutral-700 placeholder:text-neutral-300" 
               />
-              <div className="flex items-center justify-between pt-4 border-t border-neutral-200/50">
-                <select 
-                  value={newNote.attached_id}
-                  onChange={e => setNewNote(p => ({...p, attached_id: e.target.value}))}
-                  className="bg-white border border-neutral-200 rounded-xl px-3 py-1.5 text-xs font-bold text-neutral-500 outline-none hover:border-violet-300 max-w-[200px] sm:max-w-xs truncate"
-                >
-                  <option value="">📎 Sin material</option>
-                  {playlists.length > 0 && (
-                    <optgroup label="📁 Series Completas">
-                      {playlists.map(pl => (
-                        <option key={pl.id} value={`playlist_${pl.id}`}>📚 {pl.title}</option>
-                      ))}
-                    </optgroup>
+              <div className="flex items-center justify-between pt-4 border-t border-neutral-200/50 gap-4">
+                <div className="flex items-center gap-2 min-w-0">
+                  <button 
+                    type="button"
+                    onClick={() => setModalTarget("note")}
+                    className={`px-4 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center gap-2 border transition-all truncate shadow-sm ${
+                      newNote.attached_id
+                        ? "bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100"
+                        : "bg-white text-neutral-600 border-neutral-200 hover:border-violet-300 hover:text-neutral-900"
+                    }`}
+                  >
+                    <BookOpen className="w-4 h-4 flex-shrink-0" />
+                    <span className="truncate">{newNote.attached_id ? `📎 ${newNote.attached_title || "Material Adjunto"}` : "📎 Adjuntar Material"}</span>
+                  </button>
+                  {newNote.attached_id && (
+                    <button
+                      type="button"
+                      onClick={() => setNewNote(p => ({...p, attached_id: "", attached_title: "", attached_type: ""}))}
+                      className="p-2.5 text-neutral-400 hover:text-red-600 rounded-xl hover:bg-red-50 transition-all flex-shrink-0"
+                      title="Quitar adjunto"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   )}
-                  {library.length > 0 && (
-                    <optgroup label="📄 Materiales Individuales">
-                      {library.map(item => (
-                        <option key={item.id} value={`item_${item.id}`}>🎵 {item.title}</option>
-                      ))}
-                    </optgroup>
-                  )}
-                </select>
+                </div>
                 <button 
                   onClick={addNote} 
                   disabled={!newNote.content.trim() || saving}
@@ -617,28 +623,31 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                 rows={2}
                 className="w-full bg-transparent border-0 outline-none text-sm font-medium resize-none text-neutral-600" 
               />
-              <div className="flex items-center justify-between pt-4 border-t border-neutral-200/50">
-                <select 
-                  value={newTask.attached_id}
-                  onChange={e => setNewTask(p => ({...p, attached_id: e.target.value}))}
-                  className="bg-white border border-neutral-200 rounded-xl px-3 py-1.5 text-xs font-bold text-neutral-500 outline-none hover:border-emerald-300 max-w-[200px] sm:max-w-xs truncate"
-                >
-                  <option value="">📎 Material</option>
-                  {playlists.length > 0 && (
-                    <optgroup label="📁 Series Completas">
-                      {playlists.map(pl => (
-                        <option key={pl.id} value={`playlist_${pl.id}`}>📚 {pl.title}</option>
-                      ))}
-                    </optgroup>
+              <div className="flex items-center justify-between pt-4 border-t border-neutral-200/50 gap-4">
+                <div className="flex items-center gap-2 min-w-0">
+                  <button 
+                    type="button"
+                    onClick={() => setModalTarget("task")}
+                    className={`px-4 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center gap-2 border transition-all truncate shadow-sm ${
+                      newTask.attached_id
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                        : "bg-white text-neutral-600 border-neutral-200 hover:border-emerald-300 hover:text-neutral-900"
+                    }`}
+                  >
+                    <BookOpen className="w-4 h-4 flex-shrink-0" />
+                    <span className="truncate">{newTask.attached_id ? `📎 ${newTask.attached_title || "Material Adjunto"}` : "📎 Adjuntar Material"}</span>
+                  </button>
+                  {newTask.attached_id && (
+                    <button
+                      type="button"
+                      onClick={() => setNewTask(p => ({...p, attached_id: "", attached_title: "", attached_type: ""}))}
+                      className="p-2.5 text-neutral-400 hover:text-red-600 rounded-xl hover:bg-red-50 transition-all flex-shrink-0"
+                      title="Quitar adjunto"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   )}
-                  {library.length > 0 && (
-                    <optgroup label="📄 Materiales Individuales">
-                      {library.map(item => (
-                        <option key={item.id} value={`item_${item.id}`}>🎵 {item.title}</option>
-                      ))}
-                    </optgroup>
-                  )}
-                </select>
+                </div>
                 <button 
                   onClick={addTask} 
                   disabled={!newTask.title.trim() || saving}
@@ -725,6 +734,22 @@ export default function ClassDetailView({ classId }: { classId: string }) {
         .field { width: 100%; padding: 0.875rem 1.25rem; border: 1px solid #f3f4f6; background: #fff; border-radius: 1.25rem; outline: none; font-weight: 800; font-size: 0.875rem; color: #171717; transition: all 0.2s; }
         .field:focus { border-color: #8b5cf6; background: #fff; box-shadow: 0 0 0 4px rgba(139,92,246,0.05); }
       `}</style>
+
+      <LibraryPickerModal
+        isOpen={modalTarget !== null}
+        onClose={() => setModalTarget(null)}
+        onSelect={(selectedId, item) => {
+          if (modalTarget === "note") {
+            setNewNote(p => ({ ...p, attached_id: selectedId, attached_title: item.title, attached_type: item.type }))
+          }
+          if (modalTarget === "task") {
+            setNewTask(p => ({ ...p, attached_id: selectedId, attached_title: item.title, attached_type: item.type }))
+          }
+        }}
+        library={library}
+        playlists={playlists}
+        currentSelectedId={modalTarget === "note" ? newNote.attached_id : modalTarget === "task" ? newTask.attached_id : ""}
+      />
     </div>
   )
 }

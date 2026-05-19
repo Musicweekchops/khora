@@ -9,6 +9,7 @@ import { toast } from "sonner"
 import { Lock, Save, Trash2, Edit3, BookOpen, ExternalLink, Plus, PlayCircle, FileText } from "lucide-react"
 import LastSeenBadge from "@/components/ui/LastSeenBadge"
 import { RichText } from "@/components/ui/RichText"
+import LibraryPickerModal from "@/components/ui/LibraryPickerModal"
 
 interface StudentData {
   id: string; user_id: string; teacher_id: string; status: string; modalidad: string; lead_source: string
@@ -39,7 +40,9 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
   const [library, setLibrary] = useState<any[]>([])
   const [playlists, setPlaylists] = useState<any[]>([])
   const [assignId, setAssignId] = useState("")
+  const [assignTitle, setAssignTitle] = useState("")
   const [assigning, setAssigning] = useState(false)
+  const [showModal, setShowModal] = useState(false)
 
   useEffect(() => { loadAll() }, [studentId])
 
@@ -110,8 +113,8 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
     if (sp?.teacher_id) {
       const [acc, lib, pl] = await Promise.all([
         supabase.from("StudentLibraryAccess").select("id, created_at, LibraryContent(id, title, type, url), LibraryPlaylist(id, title, description)").eq("student_id", studentId),
-        supabase.from("LibraryContent").select("id, title, type").eq("teacher_id", sp.teacher_id).order("title"),
-        supabase.from("LibraryPlaylist").select("id, title").eq("teacher_id", sp.teacher_id).order("title")
+        supabase.from("LibraryContent").select("id, title, type, category, url").eq("teacher_id", sp.teacher_id).order("title"),
+        supabase.from("LibraryPlaylist").select("id, title, description").eq("teacher_id", sp.teacher_id).order("title")
       ])
       if (acc.data) setAccessList(acc.data)
       if (lib.data) setLibrary(lib.data)
@@ -140,6 +143,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
     else {
       toast.success("Asignado exitosamente")
       setAssignId("")
+      setAssignTitle("")
       await loadAll()
     }
     setAssigning(false)
@@ -536,32 +540,35 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
               </h3>
             </div>
 
-            <div className="bg-neutral-50 rounded-[32px] p-6 flex flex-col sm:flex-row items-center gap-4 border border-neutral-100">
-              <select 
-                value={assignId}
-                onChange={e => setAssignId(e.target.value)}
-                className="w-full sm:flex-1 bg-white border border-neutral-200 rounded-2xl px-4 py-3 text-sm font-bold text-neutral-700 outline-none hover:border-indigo-300"
-              >
-                <option value="">📎 Seleccionar Serie o Material para asignar...</option>
-                {playlists.length > 0 && (
-                  <optgroup label="📁 Series Completas">
-                    {playlists.map(pl => (
-                      <option key={pl.id} value={`playlist_${pl.id}`}>📚 {pl.title}</option>
-                    ))}
-                  </optgroup>
+            <div className="bg-neutral-50 rounded-[32px] p-6 flex flex-col sm:flex-row items-center justify-between gap-4 border border-neutral-100">
+              <div className="flex items-center gap-3 w-full sm:w-auto min-w-0">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(true)}
+                  className={`w-full sm:w-auto px-6 py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 border transition-all truncate shadow-sm ${
+                    assignId
+                      ? "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
+                      : "bg-white text-neutral-600 border-neutral-200 hover:border-indigo-300 hover:text-neutral-900"
+                  }`}
+                >
+                  <BookOpen className="w-4 h-4 flex-shrink-0" />
+                  <span className="truncate">{assignId ? `📎 ${assignTitle || "Material Seleccionado"}` : "📎 Seleccionar Material o Serie"}</span>
+                </button>
+                {assignId && (
+                  <button
+                    type="button"
+                    onClick={() => { setAssignId(""); setAssignTitle(""); }}
+                    className="p-3 text-neutral-400 hover:text-red-600 rounded-xl hover:bg-red-50 transition-all flex-shrink-0"
+                    title="Quitar selección"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 )}
-                {library.length > 0 && (
-                  <optgroup label="📄 Materiales Individuales">
-                    {library.map(item => (
-                      <option key={item.id} value={`item_${item.id}`}>🎵 {item.title}</option>
-                    ))}
-                  </optgroup>
-                )}
-              </select>
+              </div>
               <button 
                 onClick={handleAssignAccess}
                 disabled={!assignId || assigning}
-                className="w-full sm:w-auto px-8 py-3 bg-neutral-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-indigo-600 disabled:opacity-30 flex items-center justify-center gap-2 shadow-lg shadow-neutral-900/10 transition-all"
+                className="w-full sm:w-auto px-8 py-3.5 bg-neutral-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-indigo-600 disabled:opacity-30 flex items-center justify-center gap-2 shadow-lg shadow-neutral-900/10 transition-all"
               >
                 <Plus className="w-4 h-4" />
                 {assigning ? "Asignando..." : "Asignar Acceso"}
@@ -610,6 +617,18 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
           </div>
         )}
       </div>
+
+      <LibraryPickerModal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        onSelect={(selectedId, item) => {
+          setAssignId(selectedId)
+          setAssignTitle(item.title)
+        }}
+        library={library}
+        playlists={playlists}
+        currentSelectedId={assignId}
+      />
     </div>
   )
 }
