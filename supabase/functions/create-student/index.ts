@@ -53,6 +53,51 @@ serve(async (req) => {
       if (phoneErr) console.warn("Error actualizando teléfono:", phoneErr)
     }
 
+    // 3. Obtener el nombre del profesor para personalizar el correo de bienvenida
+    let teacherName = ""
+    try {
+      const { data: teacherData } = await supabaseAdmin
+        .from("TeacherProfile")
+        .select(`
+          User ( name )
+        `)
+        .eq("id", teacher_id)
+        .maybeSingle()
+      
+      if (teacherData?.User) {
+        const u = teacherData.User
+        teacherName = Array.isArray(u) ? u[0]?.name : u?.name || ""
+      }
+    } catch (err) {
+      console.error("Error fetching teacher name for welcome email:", err)
+    }
+
+    // 4. Enviar correo de bienvenida de forma automatizada
+    try {
+      const emailRes = await fetch(`${supabaseUrl}/functions/v1/send-email`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${supabaseKey}`,
+        },
+        body: JSON.stringify({
+          to: email.trim().toLowerCase(),
+          type: "WELCOME",
+          params: {
+            studentName: name.trim(),
+            teacherName: teacherName,
+            email: email.trim().toLowerCase(),
+            tempPassword: password,
+          }
+        })
+      })
+      if (!emailRes.ok) {
+        console.error("Error response from send-email:", await emailRes.text())
+      }
+    } catch (err) {
+      console.error("Error calling send-email function:", err)
+    }
+
     return new Response(JSON.stringify({ userId: userData.user.id }), {
       headers: { 
         "Content-Type": "application/json",
