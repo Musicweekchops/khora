@@ -159,6 +159,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
   async function loadNotesAndTasks(currentCls?: ClassData | null) {
     const activeCls = currentCls || cls
 
+    // 1. Fetch Class Notes
     const { data: n } = await supabase
       .from("ClassNote")
       .select("*, LibraryContent!ClassNote_content_id_fkey(title, url, type), LibraryPlaylist!ClassNote_playlist_id_fkey(title, description)")
@@ -166,40 +167,48 @@ export default function ClassDetailView({ classId }: { classId: string }) {
       .order("created_at", { ascending: false })
     if (n) setNotes(n as any)
 
-    const { data: t } = await supabase
-      .from("Task")
-      .select("*, LibraryContent(title, url, type), LibraryPlaylist(title, description)")
-      .eq("class_id", classId)
-      .order("created_at", { ascending: false })
-    if (t) setTasks(t as any)
-
+    // 2. Fetch all student tasks if student is present
     if (activeCls && activeCls.student_id) {
-      const { data: siblingClasses } = await supabase
-        .from("Class")
-        .select("id, date, start_time")
+      const { data: allTasks } = await supabase
+        .from("Task")
+        .select("*, LibraryContent(title, url, type), LibraryPlaylist(title, description)")
         .eq("student_id", activeCls.student_id)
-        .order("date", { ascending: false })
-        .order("start_time", { ascending: false })
+        .order("created_at", { ascending: false })
 
-      let prevClassId: string | null = null
-      if (siblingClasses) {
-        const currentIndex = siblingClasses.findIndex(sc => sc.id === classId)
-        if (currentIndex !== -1 && currentIndex < siblingClasses.length - 1) {
-          prevClassId = siblingClasses[currentIndex + 1].id
+      if (allTasks) {
+        // Tareas asignadas hoy (created in this classId)
+        const todayT = allTasks.filter(t => t.class_id === classId)
+        setTasks(todayT as any)
+
+        // Tareas del pasado (class_id !== classId)
+        const pastT = allTasks.filter(t => t.class_id !== classId)
+
+        if (pastT.length > 0) {
+          // Find the most recent class_id from past tasks
+          const mostRecentPastClassId = pastT[0].class_id
+
+          // Gather:
+          // A. All tasks from that most recent past class (completed or not)
+          // B. Any other older past tasks that are still pending (completed === false)
+          const revT = pastT.filter(t => 
+            t.class_id === mostRecentPastClassId || t.completed === false
+          )
+          setReviewTasks(revT as any)
+        } else {
+          setReviewTasks([])
         }
-      }
-
-      if (prevClassId) {
-        const { data: revT } = await supabase
-          .from("Task")
-          .select("*, LibraryContent(title, url, type), LibraryPlaylist(title, description)")
-          .eq("class_id", prevClassId)
-          .order("created_at", { ascending: false })
-        if (revT) setReviewTasks(revT as any)
       } else {
+        setTasks([])
         setReviewTasks([])
       }
     } else {
+      // Fallback if no student is assigned
+      const { data: t } = await supabase
+        .from("Task")
+        .select("*, LibraryContent(title, url, type), LibraryPlaylist(title, description)")
+        .eq("class_id", classId)
+        .order("created_at", { ascending: false })
+      if (t) setTasks(t as any)
       setReviewTasks([])
     }
   }
@@ -701,7 +710,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                 )}
                 <div className="mt-4 pt-3 border-t border-neutral-50 flex justify-between items-center">
                   <p className="text-[9px] font-black text-neutral-300 uppercase tracking-widest">
-                    {isReview ? "Asignada la clase pasada" : `Asignada el ${new Date(t.created_at).toLocaleDateString("es-CL")}`}
+                    Asignada el {new Date(t.created_at).toLocaleDateString("es-CL", { day: "numeric", month: "short", year: "numeric" })}
                   </p>
                 </div>
               </div>
