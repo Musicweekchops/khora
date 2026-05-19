@@ -171,10 +171,13 @@ export default function ClassDetailView({ classId }: { classId: string }) {
     if (activeCls && activeCls.student_id) {
       const { data: siblingClasses } = await supabase
         .from("Class")
-        .select("id")
+        .select("id, date, start_time")
         .eq("student_id", activeCls.student_id)
+        .order("date", { ascending: false })
+        .order("start_time", { ascending: false })
 
       if (siblingClasses && siblingClasses.length > 0) {
+        const currentIndex = siblingClasses.findIndex(sc => sc.id === classId)
         const classIds = siblingClasses.map(sc => sc.id)
 
         const { data: allTasks } = await supabase
@@ -188,19 +191,26 @@ export default function ClassDetailView({ classId }: { classId: string }) {
           const todayT = allTasks.filter(t => t.class_id === classId)
           setTasks(todayT as any)
 
-          // Tareas del pasado (class_id !== classId)
-          const pastT = allTasks.filter(t => t.class_id !== classId)
+          // Filter tasks from chronologically past classes (index > currentIndex)
+          const pastTasksWithIndex = allTasks
+            .map(t => {
+              const idx = siblingClasses.findIndex(sc => sc.id === t.class_id)
+              return { task: t, index: idx }
+            })
+            .filter(item => item.index !== -1 && item.index > currentIndex)
 
-          if (pastT.length > 0) {
-            // Find the most recent class_id from past tasks
-            const mostRecentPastClassId = pastT[0].class_id
+          if (pastTasksWithIndex.length > 0) {
+            // Find the smallest index (which represents the most recent past class that has tasks)
+            const smallestPastIndex = Math.min(...pastTasksWithIndex.map(item => item.index))
+            const mostRecentPastClassId = siblingClasses[smallestPastIndex].id
 
             // Gather:
             // A. All tasks from that most recent past class (completed or not)
             // B. Any other older past tasks that are still pending (completed === false)
-            const revT = pastT.filter(t => 
-              t.class_id === mostRecentPastClassId || t.completed === false
-            )
+            const revT = pastTasksWithIndex
+              .filter(item => item.index === smallestPastIndex || item.task.completed === false)
+              .map(item => item.task)
+
             setReviewTasks(revT as any)
           } else {
             setReviewTasks([])
