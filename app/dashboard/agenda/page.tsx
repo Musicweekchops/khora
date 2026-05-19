@@ -10,6 +10,7 @@ import AvailabilitySettings from "@/components/agenda/AvailabilitySettings"
 interface CalendarClass {
   id: string; date: string; start_time: string; end_time: string
   status: string; modalidad: string; student_name: string
+  is_booking?: boolean; is_recurring?: boolean;
 }
 
 const HOURS = Array.from({ length: 14 }, (_, i) => i + 7) // 7am to 20pm

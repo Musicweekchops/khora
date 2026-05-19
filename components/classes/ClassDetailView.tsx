@@ -218,12 +218,13 @@ export default function ClassDetailView({ classId }: { classId: string }) {
       } else {
         console.log("Nota guardada OK", data)
         if (cls?.student_id && (contentId || playlistId)) {
-          await supabase.from("StudentLibraryAccess").upsert({
+          const { error: slaErr } = await supabase.from("StudentLibraryAccess").upsert({
             student_id: cls.student_id,
             content_id: contentId || null,
             playlist_id: playlistId || null,
             assigned_by: cls.teacher_id
-          }, { onConflict: contentId ? 'student_id,content_id' : 'student_id,playlist_id' }).catch(err => console.error("Error SLA:", err))
+          }, { onConflict: contentId ? 'student_id,content_id' : 'student_id,playlist_id' })
+          if (slaErr) console.error("Error SLA:", slaErr)
         }
         setNewNote({ content: "", attached_id: "", attached_title: "", attached_type: "" })
         toast("Nota guardada con éxito", "success")
@@ -261,12 +262,13 @@ export default function ClassDetailView({ classId }: { classId: string }) {
       } else {
         toast("Tarea asignada correctamente", "success")
         if (cls?.student_id && (contentId || playlistId)) {
-          await supabase.from("StudentLibraryAccess").upsert({
+          const { error: slaErr } = await supabase.from("StudentLibraryAccess").upsert({
             student_id: cls.student_id,
             content_id: contentId || null,
             playlist_id: playlistId || null,
             assigned_by: cls.teacher_id
-          }, { onConflict: contentId ? 'student_id,content_id' : 'student_id,playlist_id' }).catch(err => console.error("Error SLA:", err))
+          }, { onConflict: contentId ? 'student_id,content_id' : 'student_id,playlist_id' })
+          if (slaErr) console.error("Error SLA:", slaErr)
         }
         if (cls?.student_email) {
           // Trigger new task email

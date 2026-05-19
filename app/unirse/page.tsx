@@ -40,7 +40,8 @@ function RegistrationForm() {
         .maybeSingle()
       
       if (data?.User) {
-        const name = Array.isArray(data.User) ? data.User[0]?.name : data.User.name
+        const userObj: any = data.User
+        const name = Array.isArray(userObj) ? userObj[0]?.name : userObj.name
         setTeacherName(name)
       } else {
         setError("El enlace de inscripción no es válido o ha expirado.")
