@@ -8,7 +8,7 @@ const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")
 
 // El dominio desde donde enviarás. En modo de prueba con Resend, puedes usar "onboarding@resend.dev" 
 // pero solo podrás enviarte correos a ti mismo. Una vez verifiques tu dominio, cámbialo aquí.
-const FROM_EMAIL = "Khora <onboarding@resend.dev>" 
+const FROM_EMAIL = "Khora <noreply@khora.cl>" 
 
 serve(async (req) => {
   // Configuración de Supabase (usamos Service Role para ignorar RLS en este proceso de sistema)
@@ -17,17 +17,33 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseKey)
 
   try {
-    // 1. Obtener la hora objetivo (24 horas desde ahora) en la zona horaria de Chile
-    const targetTime = new Date(Date.now() + 24 * 60 * 60 * 1000)
-    
-    // Formatear a YYYY-MM-DD
-    const formatterDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit' })
-    const targetDate = formatterDate.format(targetTime)
+    let targetDate = ''
+    let targetHour = ''
 
-    // Formatear la hora actual en esa ventana (ej. si son las 14:00, busca entre 14:00:00 y 14:59:59)
-    const formatterHour = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Santiago', hour: '2-digit', hour12: false })
-    const targetHourStr = formatterHour.format(targetTime)
-    const targetHour = targetHourStr === '24' ? '00' : targetHourStr.padStart(2, '0')
+    // Intentar leer parámetros de fecha y hora del cuerpo (para re-intentos manuales)
+    try {
+      if (req.method === "POST") {
+        const body = await req.json()
+        if (body.targetDate) targetDate = body.targetDate
+        if (body.targetHour) targetHour = body.targetHour
+      }
+    } catch (_) {
+      // Ignorar si no hay cuerpo JSON o falla la lectura
+    }
+
+    if (!targetDate || !targetHour) {
+      // 1. Obtener la hora objetivo (24 horas desde ahora) en la zona horaria de Chile
+      const targetTime = new Date(Date.now() + 24 * 60 * 60 * 1000)
+      
+      // Formatear a YYYY-MM-DD
+      const formatterDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit' })
+      targetDate = formatterDate.format(targetTime)
+
+      // Formatear la hora actual en esa ventana (ej. si son las 14:00, busca entre 14:00:00 y 14:59:59)
+      const formatterHour = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Santiago', hour: '2-digit', hour12: false })
+      const targetHourStr = formatterHour.format(targetTime)
+      targetHour = targetHourStr === '24' ? '00' : targetHourStr.padStart(2, '0')
+    }
 
     const startTimeLimit = `${targetHour}:00:00`
     const endTimeLimit = `${targetHour}:59:59`
