@@ -157,7 +157,23 @@ export default function ClassDetailView({ classId }: { classId: string }) {
   }
 
   async function loadNotesAndTasks(currentCls?: ClassData | null) {
-    const activeCls = currentCls || cls
+    let activeCls = currentCls || cls
+
+    // Garantizar que activeCls y student_id estén cargados para evitar condiciones de carrera en el estado de React
+    if (!activeCls || !activeCls.student_id) {
+      const { data: c } = await supabase
+        .from("Class")
+        .select("student_id, teacher_id")
+        .eq("id", classId)
+        .maybeSingle()
+      if (c) {
+        activeCls = {
+          id: classId,
+          student_id: c.student_id,
+          teacher_id: c.teacher_id,
+        } as any
+      }
+    }
 
     // 1. Fetch Class Notes
     const { data: n } = await supabase
