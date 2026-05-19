@@ -169,32 +169,44 @@ export default function ClassDetailView({ classId }: { classId: string }) {
 
     // 2. Fetch all student tasks if student is present
     if (activeCls && activeCls.student_id) {
-      const { data: allTasks } = await supabase
-        .from("Task")
-        .select("*, LibraryContent(title, url, type), LibraryPlaylist(title, description)")
+      const { data: siblingClasses } = await supabase
+        .from("Class")
+        .select("id")
         .eq("student_id", activeCls.student_id)
-        .order("created_at", { ascending: false })
 
-      if (allTasks) {
-        // Tareas asignadas hoy (created in this classId)
-        const todayT = allTasks.filter(t => t.class_id === classId)
-        setTasks(todayT as any)
+      if (siblingClasses && siblingClasses.length > 0) {
+        const classIds = siblingClasses.map(sc => sc.id)
 
-        // Tareas del pasado (class_id !== classId)
-        const pastT = allTasks.filter(t => t.class_id !== classId)
+        const { data: allTasks } = await supabase
+          .from("Task")
+          .select("*, LibraryContent(title, url, type), LibraryPlaylist(title, description)")
+          .in("class_id", classIds)
+          .order("created_at", { ascending: false })
 
-        if (pastT.length > 0) {
-          // Find the most recent class_id from past tasks
-          const mostRecentPastClassId = pastT[0].class_id
+        if (allTasks) {
+          // Tareas asignadas hoy (created in this classId)
+          const todayT = allTasks.filter(t => t.class_id === classId)
+          setTasks(todayT as any)
 
-          // Gather:
-          // A. All tasks from that most recent past class (completed or not)
-          // B. Any other older past tasks that are still pending (completed === false)
-          const revT = pastT.filter(t => 
-            t.class_id === mostRecentPastClassId || t.completed === false
-          )
-          setReviewTasks(revT as any)
+          // Tareas del pasado (class_id !== classId)
+          const pastT = allTasks.filter(t => t.class_id !== classId)
+
+          if (pastT.length > 0) {
+            // Find the most recent class_id from past tasks
+            const mostRecentPastClassId = pastT[0].class_id
+
+            // Gather:
+            // A. All tasks from that most recent past class (completed or not)
+            // B. Any other older past tasks that are still pending (completed === false)
+            const revT = pastT.filter(t => 
+              t.class_id === mostRecentPastClassId || t.completed === false
+            )
+            setReviewTasks(revT as any)
+          } else {
+            setReviewTasks([])
+          }
         } else {
+          setTasks([])
           setReviewTasks([])
         }
       } else {
