@@ -160,10 +160,10 @@ export default function ClassDetailView({ classId }: { classId: string }) {
     let activeCls = currentCls || cls
 
     // Garantizar que activeCls y student_id estén cargados para evitar condiciones de carrera en el estado de React
-    if (!activeCls || !activeCls.student_id) {
+    if (!activeCls || !activeCls.student_id || !activeCls.date || !activeCls.start_time) {
       const { data: c } = await supabase
         .from("Class")
-        .select("student_id, teacher_id")
+        .select("student_id, teacher_id, date, start_time")
         .eq("id", classId)
         .maybeSingle()
       if (c) {
@@ -171,6 +171,8 @@ export default function ClassDetailView({ classId }: { classId: string }) {
           id: classId,
           student_id: c.student_id,
           teacher_id: c.teacher_id,
+          date: c.date,
+          start_time: c.start_time
         } as any
       }
     }
@@ -193,8 +195,16 @@ export default function ClassDetailView({ classId }: { classId: string }) {
         .order("start_time", { ascending: false })
 
       if (siblingClasses && siblingClasses.length > 0) {
-        const currentIndex = siblingClasses.findIndex(sc => sc.id === classId)
         const classIds = siblingClasses.map(sc => sc.id)
+
+        console.log("[DEBUG] loadNotesAndTasks started (Date-based)", {
+          classId,
+          activeClsStudentId: activeCls.student_id,
+          activeClsDate: activeCls.date,
+          activeClsTime: activeCls.start_time,
+          siblingClassesCount: siblingClasses.length,
+          siblingClassesDetails: siblingClasses.map((sc, idx) => ({ idx, id: sc.id, date: sc.date, start_time: sc.start_time })),
+        })
 
         const { data: allTasks } = await supabase
           .from("Task")
@@ -207,25 +217,58 @@ export default function ClassDetailView({ classId }: { classId: string }) {
           const todayT = allTasks.filter(t => t.class_id === classId)
           setTasks(todayT as any)
 
-          // Filter tasks from chronologically past classes (index > currentIndex)
-          const pastTasksWithIndex = allTasks
-            .map(t => {
-              const idx = siblingClasses.findIndex(sc => sc.id === t.class_id)
-              return { task: t, index: idx }
-            })
-            .filter(item => item.index !== -1 && item.index > currentIndex)
+          // Helper para comparar fechas y horas de clase (ej. "2026-05-14" y "18:00")
+          const isClassBefore = (c1Date: string, c1Time: string, c2Date: string, c2Time: string) => {
+            if (c1Date < c2Date) return true
+            if (c1Date > c2Date) return false
+            return (c1Time || "") < (c2Time || "")
+          }
 
-          if (pastTasksWithIndex.length > 0) {
-            // Find the smallest index (which represents the most recent past class that has tasks)
-            const smallestPastIndex = Math.min(...pastTasksWithIndex.map(item => item.index))
-            const mostRecentPastClassId = siblingClasses[smallestPastIndex].id
+          // Filter tasks from classes that are chronologically BEFORE the current active class
+          const pastTasksWithDetails = allTasks
+            .map(t => {
+              const sc = siblingClasses.find(sc => sc.id === t.class_id)
+              return { task: t, class: sc }
+            })
+            .filter(item => {
+              if (!item.class || !activeCls?.date || !activeCls?.start_time) return false
+              return isClassBefore(item.class.date, item.class.start_time, activeCls.date, activeCls.start_time)
+            })
+
+          console.log("[DEBUG] allTasks fetched", {
+            allTasksCount: allTasks.length,
+            allTasksDetails: allTasks.map(t => ({ id: t.id, title: t.title, class_id: t.class_id, completed: t.completed })),
+            pastTasksWithDetails: pastTasksWithDetails.map(item => ({ title: item.task.title, date: item.class?.date })),
+          })
+
+          // Find all distinct past classes that actually have tasks assigned to them
+          const pastClassesWithTasks = siblingClasses.filter(sc => 
+            pastTasksWithDetails.some(item => item.class?.id === sc.id)
+          )
+
+          if (pastClassesWithTasks.length > 0) {
+            // Since siblingClasses is sorted descending by date/time, the first element here
+            // is the chronologically most recent past class with tasks!
+            const mostRecentPastClass = pastClassesWithTasks[0]
+            const mostRecentPastClassId = mostRecentPastClass.id
 
             // Gather:
             // A. All tasks from that most recent past class (completed or not)
             // B. Any other older past tasks that are still pending (completed === false)
-            const revT = pastTasksWithIndex
-              .filter(item => item.index === smallestPastIndex || item.task.completed === false)
+            const revT = pastTasksWithDetails
+              .filter(item => {
+                if (item.class?.id === mostRecentPastClassId) return true
+                if (item.task.completed === false) return true
+                return false
+              })
               .map(item => item.task)
+
+            console.log("[DEBUG] Filtered reviewTasks (Date-based)", {
+              mostRecentPastClassId,
+              mostRecentPastClassDate: mostRecentPastClass.date,
+              revTCount: revT.length,
+              revTTitles: revT.map(t => t.title)
+            })
 
             setReviewTasks(revT as any)
           } else {
