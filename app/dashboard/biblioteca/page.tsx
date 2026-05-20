@@ -405,15 +405,15 @@ export default function BibliotecaPage() {
                        <div className="relative overflow-hidden kh-input flex items-center bg-neutral-50 text-xs">
                            <input type="file" onChange={e => {
                              const f = e.target.files?.[0]
-                             if (f && f.size > 15 * 1024 * 1024) {
-                               alert("El archivo es demasiado grande. El límite máximo es de 15 MB.")
+                             if (f && f.size > 50 * 1024 * 1024) {
+                               alert("El archivo es demasiado grande. El límite máximo es de 50 MB.")
                                e.target.value = ""
                                setFile(null)
                              } else {
                                setFile(f || null)
                              }
                            }} className="absolute inset-0 opacity-0 cursor-pointer" />
-                           <span className="truncate">{file ? file.name : "Subir (Máx 15MB)..."}</span>
+                           <span className="truncate">{file ? file.name : "Subir (Máx 50MB)..."}</span>
                         </div>
                       ) : (
                         <input value={form.url} onChange={e => setForm(p => ({...p, url: e.target.value}))} className="kh-input" placeholder="https://..." />
