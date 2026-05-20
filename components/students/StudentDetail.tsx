@@ -20,7 +20,7 @@ interface StudentData {
 
 interface ClassRow { id: string; date: string; start_time: string; end_time: string; status: string; modalidad: string }
 interface TaskRow { id: string; title: string; completed: boolean; created_at: string; class_date: string }
-interface PaymentRow { id: string; amount: number; method: string; date: string }
+interface PaymentRow { id: string; amount: number; method: string; date: string; notes?: string }
 interface NoteRow { id: string; content: string; created_at: string; class_date: string }
 
 export default function StudentDetail({ studentId }: { studentId: string }) {
@@ -92,7 +92,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
     // Payments
     const { data: py } = await supabase
       .from("Payment")
-      .select("id, amount, method, date")
+      .select("id, amount, method, date, notes")
       .eq("student_id", studentId)
       .order("date", { ascending: false })
 
@@ -473,13 +473,37 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
               <div className="p-12 text-center"><span className="text-4xl opacity-30 block mb-3">💰</span><p className="text-neutral-500 font-bold">Sin pagos registrados</p></div>
             ) : (
               <div className="overflow-x-auto scrollbar-thin">
-                <table className="w-full text-sm min-w-[400px] md:min-w-0">
+                <table className="w-full text-sm min-w-[500px] md:min-w-0">
+                  <thead>
+                    <tr className="border-b border-neutral-100 bg-neutral-50/50 text-[10px] font-bold text-neutral-400 uppercase tracking-widest text-left">
+                      <th className="px-6 py-3">Fecha</th>
+                      <th className="px-6 py-3">Monto</th>
+                      <th className="px-6 py-3">Método</th>
+                      <th className="px-6 py-3">Notas / Comentarios</th>
+                    </tr>
+                  </thead>
                   <tbody>
                     {payments.map(p => (
-                      <tr key={p.id} className="border-b border-neutral-50 hover:bg-neutral-50/50">
-                        <td className="px-6 py-4 font-bold text-neutral-900">{new Date(p.date + "T12:00").toLocaleDateString("es-CL")}</td>
-                        <td className="px-6 py-4 font-black text-emerald-600">{formatCurrency(p.amount)}</td>
-                        <td className="px-6 py-4 text-neutral-500">{p.method ?? "—"}</td>
+                      <tr key={p.id} className="border-b border-neutral-50 hover:bg-neutral-50/50 transition-colors">
+                        <td className="px-6 py-4 font-bold text-neutral-900 whitespace-nowrap">
+                          {new Date(p.date + "T12:00").toLocaleDateString("es-CL")}
+                        </td>
+                        <td className="px-6 py-4 font-black text-emerald-600 whitespace-nowrap">
+                          {formatCurrency(p.amount)}
+                        </td>
+                        <td className="px-6 py-4 text-neutral-500 font-medium whitespace-nowrap">
+                          {p.method === "TRANSFER" ? "💸 Transferencia" : p.method === "CASH" ? "💵 Efectivo" : p.method === "CARD" ? "💳 Tarjeta" : p.method ?? "—"}
+                        </td>
+                        <td className="px-6 py-4 text-neutral-600 text-xs">
+                          {p.notes ? (
+                            <div className="bg-neutral-50 border border-neutral-100 rounded-xl p-2.5 max-w-md font-medium text-neutral-600 leading-relaxed shadow-sm flex items-start gap-2">
+                              <span className="text-sm mt-0.5">💬</span>
+                              <span>{p.notes}</span>
+                            </div>
+                          ) : (
+                            <span className="text-neutral-300 italic">—</span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
