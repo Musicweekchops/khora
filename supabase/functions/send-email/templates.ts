@@ -5,7 +5,7 @@ interface TemplateParams {
   [key: string]: any;
 }
 
-function getLayout(contentHtml: string) {
+export function getLayout(contentHtml: string) {
   return `
     <!DOCTYPE html>
     <html>

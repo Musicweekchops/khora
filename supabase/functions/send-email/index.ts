@@ -35,10 +35,10 @@ serve(async (req) => {
     }
 
     const defaultSubjects: Record<EmailType, string> = {
-      WELCOME: "¡Te damos la bienvenida a KHORA! 🎵",
-      CLASS_CONFIRMATION: "¡Tu Clase de Música Está Confirmada! 🎵",
-      CLASS_REMINDER: "Recordatorio: Tienes una clase de música programada 📅",
-      TEACHER_CLASS_CONFIRMED: "¡Clase Confirmada por tu Alumno! 🥁",
+      WELCOME: "Te damos la bienvenida a Khora",
+      CLASS_CONFIRMATION: "Tu clase de musica esta confirmada",
+      CLASS_REMINDER: "Recordatorio: Tienes una clase de musica programada",
+      TEACHER_CLASS_CONFIRMED: "Clase confirmada por tu alumno",
     }
 
     const finalSubject = subject || defaultSubjects[type as EmailType] || "Notificación de Khora"
