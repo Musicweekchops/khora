@@ -13,37 +13,25 @@ serve(async (req) => {
 
   try {
     let targetDate = ''
-    let targetHour = ''
 
-    // Intentar leer parámetros de fecha y hora del cuerpo (para re-intentos manuales)
+    // Intentar leer parámetros de fecha del cuerpo (para re-intentos manuales)
     try {
       if (req.method === "POST") {
         const body = await req.json()
         if (body.targetDate) targetDate = body.targetDate
-        if (body.targetHour) targetHour = body.targetHour
       }
     } catch (_) {
       // Ignorar si no hay cuerpo JSON o falla la lectura
     }
 
-    if (!targetDate || !targetHour) {
-      // 1. Obtener la hora objetivo (24 horas desde ahora) en la zona horaria de Chile
-      const targetTime = new Date(Date.now() + 24 * 60 * 60 * 1000)
-      
-      // Formatear a YYYY-MM-DD
+    if (!targetDate) {
+      // 1. Obtener la fecha de HOY en la zona horaria de Chile (America/Santiago)
+      const now = new Date()
       const formatterDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit' })
-      targetDate = formatterDate.format(targetTime)
-
-      // Formatear la hora actual en esa ventana (ej. si son las 14:00, busca entre 14:00:00 y 14:59:59)
-      const formatterHour = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Santiago', hour: '2-digit', hour12: false })
-      const targetHourStr = formatterHour.format(targetTime)
-      targetHour = targetHourStr === '24' ? '00' : targetHourStr.padStart(2, '0')
+      targetDate = formatterDate.format(now)
     }
 
-    const startTimeLimit = `${targetHour}:00:00`
-    const endTimeLimit = `${targetHour}:59:59`
-
-    // 2. Buscar clases programadas para mañana en esta ventana de 1 hora
+    // 2. Buscar todas las clases programadas para este día
     const { data: classes, error: classesError } = await supabase
       .from("Class")
       .select(`
@@ -58,14 +46,12 @@ serve(async (req) => {
         )
       `)
       .eq("date", targetDate)
-      .gte("start_time", startTimeLimit)
-      .lte("start_time", endTimeLimit)
       .eq("status", "SCHEDULED")
 
     if (classesError) throw classesError
 
     if (!classes || classes.length === 0) {
-      return new Response(JSON.stringify({ message: `No hay clases programadas para ${targetDate} a las ${targetHour}:00` }), {
+      return new Response(JSON.stringify({ message: `No hay clases programadas para la fecha ${targetDate}` }), {
         headers: { "Content-Type": "application/json" },
         status: 200,
       })
@@ -93,14 +79,14 @@ serve(async (req) => {
           body: JSON.stringify({
             from: FROM_EMAIL,
             to: sUser.email,
-            subject: "Recordatorio de clase mañana",
+            subject: "Recordatorio de tu clase de hoy",
             html: getTemplate('CLASS_REMINDER', {
               studentName: sUser.name,
               teacherName: tUser.name,
               date: cls.date,
               time: cls.start_time.slice(0, 5),
               link: `https://khora.cl/confirmar-clase?id=${cls.id}`,
-              isToday: false
+              isToday: true
             }),
           }),
         })
