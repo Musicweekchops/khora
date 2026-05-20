@@ -78,7 +78,6 @@ serve(async (req) => {
 
     // 3. Preparar correos para enviar con Resend
     let sentCount = 0
-    const teacherSummaries: Record<string, { email: string, name: string, studentNames: string[] }> = {}
 
     for (const cls of classes) {
       // Extraer datos (manejo de posibles arrays o únicos dependiedo de la relación)
@@ -112,68 +111,10 @@ serve(async (req) => {
 
         if (resendRes.ok) {
           sentCount++
-          // Agrupar información para el resumen del profesor
-          const tEmail = tUser.email
-          if (!teacherSummaries[tEmail]) {
-            teacherSummaries[tEmail] = { email: tEmail, name: tUser.name, studentNames: [] }
-          }
-          teacherSummaries[tEmail].studentNames.push(sUser.name)
         } else {
           console.error("Error enviando a alumno:", await resendRes.text())
         }
       }
-    }
-
-    // 4. Enviar resumen a cada profesor
-    for (const tEmail in teacherSummaries) {
-      const summary = teacherSummaries[tEmail]
-      await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${RESEND_API_KEY}`,
-        },
-        body: JSON.stringify({
-          from: FROM_EMAIL,
-          to: summary.email,
-          subject: "Resumen de recordatorios enviados hoy",
-          html: getLayout(`
-            <div style="padding: 0 40px 40px 40px;">
-              <h2 style="font-size: 22px; font-weight: 800; color: #ffffff; margin: 0 0 10px 0; letter-spacing: -0.5px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.2; text-align: center;">
-                Resumen de Envíos
-              </h2>
-              <p style="font-size: 15px; color: #a1a1aa; margin: 0 0 32px 0; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-align: center;">
-                Hola ${summary.name}, el sistema ha enviado exitosamente los recordatorios por correo para tus clases de mañana a los siguientes alumnos:
-              </p>
-              
-              <div style="background-color: #13131a; border: 1px solid #2d2d3d; border-radius: 20px; padding: 24px; margin-bottom: 32px;">
-                <div style="font-size: 11px; font-weight: 800; color: #5b4fcf; margin-bottom: 20px; text-align: center; text-transform: uppercase; letter-spacing: 1.5px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-                  ALUMNOS NOTIFICADOS
-                </div>
-                
-                ${summary.studentNames.map((name: string) => `
-                  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 12px; border-bottom: 1px solid #2d2d3d; padding-bottom: 12px;">
-                    <tr>
-                      <td align="left" style="font-size: 14px; color: #ffffff; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-                        ${name}
-                      </td>
-                      <td align="right" style="font-size: 12px; color: #10b981; font-weight: 700; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-transform: uppercase; letter-spacing: 0.5px;">
-                        Enviado
-                      </td>
-                    </tr>
-                  </table>
-                `).join('')}
-              </div>
-              
-              <div style="text-align: center;">
-                <a href="https://khora.cl/login" style="display: inline-block; background: linear-gradient(135deg, #5b4fcf 0%, #3d2fa8 100%); background-color: #5b4fcf; color: #ffffff !important; text-decoration: none; font-size: 15px; font-weight: 800; padding: 16px 36px; border-radius: 100px; box-shadow: 0 4px 15px rgba(91, 79, 207, 0.3); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-                  Ver mi Agenda
-                </a>
-              </div>
-            </div>
-          `),
-        }),
-      })
     }
 
     return new Response(JSON.stringify({ 
