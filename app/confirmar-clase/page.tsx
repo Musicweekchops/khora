@@ -103,6 +103,7 @@ function ConfirmarClaseContent() {
             body: JSON.stringify({
               to: teacherEmail,
               type: "TEACHER_CLASS_CONFIRMED",
+              subject: `La clase de ${studentName} está confirmada`,
               params: {
                 studentName,
                 teacherName,

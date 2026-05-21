@@ -183,10 +183,10 @@ export function getTemplate(type: EmailType, params: TemplateParams): string {
     return getLayout(`
       <div style="padding: 0 40px 40px 40px; text-align: center;">
         <h2 style="font-size: 24px; font-weight: 800; color: #ffffff; margin: 0 0 10px 0; letter-spacing: -0.5px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.2;">
-          ¡Clase Confirmada! 🥁
+          Clase Confirmada
         </h2>
         <p style="font-size: 15px; color: #a1a1aa; margin: 0 0 32px 0; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-          ¡Hola ${params.teacherName}! Tu alumno ${params.studentName} ha confirmado su asistencia para la clase programada.
+          ¡Hola ${params.teacherName}! La clase de tu alumno ${params.studentName} ha sido confirmada.
         </p>
         
         <div style="background-color: #13131a; border: 1px solid #2d2d3d; border-radius: 20px; padding: 24px; margin-bottom: 32px; text-align: left;">
