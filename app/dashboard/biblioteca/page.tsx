@@ -387,6 +387,10 @@ export default function BibliotecaPage() {
                       {playlists.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
                     </select>
                   </div>
+                  <div>
+                    <label className="kh-label block mb-1">Categoría / Etiqueta</label>
+                    <input value={form.category} onChange={e => setForm(p => ({...p, category: e.target.value}))} className="kh-input" placeholder="Ej: Warm Up, Técnica, Coordinación..." />
+                  </div>
                 </div>
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">

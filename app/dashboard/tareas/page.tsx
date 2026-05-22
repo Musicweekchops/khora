@@ -6,12 +6,26 @@ import { useAuth } from "@/lib/context/AuthContext"
 import { ClipboardList, CheckCircle2, Circle } from "lucide-react"
 import { RichText } from "@/components/ui/RichText"
 
+import Link from "next/link"
+
 interface Task {
   id: string
   title: string
   description: string
   completed: boolean
   created_at: string
+  content_id?: string | null
+  playlist_id?: string | null
+  progress?: number
+  LibraryContent?: {
+    title: string
+    url: string | null
+    type: string
+  } | null
+  LibraryPlaylist?: {
+    id: string
+    title: string
+  } | null
 }
 
 export default function TareasPage() {
@@ -29,22 +43,52 @@ export default function TareasPage() {
     setLoading(true)
     const { data, error } = await supabase
       .from("Task")
-      .select("*")
+      .select(`
+        id,
+        title,
+        description,
+        completed,
+        created_at,
+        content_id,
+        playlist_id,
+        progress,
+        LibraryContent (
+          title,
+          url,
+          type
+        ),
+        LibraryPlaylist (
+          id,
+          title
+        )
+      `)
       .eq("student_id", profile!.studentProfileId!)
       .order("created_at", { ascending: false })
 
-    if (!error && data) setTasks(data)
+    if (!error && data) setTasks(data as any)
     setLoading(false)
   }
 
   async function toggleTask(task: Task) {
     const newStatus = !task.completed
+    const newProgress = newStatus ? 100 : 0
     // Optimistic UI update
-    setTasks(tasks.map(t => t.id === task.id ? { ...t, completed: newStatus } : t))
+    setTasks(tasks.map(t => t.id === task.id ? { ...t, completed: newStatus, progress: newProgress } : t))
     
     await supabase
       .from("Task")
-      .update({ completed: newStatus })
+      .update({ completed: newStatus, progress: newProgress })
+      .eq("id", task.id)
+  }
+
+  async function updateProgress(task: Task, value: number) {
+    const isCompleted = value === 100
+    // Optimistic UI update
+    setTasks(tasks.map(t => t.id === task.id ? { ...t, progress: value, completed: isCompleted } : t))
+    
+    await supabase
+      .from("Task")
+      .update({ progress: value, completed: isCompleted })
       .eq("id", task.id)
   }
 
@@ -81,7 +125,14 @@ export default function TareasPage() {
                 Por Hacer
               </h2>
               <div className="grid gap-3">
-                {pending.map(task => <TaskCard key={task.id} task={task} onToggle={() => toggleTask(task)} />)}
+                {pending.map(task => (
+                  <TaskCard 
+                    key={task.id} 
+                    task={task} 
+                    onToggle={() => toggleTask(task)} 
+                    onUpdateProgress={(val) => updateProgress(task, val)} 
+                  />
+                ))}
               </div>
             </div>
           )}
@@ -94,7 +145,14 @@ export default function TareasPage() {
                 Completadas
               </h2>
               <div className="grid gap-3 opacity-60 hover:opacity-100 transition-opacity">
-                {completed.map(task => <TaskCard key={task.id} task={task} onToggle={() => toggleTask(task)} />)}
+                {completed.map(task => (
+                  <TaskCard 
+                    key={task.id} 
+                    task={task} 
+                    onToggle={() => toggleTask(task)} 
+                    onUpdateProgress={(val) => updateProgress(task, val)} 
+                  />
+                ))}
               </div>
             </div>
           )}
@@ -104,7 +162,15 @@ export default function TareasPage() {
   )
 }
 
-function TaskCard({ task, onToggle }: { task: Task, onToggle: () => void }) {
+function TaskCard({ 
+  task, 
+  onToggle, 
+  onUpdateProgress 
+}: { 
+  task: Task, 
+  onToggle: () => void, 
+  onUpdateProgress: (val: number) => void 
+}) {
   return (
     <div 
       onClick={onToggle}
@@ -119,18 +185,84 @@ function TaskCard({ task, onToggle }: { task: Task, onToggle: () => void }) {
           <Circle className="w-6 h-6 text-neutral-300 hover:text-emerald-400 transition-colors" />
         )}
       </div>
-      <div className="flex-1">
-        <p className={`font-bold text-lg transition-colors ${task.completed ? 'text-neutral-400 line-through' : 'text-neutral-900'}`}>
-          {task.title}
-        </p>
-        {task.description && (
-          <div onClick={e => e.stopPropagation()}>
-            <RichText 
-              text={task.description} 
-              className={`text-sm mt-1 ${task.completed ? 'text-neutral-400' : 'text-neutral-500'}`} 
-            />
+      <div className="flex-1 space-y-4">
+        <div>
+          <p className={`font-bold text-lg transition-colors ${task.completed ? 'text-neutral-400 line-through' : 'text-neutral-900'}`}>
+            {task.title}
+          </p>
+          {task.description && (
+            <div onClick={e => e.stopPropagation()}>
+              <RichText 
+                text={task.description} 
+                className={`text-sm mt-1 ${task.completed ? 'text-neutral-400' : 'text-neutral-500'}`} 
+              />
+            </div>
+          )}
+        </div>
+        
+        {/* Adjuntos del Material */}
+        {(task.LibraryContent || task.LibraryPlaylist) && (
+          <div className="flex flex-wrap gap-2" onClick={e => e.stopPropagation()}>
+            {task.LibraryContent && task.LibraryContent.url && (
+              <a 
+                href={task.LibraryContent.url} 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="inline-flex items-center gap-1.5 bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-100 rounded-xl px-3 py-1.5 text-xs font-bold transition-all shadow-sm"
+              >
+                📖 Ver material: {task.LibraryContent.title}
+              </a>
+            )}
+            {task.LibraryPlaylist && (
+              <Link 
+                href="/dashboard/biblioteca"
+                className="inline-flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-100 rounded-xl px-3 py-1.5 text-xs font-bold transition-all shadow-sm"
+              >
+                📚 Ver serie: {task.LibraryPlaylist.title}
+              </Link>
+            )}
           </div>
         )}
+
+        {/* Progress Bar & Interactive Pills */}
+        <div className="space-y-2 pt-2 border-t border-neutral-50" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between text-[10px] font-black text-neutral-400 uppercase tracking-widest">
+            <span>Progreso actual</span>
+            <span className={task.completed || task.progress === 100 ? "text-emerald-600 font-bold" : "text-violet-600 font-bold"}>
+              {task.completed ? "100%" : `${task.progress || 0}%`}
+            </span>
+          </div>
+          
+          <div className="w-full h-1.5 bg-neutral-100 rounded-full overflow-hidden">
+            <div 
+              className={`h-full rounded-full transition-all duration-500 ${
+                task.completed || task.progress === 100 
+                  ? "bg-gradient-to-r from-emerald-400 to-teal-500" 
+                  : "bg-gradient-to-r from-violet-500 to-indigo-500"
+              }`}
+              style={{ width: `${task.completed ? 100 : (task.progress || 0)}%` }}
+            />
+          </div>
+
+          {!task.completed && (
+            <div className="flex gap-1.5 pt-1">
+              {[0, 25, 50, 75, 100].map(val => (
+                <button
+                  type="button"
+                  key={val}
+                  onClick={() => onUpdateProgress(val)}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all ${
+                    task.progress === val
+                      ? "bg-violet-600 text-white shadow-sm"
+                      : "bg-neutral-50 text-neutral-500 border border-neutral-100 hover:bg-neutral-100"
+                  }`}
+                >
+                  {val}%
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

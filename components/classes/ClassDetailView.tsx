@@ -46,6 +46,7 @@ interface Task {
   content_id?: string | null; playlist_id?: string | null; created_at: string;
   LibraryContent?: { title: string; url: string; type: string } | null;
   LibraryPlaylist?: { title: string; description: string | null } | null;
+  progress?: number;
 }
 interface StudentOption { id: string; name: string }
 interface LibraryItem { id: string; title: string; category: string; type: string; url?: string }
@@ -69,11 +70,13 @@ export default function ClassDetailView({ classId }: { classId: string }) {
 
   // Notes & tasks
   const [newNote, setNewNote] = useState({ content: "", attached_id: "", attached_title: "", attached_type: "" })
-  const [newTask, setNewTask] = useState({ title: "", description: "", attached_id: "", attached_title: "", attached_type: "" })
+  const [newTask, setNewTask] = useState({ title: "", description: "", attached_id: "", attached_title: "", attached_type: "", progress: 0 })
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
+  const [editingTaskForm, setEditingTaskForm] = useState({ title: "", description: "", attached_id: "", attached_title: "", attached_type: "", progress: 0 })
   const [library, setLibrary] = useState<LibraryItem[]>([])
   const [playlists, setPlaylists] = useState<Playlist[]>([])
   const [saving, setSaving] = useState(false)
-  const [modalTarget, setModalTarget] = useState<"note" | "task" | null>(null)
+  const [modalTarget, setModalTarget] = useState<"note" | "task" | "edit_task" | null>(null)
 
   useEffect(() => {
     loadAll()
@@ -379,7 +382,8 @@ export default function ClassDetailView({ classId }: { classId: string }) {
         title: newTask.title.trim(), 
         description: newTask.description.trim() || null,
         content_id: contentId,
-        playlist_id: playlistId
+        playlist_id: playlistId,
+        progress: newTask.progress || 0
       }).select()
 
       if (error) {
@@ -411,7 +415,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
             }
           }).catch(err => console.error("Error sending task email:", err))
         }
-        setNewTask({ title: "", description: "", attached_id: "", attached_title: "", attached_type: "" })
+        setNewTask({ title: "", description: "", attached_id: "", attached_title: "", attached_type: "", progress: 0 })
         await loadNotesAndTasks()
       }
     } catch (err) {
@@ -436,6 +440,52 @@ export default function ClassDetailView({ classId }: { classId: string }) {
     await supabase.from("Task").delete().eq("id", taskId)
     setTasks(prev => prev.filter(t => t.id !== taskId))
     setReviewTasks(prev => prev.filter(t => t.id !== taskId))
+  }
+
+  async function saveEditedTask(taskId: string) {
+    if (!editingTaskForm.title.trim()) return
+    setSaving(true)
+
+    const isPlaylist = editingTaskForm.attached_id.startsWith("playlist_")
+    const contentId = !isPlaylist && editingTaskForm.attached_id ? editingTaskForm.attached_id.replace("item_", "") : null
+    const playlistId = isPlaylist ? editingTaskForm.attached_id.replace("playlist_", "") : null
+
+    try {
+      const { error } = await supabase
+        .from("Task")
+        .update({
+          title: editingTaskForm.title.trim(),
+          description: editingTaskForm.description.trim() || null,
+          content_id: contentId,
+          playlist_id: playlistId,
+          progress: editingTaskForm.progress,
+          completed: editingTaskForm.progress === 100
+        })
+        .eq("id", taskId)
+
+      if (error) {
+        toast("Error al guardar cambios de la tarea", "error")
+      } else {
+        toast("Tarea modificada correctamente", "success")
+        
+        if (cls?.student_id && (contentId || playlistId)) {
+          const { error: slaErr } = await supabase.from("StudentLibraryAccess").upsert({
+            student_id: cls.student_id,
+            content_id: contentId || null,
+            playlist_id: playlistId || null,
+            assigned_by: cls.teacher_id
+          }, { onConflict: contentId ? 'student_id,content_id' : 'student_id,playlist_id' })
+          if (slaErr) console.error("Error SLA:", slaErr)
+        }
+        
+        setEditingTaskId(null)
+        await loadNotesAndTasks()
+      }
+    } catch (err) {
+      toast("Error inesperado al guardar", "error")
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (loading) return <div className="animate-pulse space-y-4">{[1, 2].map(i => <div key={i} className="h-32 bg-white rounded-3xl" />)}</div>
@@ -738,67 +788,209 @@ export default function ClassDetailView({ classId }: { classId: string }) {
           </h3>
 
           {(() => {
-            const renderTaskItem = (t: Task, isReview: boolean) => (
-              <div key={t.id} className="flex flex-col p-5 bg-white border border-neutral-100 rounded-3xl hover:shadow-md transition-all group">
-                <div className="flex items-start gap-4">
-                  <button onClick={() => toggleTask(t.id, t.completed)}
-                    className={`w-8 h-8 rounded-xl border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-                      t.completed ? "bg-emerald-500 border-emerald-500 text-white" : "border-neutral-200 hover:border-violet-400"
-                    }`}>
-                    {t.completed && <CheckCircle2 className="w-4 h-4" />}
-                  </button>
-                  <div className="flex-1 min-w-0">
-                    <p className={`font-black text-sm tracking-tight ${t.completed ? "line-through text-neutral-300" : "text-neutral-900"}`}>{t.title}</p>
-                    {t.description && <p className="text-xs text-neutral-500 font-medium mt-1 uppercase tracking-tighter">{t.description}</p>}
-                  </div>
-                  {profile?.role === 'TEACHER' && (
-                    <button onClick={() => deleteTask(t.id)} className="text-neutral-400 md:opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-500 p-1">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-                {t.LibraryContent && (
-                  <div className="mt-6 space-y-4">
-                    {t.LibraryContent.type === 'video' && t.LibraryContent.url && (
-                      <VideoPlayer url={t.LibraryContent.url} title={t.LibraryContent.title} />
-                    )}
-                    <div className="p-4 bg-emerald-50 rounded-2xl flex items-center justify-between border border-emerald-100">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center text-emerald-600">
-                          {t.LibraryContent.type === 'video' ? <PlayCircle className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
-                        </div>
-                        <div>
-                          <p className="text-xs font-black text-emerald-900">{t.LibraryContent.title}</p>
-                          <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">{t.LibraryContent.type}</p>
-                        </div>
-                      </div>
-                      <a href={t.LibraryContent.url} target="_blank" rel="noopener noreferrer" className="p-2 bg-white text-emerald-600 rounded-xl hover:bg-emerald-600 transition-all">
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
-                    </div>
-                  </div>
-                )}
-                {t.LibraryPlaylist && (
-                  <div className="mt-6 p-4 bg-indigo-50 rounded-2xl border border-indigo-100 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center text-indigo-600 font-bold">📚</div>
+            const renderTaskItem = (t: Task, isReview: boolean) => {
+              const isEditingThisTask = editingTaskId === t.id;
+
+              if (isEditingThisTask) {
+                return (
+                  <div key={t.id} className="flex flex-col p-5 bg-neutral-50 border border-violet-200 rounded-3xl space-y-4">
+                    <div className="space-y-3">
                       <div>
-                        <p className="text-xs font-black text-indigo-900">{t.LibraryPlaylist.title}</p>
-                        <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Serie Completa</p>
+                        <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest block mb-1">Título de la Tarea</label>
+                        <input 
+                          type="text" 
+                          value={editingTaskForm.title} 
+                          onChange={e => setEditingTaskForm(p => ({ ...p, title: e.target.value }))}
+                          className="w-full bg-white border border-neutral-200 rounded-xl px-4 py-2.5 text-sm font-bold text-neutral-900 outline-none focus:border-violet-400" 
+                          placeholder="Título..."
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest block mb-1">Descripción / Detalles</label>
+                        <textarea 
+                          value={editingTaskForm.description || ""} 
+                          onChange={e => setEditingTaskForm(p => ({ ...p, description: e.target.value }))}
+                          className="w-full bg-white border border-neutral-200 rounded-xl px-4 py-2.5 text-xs font-medium text-neutral-600 outline-none focus:border-violet-400 resize-none" 
+                          placeholder="Detalles..."
+                          rows={2}
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest block mb-2">Progreso de la Tarea</label>
+                        <div className="flex gap-2">
+                          {[0, 25, 50, 75, 100].map(val => (
+                            <button
+                              type="button"
+                              key={val}
+                              onClick={() => setEditingTaskForm(p => ({ ...p, progress: val }))}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
+                                editingTaskForm.progress === val
+                                  ? "bg-violet-600 text-white shadow-sm"
+                                  : "bg-white text-neutral-600 border border-neutral-200 hover:bg-neutral-50"
+                              }`}
+                            >
+                              {val}%
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-2 pt-2">
+                        <button 
+                          type="button"
+                          onClick={() => setModalTarget("edit_task")}
+                          className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 border transition-all truncate shadow-sm ${
+                            editingTaskForm.attached_id
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                              : "bg-white text-neutral-600 border-neutral-200 hover:border-emerald-300 hover:text-neutral-900"
+                          }`}
+                        >
+                          <BookOpen className="w-3.5 h-3.5 flex-shrink-0" />
+                          <span className="truncate">{editingTaskForm.attached_id ? `📎 ${editingTaskForm.attached_title || "Material Adjunto"}` : "📎 Adjuntar Material"}</span>
+                        </button>
+                        {editingTaskForm.attached_id && (
+                          <button
+                            type="button"
+                            onClick={() => setEditingTaskForm(p => ({...p, attached_id: "", attached_title: "", attached_type: ""}))}
+                            className="p-2 text-neutral-400 hover:text-red-600 rounded-xl hover:bg-red-50 transition-all flex-shrink-0"
+                            title="Quitar adjunto"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
-                    <Link href={`/dashboard/biblioteca?playlist=${t.playlist_id}`} className="px-3 py-1.5 bg-white text-indigo-600 rounded-xl font-bold text-xs hover:bg-indigo-600 hover:text-white transition-all shadow-sm flex items-center gap-1.5">
-                      Abrir Serie <ExternalLink className="w-3.5 h-3.5" />
-                    </Link>
+                    
+                    <div className="flex justify-end gap-2 pt-3 border-t border-neutral-200/50">
+                      <button 
+                        onClick={() => setEditingTaskId(null)}
+                        className="px-4 py-2 bg-white hover:bg-neutral-100 border border-neutral-200 text-neutral-600 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                      >
+                        Cancelar
+                      </button>
+                      <button 
+                        onClick={() => saveEditedTask(t.id)}
+                        disabled={!editingTaskForm.title.trim() || saving}
+                        className="px-4 py-2 bg-neutral-900 hover:bg-violet-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-30 flex items-center gap-1"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        {saving ? "..." : "Guardar"}
+                      </button>
+                    </div>
                   </div>
-                )}
-                <div className="mt-4 pt-3 border-t border-neutral-50 flex justify-between items-center">
-                  <p className="text-[9px] font-black text-neutral-300 uppercase tracking-widest">
-                    Asignada el {new Date(t.created_at).toLocaleDateString("es-CL", { day: "numeric", month: "short", year: "numeric" })}
-                  </p>
+                );
+              }
+
+              return (
+                <div key={t.id} className="flex flex-col p-5 bg-white border border-neutral-100 rounded-3xl hover:shadow-md transition-all group">
+                  <div className="flex items-start gap-4">
+                    <button onClick={() => toggleTask(t.id, t.completed)}
+                      className={`w-8 h-8 rounded-xl border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                        t.completed ? "bg-emerald-500 border-emerald-500 text-white" : "border-neutral-200 hover:border-violet-400"
+                      }`}>
+                      {t.completed && <CheckCircle2 className="w-4 h-4" />}
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <p className={`font-black text-sm tracking-tight ${t.completed ? "line-through text-neutral-300" : "text-neutral-900"}`}>{t.title}</p>
+                      {t.description && <p className="text-xs text-neutral-500 font-medium mt-1 uppercase tracking-tighter">{t.description}</p>}
+                    </div>
+                    {profile?.role === 'TEACHER' && (
+                      <div className="flex items-center gap-1 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button 
+                          onClick={() => {
+                            const attachedId = t.content_id ? `item_${t.content_id}` : t.playlist_id ? `playlist_${t.playlist_id}` : "";
+                            const attachedTitle = t.LibraryContent?.title || t.LibraryPlaylist?.title || "";
+                            const attachedType = t.LibraryContent?.type || (t.playlist_id ? "playlist" : "");
+                            
+                            setEditingTaskForm({
+                              title: t.title,
+                              description: t.description || "",
+                              attached_id: attachedId,
+                              attached_title: attachedTitle,
+                              attached_type: attachedType,
+                              progress: t.progress || 0
+                            });
+                            setEditingTaskId(t.id);
+                          }} 
+                          className="text-neutral-400 hover:text-violet-600 p-1 transition-colors"
+                          title="Editar tarea"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => deleteTask(t.id)} 
+                          className="text-neutral-400 hover:text-red-500 p-1 transition-colors"
+                          title="Eliminar tarea"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* PROGRESS BAR */}
+                  <div className="mt-4 space-y-1.5">
+                    <div className="flex items-center justify-between text-[10px] font-black text-neutral-400 uppercase tracking-widest">
+                      <span>Progreso de la tarea</span>
+                      <span className={t.completed || t.progress === 100 ? "text-emerald-600 font-bold" : "text-violet-600 font-bold"}>
+                        {t.completed ? "100%" : `${t.progress || 0}%`}
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 bg-neutral-100 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          t.completed || t.progress === 100 
+                            ? "bg-gradient-to-r from-emerald-400 to-teal-500" 
+                            : "bg-gradient-to-r from-violet-500 to-indigo-500"
+                        }`}
+                        style={{ width: `${t.completed ? 100 : (t.progress || 0)}%` }}
+                      />
+                    </div>
+                  </div>
+                  {t.LibraryContent && (
+                    <div className="mt-6 space-y-4">
+                      {t.LibraryContent.type === 'video' && t.LibraryContent.url && (
+                        <VideoPlayer url={t.LibraryContent.url} title={t.LibraryContent.title} />
+                      )}
+                      <div className="p-4 bg-emerald-50 rounded-2xl flex items-center justify-between border border-emerald-100">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center text-emerald-600">
+                            {t.LibraryContent.type === 'video' ? <PlayCircle className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                          </div>
+                          <div>
+                            <p className="text-xs font-black text-emerald-900">{t.LibraryContent.title}</p>
+                            <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">{t.LibraryContent.type}</p>
+                          </div>
+                        </div>
+                        <a href={t.LibraryContent.url} target="_blank" rel="noopener noreferrer" className="p-2 bg-white text-emerald-600 rounded-xl hover:bg-emerald-600 transition-all">
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                  {t.LibraryPlaylist && (
+                    <div className="mt-6 p-4 bg-indigo-50 rounded-2xl border border-indigo-100 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center text-indigo-600 font-bold">📚</div>
+                        <div>
+                          <p className="text-xs font-black text-indigo-900">{t.LibraryPlaylist.title}</p>
+                          <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Serie Completa</p>
+                        </div>
+                      </div>
+                      <Link href={`/dashboard/biblioteca?playlist=${t.playlist_id}`} className="px-3 py-1.5 bg-white text-indigo-600 rounded-xl font-bold text-xs hover:bg-indigo-600 hover:text-white transition-all shadow-sm flex items-center gap-1.5">
+                        Abrir Serie <ExternalLink className="w-3.5 h-3.5" />
+                      </Link>
+                    </div>
+                  )}
+                  <div className="mt-4 pt-3 border-t border-neutral-50 flex justify-between items-center">
+                    <p className="text-[9px] font-black text-neutral-300 uppercase tracking-widest">
+                      Asignada el {new Date(t.created_at).toLocaleDateString("es-CL", { day: "numeric", month: "short", year: "numeric" })}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            )
+              )
+            }
 
             return (
               <>
@@ -841,6 +1033,26 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                         rows={2}
                         className="w-full bg-transparent border-0 outline-none text-sm font-medium resize-none text-neutral-600" 
                       />
+                      
+                      <div className="pt-3 border-t border-neutral-100">
+                        <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest block mb-2">Progreso Inicial</label>
+                        <div className="flex gap-2">
+                          {[0, 25, 50, 75, 100].map(val => (
+                            <button
+                              type="button"
+                              key={val}
+                              onClick={() => setNewTask(p => ({ ...p, progress: val }))}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
+                                newTask.progress === val
+                                  ? "bg-violet-600 text-white shadow-sm"
+                                  : "bg-white text-neutral-600 border border-neutral-200 hover:bg-neutral-50"
+                              }`}
+                            >
+                              {val}%
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                       <div className="flex items-center justify-between pt-4 border-t border-neutral-200/50 gap-4">
                         <div className="flex items-center gap-2 min-w-0">
                           <button 
@@ -907,10 +1119,21 @@ export default function ClassDetailView({ classId }: { classId: string }) {
           if (modalTarget === "task") {
             setNewTask(p => ({ ...p, attached_id: selectedId, attached_title: item.title, attached_type: item.type }))
           }
+          if (modalTarget === "edit_task") {
+            setEditingTaskForm(p => ({ ...p, attached_id: selectedId, attached_title: item.title, attached_type: item.type }))
+          }
         }}
         library={library}
         playlists={playlists}
-        currentSelectedId={modalTarget === "note" ? newNote.attached_id : modalTarget === "task" ? newTask.attached_id : ""}
+        currentSelectedId={
+          modalTarget === "note" 
+            ? newNote.attached_id 
+            : modalTarget === "task" 
+            ? newTask.attached_id 
+            : modalTarget === "edit_task" 
+            ? editingTaskForm.attached_id 
+            : ""
+        }
       />
     </div>
   )
