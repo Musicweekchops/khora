@@ -77,7 +77,7 @@ export default function NuevoPagoPage() {
       {error && <div className="bg-red-50 text-red-700 p-4 rounded-2xl border border-red-200 text-sm font-bold">⚠️ {error}</div>}
 
       <form onSubmit={handleSubmit} className="bg-white rounded-3xl border border-neutral-100 p-8 space-y-6 shadow-sm">
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           <div>
             <label className="block text-xs font-bold text-neutral-400 uppercase tracking-widest mb-2">Alumno *</label>
             <select value={form.student_id} onChange={e => set("student_id", e.target.value)} className="kh-input w-full" required>
@@ -94,7 +94,7 @@ export default function NuevoPagoPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="block text-xs font-bold text-neutral-400 uppercase tracking-widest mb-2">Monto *</label>
             <input type="number" value={form.amount} onChange={e => set("amount", e.target.value)} className="kh-input w-full" placeholder="50000" required />
@@ -117,7 +117,7 @@ export default function NuevoPagoPage() {
         {form.payment_type === "MONTHLY" && (
           <div className="bg-violet-50 p-6 rounded-2xl border border-violet-100 space-y-4">
             <h3 className="text-xs font-black text-violet-700 uppercase tracking-widest">Detalles del Pack Mensual</h3>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="block text-[10px] font-bold text-violet-400 uppercase mb-2">Inicio Período</label>
                 <input type="date" value={form.period_start} onChange={e => set("period_start", e.target.value)} className="kh-input w-full border-violet-200" />

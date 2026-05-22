@@ -4,13 +4,14 @@ import { useState } from "react"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { CHILE_REGIONS } from "@/lib/chile-regions"
-import { Info } from "lucide-react"
+import { Info, Eye, EyeOff } from "lucide-react"
 
 import { useRouter } from "next/navigation"
 
 export default function RegisterPage() {
   const router = useRouter()
   const [form, setForm] = useState({ name: "", email: "", password: "", region: "", comuna: "", instrumento: "" })
+  const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
 
@@ -21,8 +22,8 @@ export default function RegisterPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError("")
-    if (!form.region) return setError("Por favor, selecciona una región")
-    if (!form.comuna) return setError("Por favor, selecciona una comuna")
+    if (!form.region || form.region.trim() === "") return setError("Por favor, selecciona una región")
+    if (!form.comuna || form.comuna.trim() === "") return setError("Por favor, selecciona una comuna")
     setLoading(true)
 
     // Guardamos la combinación como 'Comuna, Región' para no alterar la base de datos
@@ -94,7 +95,24 @@ export default function RegisterPage() {
 
             <div>
               <label className="kh-label">Contraseña</label>
-              <input type="password" required minLength={6} value={form.password} onChange={e => set("password", e.target.value)} className="kh-input" placeholder="Mínimo 6 caracteres" />
+              <div className="relative">
+                <input 
+                  type={showPass ? "text" : "password"} 
+                  required 
+                  minLength={6} 
+                  value={form.password} 
+                  onChange={e => set("password", e.target.value)} 
+                  className="kh-input pr-10 w-full" 
+                  placeholder="Mínimo 6 caracteres" 
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPass(!showPass)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-neutral-400 hover:text-neutral-600 transition-colors"
+                >
+                  {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
