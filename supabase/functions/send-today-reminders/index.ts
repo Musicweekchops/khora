@@ -69,6 +69,17 @@ serve(async (req) => {
       const tUser = Array.isArray(teacherUser) ? teacherUser[0] : teacherUser
 
       if (sUser?.email && tUser?.email) {
+        // Retraso secuencial (jitter) para evitar que los proveedores de correo marquen envíos masivos como spam
+        await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1500))
+
+        // Personalización dinámica del asunto para romper la firma de patrones idénticos (anti-spam)
+        const subjectOptions = [
+          `🎶 ¡Hola ${sUser.name}! Hoy tienes clase de música con ${tUser.name}`,
+          `🎸 ${sUser.name}, te recordamos tu clase de hoy con ${tUser.name}`,
+          `🥁 ¡Hola! Tu clase con ${tUser.name} está programada para hoy`
+        ]
+        const dynamicSubject = subjectOptions[cls.id.charCodeAt(cls.id.length - 1) % subjectOptions.length]
+
         // Enviar correo al alumno
         const resendRes = await fetch("https://api.resend.com/emails", {
           method: "POST",
@@ -79,7 +90,7 @@ serve(async (req) => {
           body: JSON.stringify({
             from: FROM_EMAIL,
             to: sUser.email,
-            subject: "Recordatorio de tu clase de hoy",
+            subject: dynamicSubject,
             html: getTemplate('CLASS_REMINDER', {
               studentName: sUser.name,
               teacherName: tUser.name,

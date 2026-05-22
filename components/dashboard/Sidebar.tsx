@@ -150,6 +150,19 @@ export default function Sidebar({ user }: SidebarProps) {
               )}
             </div>
           </div>
+          
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent("khora-trigger-onboarding"))}
+            className="w-full flex items-center gap-2 px-3 py-2 text-neutral-500 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors text-[13px] font-medium mb-1"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            <span>Guía Rápida</span>
+          </button>
+
           <button
             onClick={() => signOut()}
             className="w-full flex items-center gap-2 px-3 py-2 text-neutral-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors text-[13px] font-medium"
@@ -166,7 +179,7 @@ export default function Sidebar({ user }: SidebarProps) {
         style={{ bottom: 'calc(env(safe-area-inset-bottom, 16px) + 12px)' }}
       >
         <div className="flex items-center justify-around">
-          {navItems.slice(0, 4).map(item => { // Limit to 4 items on mobile for space
+          {navItems.slice(0, 3).map(item => { // Limit to 3 items on mobile for space when Help button is added
             const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname?.startsWith(item.href))
             return (
               <Link key={item.name} href={item.href} className="flex-1">
@@ -179,13 +192,29 @@ export default function Sidebar({ user }: SidebarProps) {
               </Link>
             )
           })}
+          
+          {/* Mobile Onboarding Trigger */}
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent("khora-trigger-onboarding"))}
+            className="flex-1 flex flex-col items-center justify-center gap-1 text-neutral-400"
+          >
+            <span className="mb-0.5">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+            </span>
+            <span className="text-[10px] font-bold uppercase tracking-tighter">Ayuda</span>
+          </button>
+
           {/* Mobile Profile/Menu Trigger */}
           <Link href="/dashboard/ajustes" className="flex-1">
              <div className={`flex flex-col items-center justify-center gap-1 ${pathname === '/dashboard/ajustes' ? "text-violet-600" : "text-neutral-400"}`}>
                 <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold border ${pathname === '/dashboard/ajustes' ? "border-violet-600 bg-violet-50" : "border-neutral-300"}`}>
                   {user.name.charAt(0).toUpperCase()}
                 </div>
-                <span className="text-[10px] font-bold uppercase tracking-tighter">Mí Perfil</span>
+                <span className="text-[10px] font-bold uppercase tracking-tighter">Perfil</span>
              </div>
           </Link>
         </div>

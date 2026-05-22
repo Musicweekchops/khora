@@ -18,6 +18,7 @@ export interface UserProfile {
   teacherProfileId: string | null
   studentProfileId: string | null
   instrumento?: string | null
+  completed_onboarding?: boolean
 }
 
 interface AuthContextType {
@@ -77,7 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { data, error } = await supabase
           .from('User')
           .select(`
-            id, email, name, phone, role, is_admin,
+            id, email, name, phone, role, is_admin, completed_onboarding,
             TeacherProfile ( id, instrumento ),
             StudentProfile ( id )
           `)
@@ -100,6 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             teacherProfileId: tp?.id ?? null,
             studentProfileId: sp?.id ?? null,
             instrumento: tp?.instrumento ?? null,
+            completed_onboarding: data.completed_onboarding ?? false,
           }
         }
         
