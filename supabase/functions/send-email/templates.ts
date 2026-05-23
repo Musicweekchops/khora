@@ -1,4 +1,4 @@
-export type EmailType = 'WELCOME' | 'CLASS_CONFIRMATION' | 'CLASS_REMINDER' | 'TEACHER_CLASS_CONFIRMED';
+export type EmailType = 'WELCOME' | 'CLASS_CONFIRMATION' | 'CLASS_REMINDER' | 'TEACHER_CLASS_CONFIRMED' | 'TEACHER_NEW_STUDENT';
 
 interface TemplateParams {
   studentName: string;
@@ -214,6 +214,53 @@ export function getTemplate(type: EmailType, params: TemplateParams): string {
         
         <a href="https://khora.cl/dashboard/agenda" style="display: inline-block; background: linear-gradient(135deg, #5b4fcf 0%, #3d2fa8 100%); background-color: #5b4fcf; color: #ffffff !important; text-decoration: none; font-size: 15px; font-weight: 800; padding: 16px 36px; border-radius: 100px; box-shadow: 0 4px 15px rgba(91, 79, 207, 0.3); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
           Ver mi Agenda
+        </a>
+      </div>
+    `);
+  }
+
+  if (type === 'TEACHER_NEW_STUDENT') {
+    return getLayout(`
+      <div style="padding: 0 40px 40px 40px; text-align: center;">
+        <div style="width: 60px; height: 60px; background-color: #5b4fcf; border-radius: 50%; font-size: 24px; color: #ffffff; display: inline-block; text-align: center; margin: 0 auto 24px auto; line-height: 60px;">
+          👥
+        </div>
+        <h2 style="font-size: 24px; font-weight: 800; color: #ffffff; margin: 0 0 10px 0; letter-spacing: -0.5px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.2;">
+          ¡Nuevo Alumno Inscrito! 🎉
+        </h2>
+        <p style="font-size: 15px; color: #a1a1aa; margin: 0 0 32px 0; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+          ¡Hola ${params.teacherName}! Un nuevo estudiante se ha registrado en tu academia Khora a través de tu enlace de invitación.
+        </p>
+        
+        <div style="background-color: #13131a; border: 1px solid #2d2d3d; border-radius: 20px; padding: 24px; margin-bottom: 32px; text-align: left;">
+          <div style="font-size: 11px; font-weight: 800; color: #5b4fcf; margin-bottom: 20px; text-align: center; text-transform: uppercase; letter-spacing: 1.5px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+            DATOS DEL ALUMNO
+          </div>
+          
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 12px;">
+            <tr>
+              <td align="left" style="font-size: 14px; color: #a1a1aa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Nombre:</td>
+              <td align="right" style="font-size: 14px; color: #ffffff; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${params.studentName}</td>
+            </tr>
+          </table>
+          
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 12px;">
+            <tr>
+              <td align="left" style="font-size: 14px; color: #a1a1aa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Email:</td>
+              <td align="right" style="font-size: 14px; color: #ffffff; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${params.email}</td>
+            </tr>
+          </table>
+          
+          <table width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td align="left" style="font-size: 14px; color: #a1a1aa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">WhatsApp:</td>
+              <td align="right" style="font-size: 14px; color: #ffffff; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${params.phone || 'No especificado'}</td>
+            </tr>
+          </table>
+        </div>
+        
+        <a href="https://khora.cl/dashboard/alumnos" style="display: inline-block; background: linear-gradient(135deg, #5b4fcf 0%, #3d2fa8 100%); background-color: #5b4fcf; color: #ffffff !important; text-decoration: none; font-size: 15px; font-weight: 800; padding: 16px 36px; border-radius: 100px; box-shadow: 0 4px 15px rgba(91, 79, 207, 0.3); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+          Ver Lista de Alumnos
         </a>
       </div>
     `);
