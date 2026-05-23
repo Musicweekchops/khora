@@ -26,6 +26,10 @@ export default function PushRegister() {
   useEffect(() => {
     if (!profile) return
 
+    // Si el usuario ya descartó el banner anteriormente, no molestar más
+    const dismissed = localStorage.getItem("khora-push-dismissed")
+    if (dismissed === "true") return
+
     // 1. Detectar si el usuario está corriendo la app en "Pantalla de Inicio" (modo standalone)
     const isStandalone = window.matchMedia("(display-mode: standalone)").matches || 
                          (window.navigator as any).standalone === true
@@ -90,7 +94,8 @@ export default function PushRegister() {
         }
       }
 
-      // Cerrar banner exitosamente
+      // Cerrar banner exitosamente y marcar como guardado
+      localStorage.setItem("khora-push-dismissed", "true")
       setShowBanner(false)
       
       // Opcional: Enviar una notificación de bienvenida inmediata local
@@ -131,7 +136,10 @@ export default function PushRegister() {
                 {loading ? "Activando..." : "Activar Alertas 🔔"}
               </button>
               <button
-                onClick={() => setShowBanner(false)}
+                onClick={() => {
+                  localStorage.setItem("khora-push-dismissed", "true")
+                  setShowBanner(false)
+                }}
                 className="px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-600 font-semibold"
               >
                 Quizás más tarde
