@@ -374,7 +374,7 @@ export default function BibliotecaPage() {
             </form>
           ) : (
             <form onSubmit={handleCreateItem} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="space-y-4">
                   <div>
                     <label className="kh-label block mb-1">Título del Recurso *</label>
@@ -393,7 +393,7 @@ export default function BibliotecaPage() {
                   </div>
                 </div>
                 <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="kh-label block mb-1">Tipo</label>
                       <select value={form.type} onChange={e => setForm(p => ({...p, type: e.target.value}))} className="kh-input">
@@ -464,7 +464,7 @@ export default function BibliotecaPage() {
               <h2 className="text-lg font-black text-neutral-800 flex items-center gap-2">
                 <span className="w-2 h-5 bg-violet-500 rounded-full" /> Series y Colecciones
               </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                 {filteredPlaylists.map(playlist => (
                   <div 
                     key={playlist.id} 
@@ -557,7 +557,7 @@ export default function BibliotecaPage() {
                                       </a>
                                     )}
                                     {profile?.role === "TEACHER" && (
-                                      <button onClick={() => deleteItem(item.id)} className="p-2 text-neutral-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all opacity-0 group-hover:opacity-100">
+                                      <button onClick={() => deleteItem(item.id)} className="p-2 text-neutral-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all opacity-100 lg:opacity-0 lg:group-hover:opacity-100">
                                         <Trash2 className="w-4 h-4" />
                                       </button>
                                     )}
