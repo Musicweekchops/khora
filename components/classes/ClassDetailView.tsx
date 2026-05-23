@@ -222,14 +222,16 @@ export default function ClassDetailView({ classId }: { classId: string }) {
           const todayT = allTasks.filter(t => t.class_id === classId)
           setTasks(todayT as any)
 
-          // Helper para comparar fechas y horas de clase (ej. "2026-05-14" y "18:00")
-          const isClassBefore = (c1Date: string, c1Time: string, c2Date: string, c2Time: string) => {
-            if (c1Date < c2Date) return true
-            if (c1Date > c2Date) return false
-            return (c1Time || "") < (c2Time || "")
+          // Helper robusto: convierte fecha+hora a timestamp ISO para comparación exacta.
+          // Normaliza el start_time a HH:MM para evitar problemas con "18:00:00" vs "18:00"
+          const toTimestamp = (date: string, time: string) => {
+            const normalizedTime = (time || "00:00").slice(0, 5) // tomar solo HH:MM
+            return new Date(`${date}T${normalizedTime}:00`).getTime()
           }
 
-          // Filter tasks from classes that are chronologically BEFORE the current active class
+          const activeTs = toTimestamp(activeCls.date, activeCls.start_time)
+
+          // Filter tasks from classes that are chronologically STRICTLY BEFORE the current active class
           const pastTasksWithDetails = allTasks
             .map(t => {
               const sc = siblingClasses.find(sc => sc.id === t.class_id)
@@ -237,7 +239,9 @@ export default function ClassDetailView({ classId }: { classId: string }) {
             })
             .filter(item => {
               if (!item.class || !activeCls?.date || !activeCls?.start_time) return false
-              return isClassBefore(item.class.date, item.class.start_time, activeCls.date, activeCls.start_time)
+              // Excluir explícitamente la clase actual (class_id === classId)
+              if (item.class.id === classId) return false
+              return toTimestamp(item.class.date, item.class.start_time) < activeTs
             })
 
           console.log("[DEBUG] allTasks fetched", {

@@ -341,17 +341,17 @@ export default function BibliotecaPage() {
 
       {/* CREATION FORM (Solo Profesores) */}
       {showForm && profile?.role === "TEACHER" && (
-        <div className="bg-white rounded-3xl border border-neutral-200 p-6 shadow-sm animate-in fade-in slide-in-from-top-4">
-          <div className="flex gap-4 mb-6 border-b border-neutral-100 pb-4">
+        <div className="bg-white rounded-3xl border border-neutral-200 p-4 sm:p-6 shadow-sm animate-in fade-in slide-in-from-top-4">
+          <div className="flex flex-wrap gap-2 mb-6 border-b border-neutral-100 pb-4 overflow-x-auto">
             <button 
               onClick={() => setFormMode("item")}
-              className={`font-bold px-4 py-2 rounded-xl transition-all ${formMode === "item" ? "bg-violet-100 text-violet-700" : "text-neutral-500 hover:bg-neutral-50"}`}
+              className={`font-bold px-4 py-2 rounded-xl transition-all whitespace-nowrap ${formMode === "item" ? "bg-violet-100 text-violet-700" : "text-neutral-500 hover:bg-neutral-50"}`}
             >
               Nuevo Recurso
             </button>
             <button 
               onClick={() => setFormMode("playlist")}
-              className={`font-bold px-4 py-2 rounded-xl transition-all ${formMode === "playlist" ? "bg-violet-100 text-violet-700" : "text-neutral-500 hover:bg-neutral-50"}`}
+              className={`font-bold px-4 py-2 rounded-xl transition-all whitespace-nowrap ${formMode === "playlist" ? "bg-violet-100 text-violet-700" : "text-neutral-500 hover:bg-neutral-50"}`}
             >
               Crear Serie / Lista
             </button>
