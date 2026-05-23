@@ -94,25 +94,13 @@ function ConfirmarClaseContent() {
 
       if (updateErr) throw updateErr
 
-      // 4. Si el profesor tiene correo, dispararle la notificación de forma asíncrona (NO bloqueante)
-      // para evitar que el alumno se quede pegado en el spinner mientras se procesa la API de correos.
-      if (teacherEmail) {
-        supabase.functions.invoke("send-email", {
-          body: {
-            to: teacherEmail,
-            type: "TEACHER_CLASS_CONFIRMED",
-            subject: `La clase de ${studentName} está confirmada`,
-            params: {
-              studentName,
-              teacherName,
-              date: cls.date,
-              time: formattedTime
-            }
-          }
-        }).catch((mailErr) => {
-          console.error("Error al enviar correo al profesor (no bloqueante):", mailErr)
-        })
-      }
+      // 4. Notificar al profesor mediante una notificación Push de forma asíncrona (NO bloqueante)
+      // para evitar que el alumno se quede pegado en el spinner de carga.
+      supabase.functions.invoke("notify-teacher-push", {
+        body: { classId }
+      }).catch((pushErr) => {
+        console.error("Error al enviar notificación push al profesor (no bloqueante):", pushErr)
+      })
 
       setStatus("success")
     } catch (err: any) {

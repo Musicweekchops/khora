@@ -4,7 +4,7 @@ import webpush from "web-push"
 // ==========================================
 // CONFIGURACIÓN DE LAS LLAVES DE NOTIFICACIÓN
 // ==========================================
-const VAPID_PUBLIC_KEY = "BC3N_V7TcV1Wo-u4IdieY9eJYuHfO-zC3ghLAho4Lj2BsUtQf2lgrQURxmq_I0vNigamO5lRB1C_AG-2jLm1Cm4"
+const VAPID_PUBLIC_KEY = "BC3N_V7TcV1Wo-u4IdieY9eJYuHfO-zC3ghLAho4Lj2BsLtQf2lgrQURxmq_I0vNigamO5lRB1C_AG-2jLm1Cm4"
 const VAPID_PRIVATE_KEY = "HTsnrmAK-XWgfOHMO2u2I_t9rbL-4qmaisaF00mcEdI"
 const VAPID_SUBJECT = "mailto:hola@khora.cl"
 
@@ -98,6 +98,15 @@ async function sendGreetingTest() {
       successCount++
     } catch (err: any) {
       console.error(`   ❌ Falló el envío: ${err.message}`)
+      if (err.statusCode) {
+        console.error(`      Status Code: ${err.statusCode}`)
+      }
+      if (err.body) {
+        console.error(`      Response Body: ${err.body}`)
+      }
+      if (err.headers) {
+        console.error(`      Response Headers:`, JSON.stringify(err.headers, null, 2))
+      }
       
       // Si la suscripción ya no es válida (statusCode 410 o 404), la limpiamos para mantener la BD limpia
       if (err.statusCode === 410 || err.statusCode === 404) {

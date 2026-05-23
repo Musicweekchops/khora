@@ -122,7 +122,7 @@ serve(async (req) => {
               const webpush = await import("https://esm.sh/web-push@3.6.7")
               webpush.setVapidDetails(
                 "mailto:hola@khora.cl",
-                "BC3N_V7TcV1Wo-u4IdieY9eJYuHfO-zC3ghLAho4Lj2BsUtQf2lgrQURxmq_I0vNigamO5lRB1C_AG-2jLm1Cm4",
+                "BC3N_V7TcV1Wo-u4IdieY9eJYuHfO-zC3ghLAho4Lj2BsLtQf2lgrQURxmq_I0vNigamO5lRB1C_AG-2jLm1Cm4",
                 "HTsnrmAK-XWgfOHMO2u2I_t9rbL-4qmaisaF00mcEdI"
               )
 
