@@ -60,8 +60,12 @@ function ConfirmarClaseContent() {
         return
       }
 
-      const sUser = Array.isArray(cls.StudentProfile?.User) ? cls.StudentProfile?.User[0] : cls.StudentProfile?.User
-      const tUser = Array.isArray(cls.TeacherProfile?.User) ? cls.TeacherProfile?.User[0] : cls.TeacherProfile?.User
+      // Robustez absoluta de parsing: Postgrest puede retornar perfiles como objetos o arrays de 1 elemento
+      const studentProfile = Array.isArray(cls.StudentProfile) ? cls.StudentProfile[0] : cls.StudentProfile
+      const teacherProfile = Array.isArray(cls.TeacherProfile) ? cls.TeacherProfile[0] : cls.TeacherProfile
+
+      const sUser = Array.isArray(studentProfile?.User) ? studentProfile?.User[0] : studentProfile?.User
+      const tUser = Array.isArray(teacherProfile?.User) ? teacherProfile?.User[0] : teacherProfile?.User
 
       const studentName = sUser?.name || "Alumno"
       const teacherName = tUser?.name || "Profesor"
@@ -90,31 +94,24 @@ function ConfirmarClaseContent() {
 
       if (updateErr) throw updateErr
 
-      // 4. Si el profesor tiene correo, dispararle la notificación automatizada
+      // 4. Si el profesor tiene correo, dispararle la notificación de forma asíncrona (NO bloqueante)
+      // para evitar que el alumno se quede pegado en el spinner mientras se procesa la API de correos.
       if (teacherEmail) {
-        try {
-          await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/send-email`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
-              Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
-            },
-            body: JSON.stringify({
-              to: teacherEmail,
-              type: "TEACHER_CLASS_CONFIRMED",
-              subject: `La clase de ${studentName} está confirmada`,
-              params: {
-                studentName,
-                teacherName,
-                date: cls.date,
-                time: formattedTime
-              }
-            })
-          })
-        } catch (mailErr) {
-          console.error("Error al enviar correo al profesor:", mailErr)
-        }
+        supabase.functions.invoke("send-email", {
+          body: {
+            to: teacherEmail,
+            type: "TEACHER_CLASS_CONFIRMED",
+            subject: `La clase de ${studentName} está confirmada`,
+            params: {
+              studentName,
+              teacherName,
+              date: cls.date,
+              time: formattedTime
+            }
+          }
+        }).catch((mailErr) => {
+          console.error("Error al enviar correo al profesor (no bloqueante):", mailErr)
+        })
       }
 
       setStatus("success")
