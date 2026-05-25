@@ -35,6 +35,13 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
   const [addingNote, setAddingNote] = useState(false)
   const [showPreviewModal, setShowPreviewModal] = useState(false)
 
+  // Deletar / Migración de alumnos
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [otherStudents, setOtherStudents] = useState<{ id: string; name: string; email: string }[]>([])
+  const [selectedTargetId, setSelectedTargetId] = useState("")
+  const [deleting, setDeleting] = useState(false)
+  const [deleteMode, setDeleteMode] = useState<"total" | "migrate">("migrate")
+
   // Materiales asignados
   const [accessList, setAccessList] = useState<any[]>([])
   const [library, setLibrary] = useState<any[]>([])
@@ -121,6 +128,24 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
       if (pl.data) setPlaylists(pl.data)
     }
 
+    // Cargar otros alumnos del profesor para opción de migración
+    if (sp?.teacher_id) {
+      const { data: otherS } = await supabase
+        .from("StudentProfile")
+        .select("id, User ( name, email )")
+        .eq("teacher_id", sp.teacher_id)
+        .neq("id", studentId)
+        .order("created_at", { ascending: false })
+
+      if (otherS) {
+        setOtherStudents(otherS.map((s: any) => ({
+          id: s.id,
+          name: s.User?.name || "Alumno Sin Nombre",
+          email: s.User?.email || "Sin email"
+        })))
+      }
+    }
+
     setLoading(false)
   }
 
@@ -177,13 +202,32 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
     toast.success(newState ? "Cobranza automática activada" : "Cobranza desactivada para este ciclo")
   }
 
-  async function handleDelete() {
-    if (!confirm("¿Seguro que deseas eliminar este alumno y todo su historial?")) return
-    // Delete the User row (cascades to StudentProfile and everything linked)
-    if (student?.user_id) {
-      await supabase.from("User").delete().eq("id", student.user_id)
+  async function confirmDelete() {
+    if (deleteMode === "migrate" && !selectedTargetId) {
+      toast.error("Por favor, selecciona un alumno de destino para migrar el historial.")
+      return
     }
-    window.location.href = "/dashboard/alumnos"
+
+    setDeleting(true)
+    try {
+      const targetId = deleteMode === "migrate" ? selectedTargetId : null
+      const { error } = await supabase.rpc("migrate_and_delete_student", {
+        p_source_student_id: studentId,
+        p_target_student_id: targetId
+      })
+
+      if (error) {
+        toast.error("Error al eliminar alumno: " + error.message)
+      } else {
+        toast.success(targetId ? "¡Alumno eliminado e historial migrado con éxito!" : "Alumno eliminado y todo su historial borrado.")
+        window.location.href = "/dashboard/alumnos"
+      }
+    } catch (err: any) {
+      toast.error("Error inesperado: " + err.message)
+    } finally {
+      setDeleting(false)
+      setShowDeleteModal(false)
+    }
   }
   
   async function handleResetPassword() {
@@ -280,7 +324,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
                 <Edit3 className="w-4 h-4" />
                 <span className="hidden sm:inline">Editar</span>
               </Link>
-              <button onClick={handleDelete} className="p-2.5 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors">
+              <button onClick={() => setShowDeleteModal(true)} className="p-2.5 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors" title="Eliminar Alumno">
                 <Trash2 className="w-4 h-4" />
               </button>
             </div>
@@ -653,6 +697,136 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
         playlists={playlists}
         currentSelectedId={assignId}
       />
+
+      {/* MODAL DE ELIMINACIÓN Y MIGRACIÓN */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-950/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-[#1a1a24] text-white border border-[#2d2d3d] rounded-[32px] max-w-lg w-full overflow-hidden shadow-2xl relative p-8 md:p-10 animate-in zoom-in duration-200 font-sans">
+            
+            {/* Fondo geométrico sutil */}
+            <div className="absolute top-[-30%] right-[-10%] w-64 h-64 bg-red-500/5 blur-[80px] rounded-full" />
+            <div className="absolute bottom-[-10%] left-[5%] w-48 h-48 bg-violet-500/5 blur-[80px] rounded-full" />
+
+            <div className="relative z-10 space-y-6">
+              {/* Encabezado */}
+              <div className="text-center">
+                <div className="w-16 h-16 bg-red-500/10 border border-red-500/30 text-red-400 rounded-full flex items-center justify-center mx-auto shadow-lg mb-4">
+                  <Trash2 className="w-8 h-8" />
+                </div>
+                <h3 className="text-2xl font-black tracking-tight text-white">Eliminar Alumno</h3>
+                <p className="text-neutral-400 text-sm mt-2 leading-relaxed">
+                  ¿Seguro que deseas dar de baja la cuenta de <strong className="text-white">{student.user.name}</strong>? Su correo electrónico (<span className="text-violet-300 font-semibold">{student.user.email}</span>) quedará liberado inmediatamente.
+                </p>
+              </div>
+
+              {/* Selección de Modo */}
+              <div className="space-y-3">
+                <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest px-1">Selecciona una opción de borrado:</p>
+                
+                {/* Opción Migrar (Recomendada) */}
+                <button
+                  type="button"
+                  onClick={() => setDeleteMode("migrate")}
+                  className={`w-full text-left p-4 rounded-2xl border transition-all ${
+                    deleteMode === "migrate"
+                      ? "bg-violet-950/20 border-violet-500/50 shadow-md"
+                      : "bg-[#13131a] border-[#2d2d3d] hover:border-neutral-700"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">🔄</span>
+                    <div>
+                      <p className="text-xs font-black text-white uppercase tracking-wider">Eliminar y Migrar Historial (Recomendado)</p>
+                      <p className="text-[11px] text-neutral-400 mt-0.5 leading-relaxed">
+                        Transfiere sus clases, tareas, pagos y materiales a otro alumno. Ideal para cambios de correo.
+                      </p>
+                    </div>
+                  </div>
+                </button>
+
+                {/* Opción Borrado Total */}
+                <button
+                  type="button"
+                  onClick={() => setDeleteMode("total")}
+                  className={`w-full text-left p-4 rounded-2xl border transition-all ${
+                    deleteMode === "total"
+                      ? "bg-red-950/20 border-red-500/50 shadow-md"
+                      : "bg-[#13131a] border-[#2d2d3d] hover:border-neutral-700"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">🗑️</span>
+                    <div>
+                      <p className="text-xs font-black text-white uppercase tracking-wider">Borrado Total (Sin Traspaso)</p>
+                      <p className="text-[11px] text-neutral-400 mt-0.5 leading-relaxed">
+                        Elimina al alumno de raíz. Todo su historial de pagos y accesos se borrará de forma permanente.
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              {/* Selector de alumno destino si elige Migrar */}
+              {deleteMode === "migrate" && (
+                <div className="space-y-2 animate-in slide-in-from-top duration-200">
+                  <label className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest px-1">
+                    👥 Alumno Destino de la Migración:
+                  </label>
+                  {otherStudents.length === 0 ? (
+                    <div className="p-4 bg-amber-500/10 border border-amber-500/30 text-amber-300 rounded-2xl text-xs font-bold text-center leading-relaxed">
+                      ⚠️ No tienes otros alumnos registrados en el sistema para poder migrar el historial. Debes crear el alumno nuevo primero.
+                    </div>
+                  ) : (
+                    <select
+                      value={selectedTargetId}
+                      onChange={(e) => setSelectedTargetId(e.target.value)}
+                      className="w-full bg-[#13131a] border border-[#2d2d3d] text-white rounded-2xl p-3.5 text-sm font-bold focus:outline-none focus:border-violet-500 transition-all cursor-pointer"
+                    >
+                      <option value="">-- Seleccionar Alumno Destino --</option>
+                      {otherStudents.map(s => (
+                        <option key={s.id} value={s.id}>{s.name} ({s.email})</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
+
+              {/* Botones de acción */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDeleteModal(false)
+                    setSelectedTargetId("")
+                  }}
+                  disabled={deleting}
+                  className="flex-1 py-3.5 bg-neutral-800 text-neutral-300 hover:bg-neutral-700 rounded-2xl text-xs font-black uppercase tracking-widest transition-all disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDelete}
+                  disabled={deleting || (deleteMode === "migrate" && (!selectedTargetId || otherStudents.length === 0))}
+                  className={`flex-1 py-3.5 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all disabled:opacity-30 shadow-lg flex items-center justify-center gap-2 ${
+                    deleteMode === "migrate"
+                      ? "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 shadow-violet-950/20"
+                      : "bg-red-600 hover:bg-red-500 shadow-red-950/20"
+                  }`}
+                >
+                  {deleting ? (
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    "✓"
+                  )}
+                  <span>{deleteMode === "migrate" ? "Migrar y Eliminar" : "Eliminar de Raíz"}</span>
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   )
 }
