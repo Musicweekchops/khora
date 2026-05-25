@@ -25,7 +25,8 @@ import {
   ChevronLeft,
   FileText,
   PlayCircle,
-  BookOpen
+  BookOpen,
+  Forward
 } from "lucide-react"
 import VideoPlayer from "@/components/ui/VideoPlayer"
 import { useToast } from "@/components/ui/Toast"
@@ -444,6 +445,27 @@ export default function ClassDetailView({ classId }: { classId: string }) {
     await supabase.from("Task").delete().eq("id", taskId)
     setTasks(prev => prev.filter(t => t.id !== taskId))
     setReviewTasks(prev => prev.filter(t => t.id !== taskId))
+  }
+
+  async function rescheduleTaskToCurrentClass(taskId: string) {
+    setSaving(true)
+    try {
+      const { error } = await supabase
+        .from("Task")
+        .update({ class_id: classId })
+        .eq("id", taskId)
+
+      if (error) {
+        toast("Error al reasignar la tarea", "error")
+      } else {
+        toast("Tarea traspasada a esta clase con éxito", "success")
+        await loadNotesAndTasks()
+      }
+    } catch (err) {
+      toast("Error inesperado al reasignar", "error")
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function saveEditedTask(taskId: string) {
@@ -901,6 +923,15 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                     </div>
                     {profile?.role === 'TEACHER' && (
                       <div className="flex items-center gap-1 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                        {isReview && !t.completed && (
+                          <button
+                            onClick={() => rescheduleTaskToCurrentClass(t.id)}
+                            className="text-neutral-400 hover:text-emerald-600 p-1 transition-colors"
+                            title="Traspasar a esta clase (para revisar la próxima)"
+                          >
+                            <Forward className="w-4 h-4" />
+                          </button>
+                        )}
                         <button 
                           onClick={() => {
                             const attachedId = t.content_id ? `item_${t.content_id}` : t.playlist_id ? `playlist_${t.playlist_id}` : "";
@@ -908,12 +939,12 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                             const attachedType = t.LibraryContent?.type || (t.playlist_id ? "playlist" : "");
                             
                             setEditingTaskForm({
-                              title: t.title,
-                              description: t.description || "",
-                              attached_id: attachedId,
-                              attached_title: attachedTitle,
-                              attached_type: attachedType,
-                              progress: t.progress || 0
+                                title: t.title,
+                                description: t.description || "",
+                                attached_id: attachedId,
+                                attached_title: attachedTitle,
+                                attached_type: attachedType,
+                                progress: t.progress || 0
                             });
                             setEditingTaskId(t.id);
                           }} 

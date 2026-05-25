@@ -1,5 +1,5 @@
 -- Migration 027: Add atomic student delete and history migration RPC
--- Allows migrating Class, Task, Payment, and Library Access history to another student before deletion.
+-- Allows migrating Class, Task, Payment, Schedule, and Library Access history to another student before deletion.
 
 CREATE OR REPLACE FUNCTION public.migrate_and_delete_student(
   p_source_student_id UUID,
@@ -8,8 +8,14 @@ CREATE OR REPLACE FUNCTION public.migrate_and_delete_student(
 DECLARE
   v_source_user_id UUID;
 BEGIN
-  -- 1. Validar que el usuario que ejecuta sea un profesor
-  IF NOT public.is_teacher() THEN
+  -- 1. Validar que el usuario que ejecuta sea un profesor (verificando JWT y tabla public.User como fallback)
+  IF NOT (
+    public.is_teacher() OR 
+    EXISTS (
+      SELECT 1 FROM public."User" 
+      WHERE id = auth.uid() AND role = 'TEACHER'
+    )
+  ) THEN
     RAISE EXCEPTION 'Solo los profesores pueden realizar esta acción.';
   END IF;
 
@@ -39,6 +45,11 @@ BEGIN
     SET student_id = p_target_student_id
     WHERE student_id = p_source_student_id;
 
+    -- Migrar Horarios Fijos (Schedule)
+    UPDATE public."Schedule"
+    SET student_id = p_target_student_id
+    WHERE student_id = p_source_student_id;
+
     -- Migrar Accesos a Biblioteca (evitando duplicados mediante exclusión de conflictos)
     INSERT INTO public."StudentLibraryAccess" (student_id, content_id, playlist_id, assigned_by)
     SELECT p_target_student_id, content_id, playlist_id, assigned_by
@@ -51,10 +62,15 @@ BEGIN
     WHERE student_id = p_source_student_id;
   END IF;
 
-  -- 4. Eliminar el usuario en auth.users (esto borra en cascada User y StudentProfile)
+  -- 4. Eliminar el usuario en auth.users si existe (esto borra en cascada si tenía cuenta de login)
   DELETE FROM auth.users
+  WHERE id = v_source_user_id;
+
+  -- 5. Eliminar en public."User" directamente (garantiza el borrado y cascada del StudentProfile en todos los casos, tenga o no cuenta auth)
+  DELETE FROM public."User"
   WHERE id = v_source_user_id;
 
   RETURN TRUE;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+

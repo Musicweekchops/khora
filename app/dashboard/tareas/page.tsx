@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/context/AuthContext"
 import { ClipboardList, CheckCircle2, Circle } from "lucide-react"
 import { RichText } from "@/components/ui/RichText"
+import { motion, AnimatePresence } from "framer-motion"
 
 import Link from "next/link"
 
@@ -92,7 +93,24 @@ export default function TareasPage() {
       .eq("id", task.id)
   }
 
-  const pending = tasks.filter(t => !t.completed)
+  const pending = tasks
+    .filter(t => !t.completed)
+    .sort((a, b) => {
+      const progressA = a.progress || 0
+      const progressB = b.progress || 0
+      
+      // 1. Mostrar las de 0% de progreso al principio
+      if (progressA === 0 && progressB > 0) return -1
+      if (progressA > 0 && progressB === 0) return 1
+      
+      // 2. Si ambas tienen algún progreso (>0%), mostrar las de MENOR progreso arriba y las de MAYOR progreso abajo (más cerca de completadas)
+      if (progressA > 0 && progressB > 0 && progressA !== progressB) {
+        return progressA - progressB
+      }
+      
+      // 3. Fallback: ordenar por fecha de creación (descendente)
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    })
   const completed = tasks.filter(t => t.completed)
 
   return (
@@ -124,16 +142,26 @@ export default function TareasPage() {
                 <span className="w-2 h-5 bg-emerald-500 rounded-full" />
                 Por Hacer
               </h2>
-              <div className="grid gap-3">
-                {pending.map(task => (
-                  <TaskCard 
-                    key={task.id} 
-                    task={task} 
-                    onToggle={() => toggleTask(task)} 
-                    onUpdateProgress={(val) => updateProgress(task, val)} 
-                  />
-                ))}
-              </div>
+              <motion.div layout className="grid gap-3">
+                <AnimatePresence mode="popLayout">
+                  {pending.map(task => (
+                    <motion.div
+                      key={task.id}
+                      layout
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      transition={{ type: "spring", stiffness: 350, damping: 30 }}
+                    >
+                      <TaskCard 
+                        task={task} 
+                        onToggle={() => toggleTask(task)} 
+                        onUpdateProgress={(val) => updateProgress(task, val)} 
+                      />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </motion.div>
             </div>
           )}
 
@@ -144,16 +172,26 @@ export default function TareasPage() {
                 <span className="w-2 h-5 bg-neutral-200 rounded-full" />
                 Completadas
               </h2>
-              <div className="grid gap-3 opacity-60 hover:opacity-100 transition-opacity">
-                {completed.map(task => (
-                  <TaskCard 
-                    key={task.id} 
-                    task={task} 
-                    onToggle={() => toggleTask(task)} 
-                    onUpdateProgress={(val) => updateProgress(task, val)} 
-                  />
-                ))}
-              </div>
+              <motion.div layout className="grid gap-3 opacity-60 hover:opacity-100 transition-opacity duration-300">
+                <AnimatePresence mode="popLayout">
+                  {completed.map(task => (
+                    <motion.div
+                      key={task.id}
+                      layout
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      transition={{ type: "spring", stiffness: 350, damping: 30 }}
+                    >
+                      <TaskCard 
+                        task={task} 
+                        onToggle={() => toggleTask(task)} 
+                        onUpdateProgress={(val) => updateProgress(task, val)} 
+                      />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </motion.div>
             </div>
           )}
         </div>

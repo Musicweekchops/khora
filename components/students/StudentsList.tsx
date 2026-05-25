@@ -17,6 +17,47 @@ interface Student {
   last_seen_at: string | null
 }
 
+const copyToClipboard = (text: string) => {
+  if (typeof window === "undefined") return
+
+  const fallbackCopy = (val: string) => {
+    try {
+      const textArea = document.createElement("textarea")
+      textArea.value = val
+      textArea.style.top = "0"
+      textArea.style.left = "0"
+      textArea.style.position = "fixed"
+      textArea.style.opacity = "0"
+      document.body.appendChild(textArea)
+      textArea.focus()
+      textArea.select()
+      const successful = document.execCommand("copy")
+      document.body.removeChild(textArea)
+      if (successful) {
+        alert("¡Link de inscripción copiado al portapapeles! Envíalo por WhatsApp a tus nuevos alumnos.")
+      } else {
+        throw new Error("execCommand copy returned false")
+      }
+    } catch (err) {
+      console.error("Fallback copy failed:", err)
+      alert(`No se pudo copiar automáticamente. Por favor copia este enlace manualmente:\n\n${val}`)
+    }
+  }
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text)
+      .then(() => {
+        alert("¡Link de inscripción copiado al portapapeles! Envíalo por WhatsApp a tus nuevos alumnos.")
+      })
+      .catch((err) => {
+        console.error("Clipboard API writeText failed, trying fallback:", err)
+        fallbackCopy(text)
+      })
+  } else {
+    fallbackCopy(text)
+  }
+}
+
 export default function StudentsList() {
   const { profile } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
@@ -110,8 +151,7 @@ export default function StudentsList() {
             onClick={() => {
               if (!profile?.teacherProfileId) return
               const link = `${window.location.origin}/unirse?teacherId=${profile.teacherProfileId}`
-              navigator.clipboard.writeText(link)
-              alert("¡Link de inscripción copiado al portapapeles! Envíalo por WhatsApp a tus nuevos alumnos.")
+              copyToClipboard(link)
             }}
             className="flex-1 md:flex-none px-4 md:px-6 py-3 bg-white border border-neutral-200 text-neutral-700 rounded-2xl text-sm font-bold hover:bg-neutral-50 hover:border-neutral-300 transition-colors shadow-sm flex items-center justify-center gap-2 whitespace-nowrap"
           >
@@ -149,8 +189,7 @@ export default function StudentsList() {
             <button
               onClick={() => {
                 const fullLink = `${window.location.origin}/unirse?teacherId=${profile.teacherProfileId}`
-                navigator.clipboard.writeText(fullLink)
-                alert("¡Link de inscripción copiado al portapapeles! Envíalo por WhatsApp a tus nuevos alumnos.")
+                copyToClipboard(fullLink)
               }}
               className="px-4 py-2 bg-neutral-900 hover:bg-violet-600 text-white text-xs font-bold rounded-xl transition-all shadow-sm shrink-0 flex items-center gap-1.5"
             >
