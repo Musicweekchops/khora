@@ -22,10 +22,14 @@ export default function StudentsList() {
   const [students, setStudents] = useState<Student[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
+  const [inviteLink, setInviteLink] = useState("")
 
   useEffect(() => {
     if (profile?.teacherProfileId) {
       fetchStudents(profile.teacherProfileId)
+      if (typeof window !== "undefined") {
+        setInviteLink(`${window.location.host}/unirse?teacherId=${profile.teacherProfileId}`)
+      }
     }
   }, [profile])
 
@@ -123,6 +127,38 @@ export default function StudentsList() {
           </Link>
         </div>
       </div>
+
+      {/* Invite Link Card */}
+      {profile?.teacherProfileId && (
+        <div className="bg-white rounded-3xl border border-neutral-100 p-5 shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-neutral-800 flex items-center gap-2">
+              <span className="text-base">🔗</span> Enlace de invitación para alumnos
+            </h2>
+            <span className="text-[10px] bg-violet-50 text-violet-600 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+              Registro Directo
+            </span>
+          </div>
+          <p className="text-xs text-neutral-500 leading-relaxed">
+            Comparte este enlace corto con tus nuevos alumnos. Al ingresar, podrán registrarse y quedar vinculados a tu cuenta automáticamente.
+          </p>
+          <div className="flex items-center gap-2 bg-neutral-50 border border-neutral-200/60 rounded-2xl p-1.5 pl-4 shadow-inner max-w-full">
+            <span className="text-xs font-mono text-neutral-600 truncate select-all flex-1 min-w-0">
+              {inviteLink}
+            </span>
+            <button
+              onClick={() => {
+                const fullLink = `${window.location.origin}/unirse?teacherId=${profile.teacherProfileId}`
+                navigator.clipboard.writeText(fullLink)
+                alert("¡Link de inscripción copiado al portapapeles! Envíalo por WhatsApp a tus nuevos alumnos.")
+              }}
+              className="px-4 py-2 bg-neutral-900 hover:bg-violet-600 text-white text-xs font-bold rounded-xl transition-all shadow-sm shrink-0 flex items-center gap-1.5"
+            >
+              <span>📋</span> Copiar
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Search */}
       <div className="relative">
