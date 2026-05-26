@@ -18,7 +18,6 @@ import {
   Sparkles, 
   Clock, 
   FolderPlus,
-  Compass,
   ArrowLeft,
   Tv
 } from "lucide-react"
@@ -166,11 +165,93 @@ function mapToStandardSlot(teacherInput: string | null): "technical" | "repertoi
   return "general";
 }
 
+// --- HELPER TO DETECT FILE EXTENSIONS ---
+function getFileExtension(url: string | null): string {
+  if (!url) return ""
+  const cleanUrl = url.split(/[?#]/)[0]
+  return cleanUrl.substring(cleanUrl.lastIndexOf(".") + 1).toLowerCase()
+}
+
 // --- HELPER TO GET YOUTUBE ID ---
 function getYouTubeId(url: string | null): string | null {
   if (!url) return null;
   const match = url.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?([^?&\s]+)/);
   return match ? match[1] : null;
+}
+
+// --- AUTOMATIC CLIENT-SIDE PDF FIRST-PAGE RENDERER ---
+function PdfThumbnail({ url }: { url: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [loaded, setLoaded] = useState(false)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    if (!url) return
+
+    async function loadPdf() {
+      try {
+        // Load PDF.js dynamically from CDN if not present in window
+        if (!window['pdfjs-dist/build/pdf']) {
+          const script = document.createElement('script')
+          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
+          script.async = true
+          document.head.appendChild(script)
+          await new Promise((resolve) => {
+            script.onload = resolve
+          })
+        }
+
+        const pdfjs = window['pdfjs-dist/build/pdf']
+        pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+
+        const pdf = await pdfjs.getDocument(url).promise
+        if (!active) return
+
+        const page = await pdf.getPage(1)
+        if (!active) return
+
+        const canvas = canvasRef.current
+        if (!canvas) return
+
+        const context = canvas.getContext('2d')
+        if (!context) return
+
+        // Scale to a lightweight preview resolution
+        const viewport = page.getViewport({ scale: 0.6 })
+        canvas.height = viewport.height
+        canvas.width = viewport.width
+
+        await page.render({
+          canvasContext: context,
+          viewport: viewport
+        }).promise
+
+        if (active) setLoaded(true)
+      } catch (e) {
+        console.error("Error rendering PDF thumbnail:", e)
+        if (active) setError(true)
+      }
+    }
+
+    loadPdf()
+    return () => {
+      active = false
+    }
+  }, [url])
+
+  if (error) return null
+
+  return (
+    <div className="w-full h-full relative overflow-hidden bg-neutral-50 flex items-center justify-center">
+      <canvas ref={canvasRef} className="w-full h-full object-cover" style={{ display: loaded ? 'block' : 'none' }} />
+      {!loaded && (
+        <div className="w-full h-full flex items-center justify-center bg-neutral-50 animate-pulse">
+          <FileText className="w-6 h-6 text-neutral-400" />
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function BibliotecaPage() {
@@ -385,6 +466,10 @@ export default function BibliotecaPage() {
   // --- RENDER CARD COVER fallback/image ---
   function renderCardCover(item: Content) {
     const ytId = getYouTubeId(item.url)
+    const ext = getFileExtension(item.url)
+    const isImage = ["jpg", "jpeg", "png", "webp", "gif"].includes(ext) || item.type === "image"
+    const isPdf = ext === "pdf" || item.type === "pdf"
+
     if (ytId) {
       return (
         <img 
@@ -396,7 +481,7 @@ export default function BibliotecaPage() {
       )
     }
 
-    if (item.type === "image" && item.url) {
+    if (isImage && item.url) {
       return (
         <img 
           src={item.url} 
@@ -405,6 +490,10 @@ export default function BibliotecaPage() {
           loading="lazy"
         />
       )
+    }
+
+    if (isPdf && item.url) {
+      return <PdfThumbnail url={item.url} />
     }
 
     // Modern Apple-Music inspired soft pastel gradients fallbacks
@@ -720,24 +809,26 @@ export default function BibliotecaPage() {
       ) : (
         <div className="space-y-10">
 
-          {/* 1. CINEMATIC HERO BANNER (Top featured content - Apple Music + Netflix fusion) */}
+          {/* 1. CINEMATIC HERO BANNER (Apple Music + Netflix Fusion - Fully Responsive & Crisp) */}
           {!activePlaylist && featuredItem && (
-            <div className="relative w-full rounded-[36px] overflow-hidden border border-neutral-200/80 bg-gradient-to-br from-neutral-50 to-white group min-h-[280px] md:min-h-[340px] flex items-end shadow-sm">
+            <div className="relative w-full rounded-[36px] overflow-hidden border border-neutral-200/80 bg-[#f9f9fb] group min-h-[260px] md:min-h-[340px] flex items-center shadow-sm">
               
-              {/* Image backdrop or gradients layout */}
-              <div className="absolute inset-0 bg-gradient-to-t from-white via-white/30 to-transparent z-10" />
-              <div className="absolute top-0 right-0 w-[45%] h-full opacity-35 z-0 hidden md:block">
+              {/* Cover Image Container with left-to-right white fade (Crisp 100% opacity on right) */}
+              <div className="absolute top-0 right-0 w-full md:w-[48%] h-full z-0 overflow-hidden">
                 {renderCardCover(featuredItem)}
-              </div>
-              <div className="absolute inset-0 md:hidden z-0 opacity-20">
-                {renderCardCover(featuredItem)}
+                
+                {/* Horizontal white fade overlay for desktop */}
+                <div className="absolute inset-0 bg-gradient-to-r from-[#f9f9fb] via-[#f9f9fb]/55 to-transparent z-10 hidden md:block" />
+                
+                {/* Vertical white fade overlay for mobile */}
+                <div className="absolute inset-0 bg-gradient-to-t from-[#f9f9fb] via-[#f9f9fb]/50 to-transparent md:hidden z-10" />
               </div>
 
-              {/* Dynamic instrument glow */}
+              {/* Dynamic subtle instrument background glow */}
               <div className="absolute -top-[30%] -left-[10%] w-[320px] h-[320px] bg-violet-500/5 blur-[120px] rounded-full" />
 
-              {/* Hero content details */}
-              <div className="relative z-20 p-6 md:p-10 max-w-lg space-y-3.5">
+              {/* Hero content details (Above cover due to z-index) */}
+              <div className="relative z-20 p-6 md:p-10 max-w-md md:max-w-lg space-y-4">
                 <div className="flex items-center gap-2">
                   <span className="text-[9px] font-black uppercase tracking-wider text-violet-600 bg-violet-50 border border-violet-100 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm">
                     <Sparkles className="w-3 h-3 text-violet-500" />
@@ -749,11 +840,11 @@ export default function BibliotecaPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <h2 className="text-xl md:text-3xl font-black tracking-tight leading-tight text-neutral-900">
+                  <h2 className="text-xl md:text-3xl font-black tracking-tight leading-tight text-neutral-905">
                     {featuredItem.title}
                   </h2>
                   {featuredItem.description && (
-                    <p className="text-neutral-500 text-xs md:text-sm font-medium leading-relaxed line-clamp-3">
+                    <p className="text-neutral-500 text-xs md:text-sm font-semibold leading-relaxed line-clamp-3">
                       {featuredItem.description}
                     </p>
                   )}
@@ -762,7 +853,7 @@ export default function BibliotecaPage() {
                 <div className="pt-1.5 flex items-center gap-3">
                   <button 
                     onClick={() => setSelectedMaterial(featuredItem)}
-                    className="px-6 py-2.5 bg-neutral-900 hover:bg-neutral-800 text-white font-black text-xs uppercase tracking-widest rounded-2xl flex items-center gap-2 shadow-sm transition-all"
+                    className="px-6 py-2.5 bg-neutral-900 hover:bg-neutral-800 text-white font-black text-xs uppercase tracking-widest rounded-2xl flex items-center gap-2 shadow-sm transition-all hover:scale-[1.02]"
                   >
                     <Play className="w-3.5 h-3.5 fill-current" />
                     <span>Ver Ahora</span>
@@ -771,7 +862,7 @@ export default function BibliotecaPage() {
                   {profile?.role === "TEACHER" && (
                     <button 
                       onClick={() => deleteItem(featuredItem.id)}
-                      className="p-2.5 bg-white hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-neutral-400 rounded-2xl border border-neutral-200 transition-all"
+                      className="p-2.5 bg-white hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-neutral-400 rounded-2xl border border-neutral-200 transition-all shadow-sm"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -931,7 +1022,7 @@ export default function BibliotecaPage() {
         </div>
       )}
 
-      {/* 5. PREMIUM GLASSMORPHIC DETAILS MODAL / DRAWER (WHITE MODE) */}
+      {/* 5. PREMIUM DETAILS MODAL / DRAWER (WHITE MODE) */}
       {selectedMaterial && (
         <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div 
