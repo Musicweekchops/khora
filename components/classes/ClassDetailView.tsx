@@ -79,11 +79,25 @@ export default function ClassDetailView({ classId }: { classId: string }) {
   const [saving, setSaving] = useState(false)
   const [modalTarget, setModalTarget] = useState<"note" | "task" | "edit_task" | null>(null)
 
+  const [showConfirmedModal, setShowConfirmedModal] = useState(false)
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get("confirmed") === "true") {
+        setShowConfirmedModal(true)
+        // Limpiar parámetros de búsqueda de la URL para mantenerla limpia y evitar que vuelva a aparecer al refrescar
+        const newUrl = window.location.pathname + "?id=" + classId
+        window.history.replaceState({ path: newUrl }, "", newUrl)
+      }
+    }
+  }, [classId])
+
   useEffect(() => {
     loadAll()
 
     // ── REAL-TIME SUBSCRIPTION ──
-    // Subscribe to changes in notes and tasks for this specific class
+    // Subscribe to changes in notes, tasks, and the class itself
     const channel = supabase
       .channel(`class-updates-${classId}`)
       .on(
@@ -100,6 +114,14 @@ export default function ClassDetailView({ classId }: { classId: string }) {
         () => {
           console.log('[Realtime] Task change detected, reloading...')
           loadNotesAndTasks()
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'Class', filter: `id=eq.${classId}` },
+        () => {
+          console.log('[Realtime] Class update detected, reloading all...')
+          loadAll()
         }
       )
       .subscribe()
@@ -527,6 +549,61 @@ export default function ClassDetailView({ classId }: { classId: string }) {
 
   return (
     <div className="space-y-4 md:space-y-6">
+      {/* MODAL DE CONFIRMACIÓN DE ASISTENCIA */}
+      {showConfirmedModal && cls && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-neutral-950/70 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-[#1a1a24] text-white border border-[#2d2d3d] rounded-[32px] max-w-md w-full overflow-hidden shadow-2xl p-8 relative animate-in zoom-in duration-300 font-sans">
+            
+            {/* Destellos ambientales */}
+            <div className="absolute top-[-20%] right-[-10%] w-52 h-52 bg-emerald-500/10 blur-[60px] rounded-full" />
+            <div className="absolute bottom-[-15%] left-[5%] w-40 h-40 bg-violet-500/5 blur-[60px] rounded-full" />
+
+            <div className="relative z-10 text-center space-y-6">
+              {/* Icono de éxito */}
+              <div className="w-16 h-16 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-full flex items-center justify-center mx-auto shadow-lg">
+                <CheckCircle2 className="w-8 h-8 animate-bounce" />
+              </div>
+
+              {/* Título y Mensaje */}
+              <div className="space-y-2">
+                <h3 className="text-2xl font-black tracking-tight text-white">🎸 ¡Asistencia Confirmada!</h3>
+                <p className="text-neutral-400 text-sm leading-relaxed font-medium">
+                  El alumno <strong className="text-emerald-400 font-black">{cls.student_name}</strong> ha confirmado personalmente su asistencia para esta sesión.
+                </p>
+              </div>
+
+              {/* Caja de Detalles */}
+              <div className="bg-[#13131a] border border-[#2d2d3d] rounded-2xl p-5 text-left space-y-3">
+                <div className="flex justify-between text-xs font-semibold">
+                  <span className="text-neutral-400">Fecha de Clase:</span>
+                  <span className="text-white font-black">
+                    {new Date(cls.date + "T12:00").toLocaleDateString("es-CL", { weekday: "short", day: "numeric", month: "short" })}
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs font-semibold">
+                  <span className="text-neutral-400">Horario:</span>
+                  <span className="text-white font-black">{formatTime(cls.start_time)} – {formatTime(cls.end_time)}</span>
+                </div>
+                <div className="flex justify-between text-xs font-semibold">
+                  <span className="text-neutral-400">Modalidad:</span>
+                  <span className="text-white font-black capitalize">{cls.modalidad === "online" ? "📹 Virtual" : "🏠 Presencial"}</span>
+                </div>
+              </div>
+
+              {/* Botón de Acción */}
+              <div className="pt-2">
+                <button
+                  onClick={() => setShowConfirmedModal(false)}
+                  className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-lg shadow-emerald-950/20 transition-all"
+                >
+                  Entendido, Ver Ficha
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* HEADER */}
       <div className="bg-white rounded-3xl md:rounded-[40px] border border-neutral-100 p-5 md:p-8 shadow-sm">
         {/* Breadcrumb */}

@@ -102,7 +102,7 @@ serve(async (req) => {
     const payload = JSON.stringify({
       title: "🎸 ¡Clase Confirmada!",
       body: `${studentName} confirmó su asistencia para la clase del ${cls.date} a las ${formattedTime} hs.`,
-      url: "/dashboard/agenda" // Redirige a la agenda del profesor
+      url: `/dashboard/clases/detalles?id=${cls.id}&confirmed=true` // Redirige al detalle de la clase con modal de confirmación
     })
 
     let successCount = 0
