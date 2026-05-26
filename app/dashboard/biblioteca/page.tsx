@@ -544,11 +544,27 @@ export default function BibliotecaPage() {
     if (ytId) {
       return (
         <ImageWithFallback 
-          src={`https://img.youtube.com/vi/${ytId}/mqdefault.jpg`} 
+          src={`https://img.youtube.com/vi/${ytId}/maxresdefault.jpg`} 
           alt={item.title} 
           className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-500"
           loading="lazy"
-          fallback={fallbackElement}
+          fallback={
+            <ImageWithFallback
+              src={`https://img.youtube.com/vi/${ytId}/hqdefault.jpg`}
+              alt={item.title}
+              className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-500"
+              loading="lazy"
+              fallback={
+                <ImageWithFallback
+                  src={`https://img.youtube.com/vi/${ytId}/mqdefault.jpg`}
+                  alt={item.title}
+                  className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-500"
+                  loading="lazy"
+                  fallback={fallbackElement}
+                />
+              }
+            />
+          }
         />
       )
     }
@@ -667,7 +683,7 @@ export default function BibliotecaPage() {
     .slice(0, 5)
 
   return (
-    <div className="space-y-6 md:space-y-8 pb-24 text-neutral-900 min-h-screen bg-transparent">
+    <div className="space-y-6 md:space-y-8 pb-24 text-neutral-900 min-h-screen bg-transparent w-full max-w-full overflow-x-hidden px-1">
       
       {/* HEADER PREMIUM WHITE (Apple Music style) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-neutral-200/60 p-6 rounded-3xl relative overflow-hidden shadow-sm">
