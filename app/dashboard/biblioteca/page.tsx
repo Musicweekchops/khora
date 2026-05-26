@@ -180,7 +180,39 @@ function getYouTubeId(url: string | null): string | null {
 }
 
 // --- AUTOMATIC CLIENT-SIDE PDF FIRST-PAGE RENDERER ---
-function PdfThumbnail({ url }: { url: string }) {
+// --- ROBUST IMAGE COMPONENT WITH FALLBACK ---
+function ImageWithFallback({ 
+  src, 
+  alt, 
+  className, 
+  fallback, 
+  ...props 
+}: { 
+  src: string
+  alt: string
+  className?: string
+  fallback: React.ReactNode
+  [key: string]: any 
+}) {
+  const [error, setError] = useState(false)
+
+  if (error) {
+    return <>{fallback}</>
+  }
+
+  return (
+    <img 
+      src={src} 
+      alt={alt} 
+      className={className} 
+      onError={() => setError(true)} 
+      {...props} 
+    />
+  )
+}
+
+// --- AUTOMATIC CLIENT-SIDE PDF FIRST-PAGE RENDERER ---
+function PdfThumbnail({ url, fallback }: { url: string; fallback: React.ReactNode }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState(false)
@@ -240,7 +272,7 @@ function PdfThumbnail({ url }: { url: string }) {
     }
   }, [url])
 
-  if (error) return null
+  if (error) return <>{fallback}</>
 
   return (
     <div className="w-full h-full relative overflow-hidden bg-neutral-50 flex items-center justify-center">
@@ -253,6 +285,7 @@ function PdfThumbnail({ url }: { url: string }) {
     </div>
   )
 }
+
 
 export default function BibliotecaPage() {
   const { profile } = useAuth()
@@ -467,34 +500,9 @@ export default function BibliotecaPage() {
   function renderCardCover(item: Content) {
     const ytId = getYouTubeId(item.url)
     const ext = getFileExtension(item.url)
-    const isImage = ["jpg", "jpeg", "png", "webp", "gif"].includes(ext) || item.type === "image"
-    const isPdf = ext === "pdf" || item.type === "pdf"
-
-    if (ytId) {
-      return (
-        <img 
-          src={`https://img.youtube.com/vi/${ytId}/mqdefault.jpg`} 
-          alt={item.title} 
-          className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-500"
-          loading="lazy"
-        />
-      )
-    }
-
-    if (isImage && item.url) {
-      return (
-        <img 
-          src={item.url} 
-          alt={item.title} 
-          className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-500"
-          loading="lazy"
-        />
-      )
-    }
-
-    if (isPdf && item.url) {
-      return <PdfThumbnail url={item.url} />
-    }
+    const itemType = (item.type || "").toLowerCase()
+    const isImage = ["jpg", "jpeg", "png", "webp", "gif"].includes(ext) || itemType === "image"
+    const isPdf = ext === "pdf" || itemType === "pdf"
 
     // Modern Apple-Music inspired soft pastel gradients fallbacks
     const instNorm = (instrumento || "").toLowerCase()
@@ -504,34 +512,64 @@ export default function BibliotecaPage() {
 
     if (instNorm.includes("bater")) {
       gradient = "from-violet-500/10 to-violet-500/5 border border-violet-100"
-      symbol = item.type === "audio" ? "🎵" : item.type === "pdf" ? "📄" : "🥁"
+      symbol = itemType === "audio" ? "🎵" : itemType === "pdf" ? "📄" : "🥁"
       colorClass = "text-violet-600"
     } else if (instNorm.includes("guitar") || instNorm.includes("bajo")) {
       gradient = "from-red-500/10 to-red-500/5 border border-red-100"
-      symbol = item.type === "audio" ? "🎵" : item.type === "pdf" ? "📄" : "🎸"
+      symbol = itemType === "audio" ? "🎵" : itemType === "pdf" ? "📄" : "🎸"
       colorClass = "text-red-600"
     } else if (instNorm.includes("piano") || instNorm.includes("teclado")) {
       gradient = "from-teal-500/10 to-teal-500/5 border border-teal-100"
-      symbol = item.type === "audio" ? "🎵" : item.type === "pdf" ? "📄" : "🎹"
+      symbol = itemType === "audio" ? "🎵" : itemType === "pdf" ? "📄" : "🎹"
       colorClass = "text-teal-600"
     } else if (instNorm.includes("cant") || instNorm.includes("voz")) {
       gradient = "from-pink-500/10 to-pink-500/5 border border-pink-100"
-      symbol = item.type === "audio" ? "🎵" : item.type === "pdf" ? "📄" : "🎤"
+      symbol = itemType === "audio" ? "🎵" : itemType === "pdf" ? "📄" : "🎤"
       colorClass = "text-pink-600"
     } else if (instNorm.includes("produc")) {
       gradient = "from-indigo-500/10 to-indigo-500/5 border border-indigo-100"
-      symbol = item.type === "audio" ? "🎵" : item.type === "pdf" ? "📄" : "🎚️"
+      symbol = itemType === "audio" ? "🎵" : itemType === "pdf" ? "📄" : "🎚️"
       colorClass = "text-indigo-600"
     }
 
-    return (
+    const fallbackElement = (
       <div className={`w-full h-full bg-gradient-to-br ${gradient} flex flex-col items-center justify-center p-3 text-center relative overflow-hidden group-hover:scale-102 transition-transform duration-500`}>
         <span className={`text-2xl filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.05)] mb-1 ${colorClass}`}>{symbol}</span>
         <span className="text-[9px] font-black uppercase tracking-wider text-neutral-400 max-w-full px-2 truncate">
-          {item.type === "link" ? "ENLACE WEB" : item.type}
+          {itemType === "link" ? "ENLACE WEB" : itemType}
         </span>
       </div>
     )
+
+    if (ytId) {
+      return (
+        <ImageWithFallback 
+          src={`https://img.youtube.com/vi/${ytId}/mqdefault.jpg`} 
+          alt={item.title} 
+          className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-500"
+          loading="lazy"
+          fallback={fallbackElement}
+        />
+      )
+    }
+
+    if (isImage && item.url) {
+      return (
+        <ImageWithFallback 
+          src={item.url} 
+          alt={item.title} 
+          className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-500"
+          loading="lazy"
+          fallback={fallbackElement}
+        />
+      )
+    }
+
+    if (isPdf && item.url) {
+      return <PdfThumbnail url={item.url} fallback={fallbackElement} />
+    }
+
+    return fallbackElement
   }
 
   // --- SUB COMPONENT: VIDEO IFRAME EMBED ---
@@ -811,25 +849,25 @@ export default function BibliotecaPage() {
 
           {/* 1. CINEMATIC HERO BANNER (Apple Music + Netflix Fusion - Fully Responsive & Crisp) */}
           {!activePlaylist && featuredItem && (
-            <div className="relative w-full rounded-[36px] overflow-hidden border border-neutral-200/80 bg-[#f9f9fb] group min-h-[260px] md:min-h-[340px] flex items-center shadow-sm">
+            <div className="relative w-full rounded-[36px] overflow-hidden border border-neutral-200/80 bg-[#f9f9fb] group flex flex-col md:flex-row md:items-stretch min-h-[340px] shadow-sm">
               
-              {/* Cover Image Container with left-to-right white fade (Crisp 100% opacity on right) */}
-              <div className="absolute top-0 right-0 w-full md:w-[48%] h-full z-0 overflow-hidden">
+              {/* Cover Image Container (Relative on mobile, absolute on desktop to prevent any right-column blank gaps) */}
+              <div className="w-full md:w-[50%] lg:w-[45%] h-52 sm:h-64 md:h-auto md:absolute md:right-0 md:top-0 md:bottom-0 overflow-hidden shrink-0 z-0 relative">
                 {renderCardCover(featuredItem)}
                 
-                {/* Horizontal white fade overlay for desktop */}
-                <div className="absolute inset-0 bg-gradient-to-r from-[#f9f9fb] via-[#f9f9fb]/55 to-transparent z-10 hidden md:block" />
+                {/* Horizontal white fade overlay for desktop (crisp color blending into white page) */}
+                <div className="absolute inset-0 bg-gradient-to-r from-[#f9f9fb] via-[#f9f9fb]/40 to-transparent z-10 hidden md:block" />
                 
-                {/* Vertical white fade overlay for mobile */}
-                <div className="absolute inset-0 bg-gradient-to-t from-[#f9f9fb] via-[#f9f9fb]/50 to-transparent md:hidden z-10" />
+                {/* Vertical white fade overlay for mobile transition */}
+                <div className="absolute inset-0 bg-gradient-to-t from-[#f9f9fb] via-[#f9f9fb]/20 to-transparent md:hidden z-10" />
               </div>
 
               {/* Dynamic subtle instrument background glow */}
-              <div className="absolute -top-[30%] -left-[10%] w-[320px] h-[320px] bg-violet-500/5 blur-[120px] rounded-full" />
+              <div className="absolute -top-[30%] -left-[10%] w-[320px] h-[320px] bg-violet-500/5 blur-[120px] rounded-full hidden md:block" />
 
-              {/* Hero content details (Above cover due to z-index) */}
-              <div className="relative z-20 p-6 md:p-10 max-w-md md:max-w-lg space-y-4">
-                <div className="flex items-center gap-2">
+              {/* Hero content details (Perfect margins and widths to prevent squishing text) */}
+              <div className="relative z-20 p-6 sm:p-8 md:p-10 w-full md:w-[55%] lg:w-[58%] flex flex-col justify-center space-y-4">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[9px] font-black uppercase tracking-wider text-violet-600 bg-violet-50 border border-violet-100 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm">
                     <Sparkles className="w-3 h-3 text-violet-500" />
                     <span>Recomendado</span>
@@ -840,11 +878,11 @@ export default function BibliotecaPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <h2 className="text-xl md:text-3xl font-black tracking-tight leading-tight text-neutral-905">
+                  <h2 className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight leading-tight text-neutral-950">
                     {featuredItem.title}
                   </h2>
                   {featuredItem.description && (
-                    <p className="text-neutral-500 text-xs md:text-sm font-semibold leading-relaxed line-clamp-3">
+                    <p className="text-neutral-500 text-xs md:text-sm font-semibold leading-relaxed line-clamp-3 md:line-clamp-4">
                       {featuredItem.description}
                     </p>
                   )}
