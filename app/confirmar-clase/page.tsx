@@ -86,21 +86,12 @@ function ConfirmarClaseContent() {
         return
       }
 
-      // 3. Actualizar estado de la clase en la base de datos
-      const { error: updateErr } = await supabase
-        .from("Class")
-        .update({ status: "CONFIRMED" })
-        .eq("id", classId)
-
-      if (updateErr) throw updateErr
-
-      // 4. Notificar al profesor mediante una notificación Push de forma asíncrona (NO bloqueante)
-      // para evitar que el alumno se quede pegado en el spinner de carga.
-      supabase.functions.invoke("notify-teacher-push", {
+      // 3. Invocar la función Edge para actualizar la clase y notificar al profesor de forma segura
+      const { data: res, error: invokeErr } = await supabase.functions.invoke("notify-teacher-push", {
         body: { classId }
-      }).catch((pushErr) => {
-        console.error("Error al enviar notificación push al profesor (no bloqueante):", pushErr)
       })
+
+      if (invokeErr) throw invokeErr
 
       setStatus("success")
     } catch (err: any) {

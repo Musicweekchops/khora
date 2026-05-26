@@ -33,6 +33,7 @@ serve(async (req) => {
         id,
         date,
         start_time,
+        status,
         StudentProfile (
           User ( name )
         ),
@@ -50,6 +51,17 @@ serve(async (req) => {
         JSON.stringify({ error: "Class not found" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 404 }
       )
+    }
+
+    // 1.5. Si el estado es SCHEDULED, actualizarlo a CONFIRMED
+    if (cls.status === "SCHEDULED") {
+      const { error: updateErr } = await supabase
+        .from("Class")
+        .update({ status: "CONFIRMED" })
+        .eq("id", classId)
+
+      if (updateErr) throw updateErr
+      cls.status = "CONFIRMED"
     }
 
     // Robustez de tipos
