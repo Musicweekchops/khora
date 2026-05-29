@@ -36,6 +36,7 @@ interface ClassData {
   id: string; date: string; start_time: string; end_time: string
   status: string; modalidad: string; duration: number
   student_name: string; student_email?: string; student_id: string | null; teacher_id: string
+  schedule_id: string | null; is_recurring: boolean
 }
 interface Note { 
   id: string; content: string; created_at: string; content_id?: string | null; playlist_id?: string | null;
@@ -80,6 +81,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
   const [modalTarget, setModalTarget] = useState<"note" | "task" | "edit_task" | null>(null)
 
   const [showConfirmedModal, setShowConfirmedModal] = useState(false)
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false)
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -136,7 +138,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
     try {
       const { data: c } = await supabase
         .from("Class")
-        .select("id, date, start_time, end_time, status, modalidad, duration, student_id, teacher_id, StudentProfile ( User ( name, email ) )")
+        .select("id, date, start_time, end_time, status, modalidad, duration, student_id, teacher_id, schedule_id, is_recurring, StudentProfile ( User ( name, email ) )")
         .eq("id", classId).maybeSingle()
 
       if (c) {
@@ -146,6 +148,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
           student_name: (c as any).StudentProfile?.User?.name ?? "Sin asignar",
           student_email: (c as any).StudentProfile?.User?.email,
           student_id: c.student_id, teacher_id: c.teacher_id,
+          schedule_id: c.schedule_id, is_recurring: !!c.is_recurring,
         }
         setCls(classData)
         setEditForm({
@@ -326,22 +329,96 @@ export default function ClassDetailView({ classId }: { classId: string }) {
     }
   }
 
-  async function saveEdit() {
-    setSavingEdit(true)
-    const { error } = await supabase.from("Class").update({
-      date: editForm.date,
-      start_time: editForm.start_time,
-      end_time: editForm.end_time,
-      student_id: editForm.student_id || null,
-      modalidad: editForm.modalidad,
-      status: editForm.status,
-    }).eq("id", classId)
+  async function handleSaveClick() {
+    // Check if anything changed that affects scheduling
+    const dateChanged = editForm.date !== cls?.date
+    const timeChanged = editForm.start_time !== cls?.start_time.slice(0, 5)
+    const modalidadChanged = editForm.modalidad !== cls?.modalidad
 
-    if (!error) {
-      setEditing(false)
-      await loadAll()
+    if (cls?.schedule_id && (dateChanged || timeChanged || modalidadChanged)) {
+      setShowRescheduleModal(true)
+    } else {
+      // Just save single class
+      await executeSave(false)
     }
+  }
+
+  async function executeSave(applyToAll: boolean) {
+    setSavingEdit(true)
+    
+    if (applyToAll && cls?.schedule_id && cls.student_id) {
+      // Update current class
+      const { error: errCurr } = await supabase.from("Class").update({
+        date: editForm.date,
+        start_time: editForm.start_time,
+        end_time: editForm.end_time,
+        student_id: editForm.student_id || null,
+        modalidad: editForm.modalidad,
+        status: editForm.status,
+      }).eq("id", classId)
+
+      if (errCurr) {
+        toast("Error al actualizar la clase actual", "error")
+        setSavingEdit(false)
+        return
+      }
+
+      // Calculate the new day of week
+      const newDateObj = new Date(editForm.date + "T12:00")
+      const newDayOfWeek = newDateObj.getDay()
+
+      // Update Schedule record
+      const { error: errSched } = await supabase.from("Schedule").update({
+        day_of_week: newDayOfWeek,
+        start_time: editForm.start_time,
+        end_time: editForm.end_time,
+        modalidad: editForm.modalidad,
+      }).eq("id", cls.schedule_id)
+
+      if (errSched) {
+        toast("Error al actualizar el horario recurrente", "error")
+        setSavingEdit(false)
+        return
+      }
+
+      // Bulk reschedule future classes
+      try {
+        const { rescheduleFutureClasses } = await import("@/lib/schedule")
+        const res = await rescheduleFutureClasses(
+          cls.schedule_id,
+          cls.teacher_id,
+          cls.student_id,
+          newDayOfWeek,
+          editForm.start_time,
+          editForm.end_time,
+          editForm.modalidad
+        )
+        toast(`¡Reprogramación exitosa! Se actualizaron ${res.created} clases futuras.`, "success")
+      } catch (err: any) {
+        toast("Error al reprogramar clases futuras: " + err.message, "error")
+      }
+    } else {
+      // Normal single class update
+      const { error } = await supabase.from("Class").update({
+        date: editForm.date,
+        start_time: editForm.start_time,
+        end_time: editForm.end_time,
+        student_id: editForm.student_id || null,
+        modalidad: editForm.modalidad,
+        status: editForm.status,
+      }).eq("id", classId)
+
+      if (error) {
+        toast("Error al guardar cambios de la clase", "error")
+      } else {
+        toast("Clase guardada exitosamente", "success")
+      }
+    }
+
+    setEditing(false)
+    setShowRescheduleModal(false)
     setSavingEdit(false)
+    await loadAll()
   }
 
   async function deleteClass() {
@@ -641,7 +718,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
               </div>
               <div className="flex gap-2">
                 <button onClick={() => setEditing(false)} className="flex-1 sm:flex-none px-4 py-2 bg-neutral-100 text-neutral-600 rounded-xl text-[10px] font-bold hover:bg-neutral-200 transition-colors">Cancelar</button>
-                <button onClick={saveEdit} disabled={savingEdit} className="flex-1 sm:flex-none px-5 py-2.5 bg-neutral-900 text-white rounded-xl text-[10px] font-bold hover:bg-violet-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                <button onClick={handleSaveClick} disabled={savingEdit} className="flex-1 sm:flex-none px-5 py-2.5 bg-neutral-900 text-white rounded-xl text-[10px] font-bold hover:bg-violet-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
                   <Save className="w-3 h-3" />
                   {savingEdit ? "..." : "Guardar"}
                 </button>
@@ -1247,6 +1324,79 @@ export default function ClassDetailView({ classId }: { classId: string }) {
             : ""
         }
       />
+
+      {/* MODAL DE REPROGRAMACIÓN EN BLOQUE */}
+      {showRescheduleModal && cls && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-neutral-950/75 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-[#1a1a24] text-white border border-[#2d2d3d] rounded-[32px] max-w-md w-full overflow-hidden shadow-2xl p-8 relative animate-in zoom-in duration-300 font-sans">
+            
+            {/* Destellos ambientales */}
+            <div className="absolute top-[-20%] right-[-10%] w-52 h-52 bg-violet-500/10 blur-[60px] rounded-full" />
+            <div className="absolute bottom-[-15%] left-[5%] w-40 h-40 bg-blue-500/5 blur-[60px] rounded-full" />
+
+            <div className="relative z-10 text-center space-y-6">
+              {/* Icono */}
+              <div className="w-16 h-16 bg-violet-500/10 border border-violet-500/30 text-violet-400 rounded-full flex items-center justify-center mx-auto shadow-lg">
+                <Forward className="w-8 h-8 animate-pulse text-violet-400" />
+              </div>
+
+              {/* Título y Mensaje */}
+              <div className="space-y-2">
+                <h3 className="text-2xl font-black tracking-tight text-white">🔄 Modificar Horario</h3>
+                <p className="text-neutral-400 text-sm leading-relaxed font-medium">
+                  Has cambiado los datos de esta clase, la cual pertenece a un <strong className="text-violet-400">horario recurrente</strong>. ¿Cómo deseas aplicar este cambio?
+                </p>
+              </div>
+
+              {/* Caja de Opciones */}
+              <div className="space-y-3 pt-2">
+                {/* Opción 1: Solo esta clase */}
+                <button
+                  type="button"
+                  onClick={() => executeSave(false)}
+                  disabled={savingEdit}
+                  className="w-full text-left p-4 bg-[#13131a] border border-[#2d2d3d] rounded-2xl hover:border-neutral-500 hover:bg-[#1c1c28] transition-all flex items-center gap-3.5"
+                >
+                  <span className="text-2xl">📅</span>
+                  <div>
+                    <p className="text-xs font-black text-white uppercase tracking-wider">Solo esta clase</p>
+                    <p className="text-[10px] text-neutral-400 mt-0.5 leading-relaxed">
+                      Modifica únicamente esta sesión en particular. El resto de las clases futuras mantendrán su horario original.
+                    </p>
+                  </div>
+                </button>
+
+                {/* Opción 2: Todas las clases futuras */}
+                <button
+                  type="button"
+                  onClick={() => executeSave(true)}
+                  disabled={savingEdit}
+                  className="w-full text-left p-4 bg-violet-950/20 border border-violet-500/30 rounded-2xl hover:border-violet-500/60 hover:bg-violet-950/30 transition-all flex items-center gap-3.5"
+                >
+                  <span className="text-2xl">🔄</span>
+                  <div>
+                    <p className="text-xs font-black text-violet-300 uppercase tracking-wider">Esta y todas las clases futuras</p>
+                    <p className="text-[10px] text-neutral-400 mt-0.5 leading-relaxed">
+                      Actualiza esta clase, el horario fijo del alumno y reprograma en bloque todas las clases futuras pendientes.
+                    </p>
+                  </div>
+                </button>
+              </div>
+
+              {/* Botón de Cancelar */}
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowRescheduleModal(false)}
+                  className="w-full py-3 bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-white rounded-xl text-xs font-bold transition-all"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
