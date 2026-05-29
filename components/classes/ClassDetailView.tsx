@@ -82,6 +82,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
 
   const [showConfirmedModal, setShowConfirmedModal] = useState(false)
   const [showRescheduleModal, setShowRescheduleModal] = useState(false)
+  const [studentSchedules, setStudentSchedules] = useState<any[]>([])
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -162,6 +163,14 @@ export default function ClassDetailView({ classId }: { classId: string }) {
           .select("id, User ( name )")
           .eq("teacher_id", classData.teacher_id)
         if (st) setStudents(st.map((s: any) => ({ id: s.id, name: s.User?.name ?? "—" })))
+
+        if (classData.student_id) {
+          const { data: scheds } = await supabase
+            .from("Schedule")
+            .select("id, day_of_week, start_time, end_time, modalidad")
+            .eq("student_id", classData.student_id)
+          if (scheds) setStudentSchedules(scheds)
+        }
 
         const { data: lib } = await supabase
           .from("LibraryContent")
@@ -335,7 +344,9 @@ export default function ClassDetailView({ classId }: { classId: string }) {
     const timeChanged = editForm.start_time !== cls?.start_time.slice(0, 5)
     const modalidadChanged = editForm.modalidad !== cls?.modalidad
 
-    if (cls?.schedule_id && (dateChanged || timeChanged || modalidadChanged)) {
+    const hasChanges = dateChanged || timeChanged || modalidadChanged
+
+    if (cls?.student_id && hasChanges) {
       setShowRescheduleModal(true)
     } else {
       // Just save single class
@@ -346,8 +357,8 @@ export default function ClassDetailView({ classId }: { classId: string }) {
   async function executeSave(applyToAll: boolean) {
     setSavingEdit(true)
     
-    if (applyToAll && cls?.schedule_id && cls.student_id) {
-      // Update current class
+    if (applyToAll && cls?.student_id) {
+      // 1. Update current class
       const { error: errCurr } = await supabase.from("Class").update({
         date: editForm.date,
         start_time: editForm.start_time,
@@ -367,13 +378,48 @@ export default function ClassDetailView({ classId }: { classId: string }) {
       const newDateObj = new Date(editForm.date + "T12:00")
       const newDayOfWeek = newDateObj.getDay()
 
-      // Update Schedule record
+      let activeScheduleId = cls.schedule_id
+
+      if (!activeScheduleId) {
+        // If the class didn't have schedule_id, check if the student has any schedule
+        if (studentSchedules && studentSchedules.length > 0) {
+          activeScheduleId = studentSchedules[0].id
+          // Link this class to the schedule
+          await supabase.from("Class").update({ schedule_id: activeScheduleId }).eq("id", classId)
+        } else {
+          // Create a new Schedule for this student
+          const { data: newSched, error: errNewSched } = await supabase
+            .from("Schedule")
+            .insert({
+              student_id: cls.student_id,
+              teacher_id: cls.teacher_id,
+              day_of_week: newDayOfWeek,
+              start_time: editForm.start_time,
+              end_time: editForm.end_time,
+              modalidad: editForm.modalidad,
+              is_active: true,
+            })
+            .select()
+            .maybeSingle()
+
+          if (errNewSched || !newSched) {
+            toast("Error al crear el horario recurrente para el alumno", "error")
+            setSavingEdit(false)
+            return
+          }
+          activeScheduleId = newSched.id
+          // Link this class to the new schedule
+          await supabase.from("Class").update({ schedule_id: activeScheduleId }).eq("id", classId)
+        }
+      }
+
+      // 2. Update Schedule record
       const { error: errSched } = await supabase.from("Schedule").update({
         day_of_week: newDayOfWeek,
         start_time: editForm.start_time,
         end_time: editForm.end_time,
         modalidad: editForm.modalidad,
-      }).eq("id", cls.schedule_id)
+      }).eq("id", activeScheduleId)
 
       if (errSched) {
         toast("Error al actualizar el horario recurrente", "error")
@@ -381,13 +427,13 @@ export default function ClassDetailView({ classId }: { classId: string }) {
         return
       }
 
-      // Bulk reschedule future classes
+      // 3. Bulk reschedule future classes
       try {
         const { rescheduleFutureClasses } = await import("@/lib/schedule")
         const res = await rescheduleFutureClasses(
-          cls.schedule_id,
+          activeScheduleId!,
           cls.teacher_id,
-          cls.student_id,
+          cls.student_id!,
           newDayOfWeek,
           editForm.start_time,
           editForm.end_time,
