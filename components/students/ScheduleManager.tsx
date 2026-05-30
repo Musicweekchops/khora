@@ -12,6 +12,7 @@ interface Schedule {
   end_time: string
   modalidad: string
   is_active: boolean
+  start_date: string
 }
 
 interface Props {
@@ -32,6 +33,7 @@ export default function ScheduleManager({ studentId, teacherId }: Props) {
     start_time: "14:00",
     end_time: "15:00",
     modalidad: "presencial",
+    start_date: new Date().toISOString().split("T")[0],
   })
 
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null)
@@ -40,6 +42,7 @@ export default function ScheduleManager({ studentId, teacherId }: Props) {
     start_time: "14:00",
     end_time: "15:00",
     modalidad: "presencial",
+    start_date: new Date().toISOString().split("T")[0],
   })
 
   useEffect(() => { loadSchedules() }, [studentId])
@@ -68,6 +71,7 @@ export default function ScheduleManager({ studentId, teacherId }: Props) {
         start_time: form.start_time,
         end_time: form.end_time,
         modalidad: form.modalidad,
+        start_date: form.start_date,
       })
       .select()
       .maybeSingle()
@@ -78,26 +82,26 @@ export default function ScheduleManager({ studentId, teacherId }: Props) {
       return
     }
 
-    // Auto-generate classes for current and next month
+    // Auto-generate classes for target month and next month based on start_date
     try {
-      const now = new Date()
+      const startD = new Date(form.start_date + "T12:00")
       const r1 = await generateClassesForSchedule(
         data.id, teacherId, studentId,
-        form.day_of_week, form.start_time, form.end_time, form.modalidad, now
+        form.day_of_week, form.start_time, form.end_time, form.modalidad, startD
       )
-      const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 15)
+      const nextMonth = new Date(startD.getFullYear(), startD.getMonth() + 1, 15)
       const r2 = await generateClassesForSchedule(
         data.id, teacherId, studentId,
         form.day_of_week, form.start_time, form.end_time, form.modalidad, nextMonth
       )
-      setMessage(`✓ Horario creado. ${r1.created + r2.created} clases generadas para este y el próximo mes.`)
+      setMessage(`✓ Horario creado. ${r1.created + r2.created} clases generadas a partir del inicio establecido.`)
     } catch (e: any) {
       setMessage("Horario creado pero error generando clases: " + e.message)
     }
 
     setShowForm(false)
     setSaving(false)
-    setForm({ day_of_week: 1, start_time: "14:00", end_time: "15:00", modalidad: "presencial" })
+    setForm({ day_of_week: 1, start_time: "14:00", end_time: "15:00", modalidad: "presencial", start_date: new Date().toISOString().split("T")[0] })
     loadSchedules()
   }
 
@@ -141,6 +145,7 @@ export default function ScheduleManager({ studentId, teacherId }: Props) {
       start_time: schedule.start_time.slice(0, 5),
       end_time: schedule.end_time.slice(0, 5),
       modalidad: schedule.modalidad,
+      start_date: schedule.start_date ? schedule.start_date.split("T")[0] : new Date().toISOString().split("T")[0],
     })
   }
 
@@ -156,6 +161,7 @@ export default function ScheduleManager({ studentId, teacherId }: Props) {
         start_time: editForm.start_time,
         end_time: editForm.end_time,
         modalidad: editForm.modalidad,
+        start_date: editForm.start_date,
       })
       .eq("id", scheduleId)
 
@@ -241,6 +247,10 @@ export default function ScheduleManager({ studentId, teacherId }: Props) {
               <input type="time" value={form.end_time} onChange={e => setForm(p => ({ ...p, end_time: e.target.value }))} className="kh-input" />
             </div>
           </div>
+          <div>
+            <label className="kh-label">Fecha de inicio</label>
+            <input type="date" value={form.start_date} onChange={e => setForm(p => ({ ...p, start_date: e.target.value }))} className="kh-input" />
+          </div>
           <div className="flex gap-2 justify-end">
             <button onClick={() => setShowForm(false)} className="kh-btn-secondary text-xs py-1.5">Cancelar</button>
             <button onClick={handleCreate} disabled={saving} className="kh-btn-primary text-xs py-1.5">
@@ -290,6 +300,10 @@ export default function ScheduleManager({ studentId, teacherId }: Props) {
                       <input type="time" value={editForm.end_time} onChange={e => setEditForm(p => ({ ...p, end_time: e.target.value }))} className="kh-input" />
                     </div>
                   </div>
+                  <div>
+                    <label className="kh-label">Fecha de inicio</label>
+                    <input type="date" value={editForm.start_date} onChange={e => setEditForm(p => ({ ...p, start_date: e.target.value }))} className="kh-input" />
+                  </div>
                   <div className="flex gap-2 justify-end">
                     <button onClick={() => setEditingScheduleId(null)} className="kh-btn-secondary text-xs py-1.5">Cancelar</button>
                     <button onClick={() => handleUpdate(s.id)} disabled={saving} className="kh-btn-primary text-xs py-1.5 bg-violet-600 hover:bg-violet-700">
@@ -318,6 +332,7 @@ export default function ScheduleManager({ studentId, teacherId }: Props) {
                   </p>
                   <p className="text-xs text-neutral-500">
                     {formatTime(s.start_time)} – {formatTime(s.end_time)} · {s.modalidad === "online" ? "Virtual" : "Presencial"}
+                    {s.start_date && ` · Inicia el ${new Date(s.start_date + "T12:00").toLocaleDateString("es-CL")}`}
                   </p>
                 </div>
 

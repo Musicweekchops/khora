@@ -49,6 +49,15 @@ export async function generateClassesForSchedule(
 
   if (dates.length === 0) return { created: 0, skipped: 0 }
 
+  // Buscar start_date de este schedule
+  const { data: sched } = await supabase
+    .from("Schedule")
+    .select("start_date")
+    .eq("id", scheduleId)
+    .maybeSingle()
+
+  const startDateStr = sched?.start_date || toDateStr(new Date())
+
   // Buscar clases existentes para este schedule en el rango
   const startStr = toDateStr(rangeStart)
   const endStr = toDateStr(rangeEnd)
@@ -62,8 +71,11 @@ export async function generateClassesForSchedule(
 
   const existingDates = new Set((existing ?? []).map(c => c.date))
 
-  // Filtrar las que ya existen
-  const toCreate = dates.filter(d => !existingDates.has(toDateStr(d)))
+  // Filtrar las que ya existen y son posteriores o iguales a la fecha de inicio
+  const toCreate = dates.filter(d => {
+    const dStr = toDateStr(d)
+    return !existingDates.has(dStr) && dStr >= startDateStr
+  })
 
   if (toCreate.length === 0) return { created: 0, skipped: dates.length }
 
@@ -122,25 +134,36 @@ export async function rescheduleFutureClasses(
   const today = new Date()
   const todayStr = toDateStr(today)
 
-  // 1. Eliminar clases futuras programadas (SCHEDULED) de este horario a partir de hoy
+  // Buscar start_date de este schedule
+  const { data: sched } = await supabase
+    .from("Schedule")
+    .select("start_date")
+    .eq("id", scheduleId)
+    .maybeSingle()
+
+  const startDateStr = sched?.start_date || todayStr
+  const effectiveStartDateStr = startDateStr > todayStr ? startDateStr : todayStr
+
+  // 1. Eliminar clases futuras programadas (SCHEDULED) de este horario a partir de la fecha de inicio efectiva
   const { error: deleteError, count: deletedCount } = await supabase
     .from("Class")
     .delete()
     .eq("schedule_id", scheduleId)
     .eq("status", "SCHEDULED")
-    .gte("date", todayStr)
+    .gte("date", effectiveStartDateStr)
 
   if (deleteError) {
     console.error("[Schedule] Error deleting future classes for rescheduling:", deleteError)
     throw new Error(deleteError.message)
   }
 
-  // 2. Generar nuevas clases para el resto del mes actual
+  // 2. Generar nuevas clases para el resto del mes actual (si aplica para la fecha de inicio)
   let createdCount = 0
   let skippedCount = 0
 
-  const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0)
-  const datesCurrent = getDatesForDayInRange(dayOfWeek, today, endOfMonth)
+  const effectiveStart = new Date(effectiveStartDateStr + "T12:00")
+  const endOfMonth = new Date(effectiveStart.getFullYear(), effectiveStart.getMonth() + 1, 0)
+  const datesCurrent = getDatesForDayInRange(dayOfWeek, effectiveStart, endOfMonth)
 
   if (datesCurrent.length > 0) {
     const rows = datesCurrent.map(d => ({
@@ -164,7 +187,7 @@ export async function rescheduleFutureClasses(
   }
 
   // 3. Generar nuevas clases para el próximo mes completo
-  const nextMonthDate = new Date(today.getFullYear(), today.getMonth() + 1, 15)
+  const nextMonthDate = new Date(effectiveStart.getFullYear(), effectiveStart.getMonth() + 1, 15)
   const rNext = await generateClassesForSchedule(
     scheduleId, teacherId, studentId,
     dayOfWeek, startTime, endTime, modalidad, nextMonthDate
