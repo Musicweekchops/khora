@@ -108,33 +108,131 @@ serve(async (req) => {
 
       // 5. Automatización según el tipo de Ítem cobrado:
       if (itemType === "TRIAL") {
-        // A. CLASE DE PRUEBA: Confirmar y activar alumno
-        // Buscar el StudentProfile temporal por correo
-        const { data: student } = await supabaseAdmin
-          .from("StudentProfile")
-          .select("id, user_id")
-          .eq("User.email", payerEmail.trim().toLowerCase())
+        // A. CLASE DE PRUEBA: Crear cuenta, registrar reserva CONFIRMED y agendar clase física
+        
+        // 1. Intentar buscar si el usuario/alumno ya existe por correo electrónico
+        // Buscamos primero en la tabla User para resolver la relación
+        const { data: publicUser } = await supabaseAdmin
+          .from("User")
+          .select("id")
+          .eq("email", payerEmail.trim().toLowerCase())
           .maybeSingle()
 
-        if (student) {
-          targetStudentId = student.id
+        let targetStudent = null
+
+        if (publicUser) {
+          const { data: student } = await supabaseAdmin
+            .from("StudentProfile")
+            .select("id")
+            .eq("user_id", publicUser.id)
+            .maybeSingle()
+          targetStudent = student
+        }
+
+        if (!targetStudent) {
+          // Si el alumno no existe, creamos su cuenta invocando nuestra Edge Function create-student
+          try {
+            console.log(`[Webhook] Estudiante no encontrado. Creando automáticamente mediante create-student para: ${payerEmail}`)
+            const studentRes = await fetch(`${supabaseUrl}/functions/v1/create-student`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "apikey": supabaseKey,
+                "Authorization": `Bearer ${supabaseKey}`
+              },
+              body: JSON.stringify({
+                email: payerEmail.trim().toLowerCase(),
+                password: "student123", // Contraseña temporal
+                name: payerName.trim(),
+                phone: payerPhone,
+                teacher_id: teacherId
+              })
+            })
+            
+            if (studentRes.ok) {
+              const studentData = await studentRes.json()
+              if (studentData?.userId) {
+                const { data: student } = await supabaseAdmin
+                  .from("StudentProfile")
+                  .select("id")
+                  .eq("user_id", studentData.userId)
+                  .maybeSingle()
+                targetStudent = student
+              }
+            } else {
+              console.error("[Webhook] Falló la creación del estudiante:", await studentRes.text())
+            }
+          } catch (createErr) {
+            console.error("[Webhook] Error excepcional llamando a create-student:", createErr)
+          }
+        }
+
+        if (targetStudent) {
+          targetStudentId = targetStudent.id
           
-          // Actualizar estado del alumno a TRIAL e inicializar su mensualidad estándar a $90.000 CLP como solicitó Arnaldo
+          // Actualizar estado del alumno a TRIAL e inicializar su mensualidad estándar a $90.000 CLP
           await supabaseAdmin
             .from("StudentProfile")
             .update({ 
               status: "TRIAL", 
               monthly_fee: 90000 
             })
-            .eq("id", student.id)
+            .eq("id", targetStudent.id)
+        }
 
-          // Confirmar el agendamiento (Booking) pendiente de esta clase de prueba
-          await supabaseAdmin
+        // 2. Insertar la reserva (Booking) directamente como CONFIRMED
+        const selectedDate = metadata.selected_date
+        const selectedSlot = metadata.selected_slot
+        const modalidad = metadata.modalidad || "presencial"
+
+        if (selectedDate && selectedSlot) {
+          const [h, m] = selectedSlot.split(":").map(Number)
+          const endD = new Date()
+          endD.setHours(h, m + 60, 0, 0)
+          const endTimeStr = `${String(endD.getHours()).padStart(2, "0")}:${String(endD.getMinutes()).padStart(2, "0")}:00`
+
+          const { data: newBooking, error: bookingInsertErr } = await supabaseAdmin
             .from("Booking")
-            .update({ status: "CONFIRMED" })
-            .eq("email", payerEmail.trim().toLowerCase())
-            .eq("teacher_id", teacherId)
-            .eq("status", "PENDING")
+            .insert({
+              teacher_id: teacherId,
+              name: payerName.trim(),
+              email: payerEmail.trim().toLowerCase(),
+              phone: payerPhone,
+              date: selectedDate,
+              start_time: selectedSlot,
+              end_time: endTimeStr,
+              total_price: transaction_amount || 25000,
+              status: "CONFIRMED"
+            })
+            .select("id")
+            .maybeSingle()
+
+          if (bookingInsertErr) {
+            console.error("[Webhook] Error al insertar booking:", bookingInsertErr)
+          }
+
+          // 3. Crear la sesión de clase física real directamente confirmada en la agenda (Class table)
+          if (targetStudentId && newBooking) {
+            console.log(`[Webhook] Insertando clase física en la agenda para la reserva aprobada: ${selectedDate} a las ${selectedSlot}`)
+            const { error: classInsertErr } = await supabaseAdmin
+              .from("Class")
+              .insert({
+                teacher_id: teacherId,
+                student_id: targetStudentId,
+                booking_id: newBooking.id,
+                date: selectedDate,
+                start_time: selectedSlot,
+                end_time: endTimeStr,
+                duration: 60,
+                modalidad: modalidad,
+                status: "CONFIRMED",
+                is_recurring: false
+              })
+
+            if (classInsertErr) {
+              console.error("[Webhook] Error al insertar clase física:", classInsertErr)
+            }
+          }
         }
       } else if (itemType === "MONTHLY" && studentId) {
         // B. COBRO MENSUAL: Reactivar alumno activo

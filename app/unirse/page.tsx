@@ -168,62 +168,25 @@ function RegistrationForm() {
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
       const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-      // 1. Crear al alumno mediante nuestra Edge Function create-student
-      const res = await fetch(`${supabaseUrl}/functions/v1/create-student`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": anonKey || "",
-          "Authorization": `Bearer ${anonKey}`
-        },
-        body: JSON.stringify({
-          email: form.email.trim().toLowerCase(),
-          password: "student123", // Contraseña temporal
-          name: form.name.trim(),
-          phone: whatsapp,
-          teacher_id: teacherId
-        })
-      })
+      const cleanEmail = form.email.trim().toLowerCase()
+      const cleanPhone = whatsapp.trim()
 
-      const edgeData = await res.json()
+      // 1. Validar si ya existe una reserva de prueba PENDING o CONFIRMED con el mismo Email o Teléfono
+      const { data: existingBooking } = await supabase
+        .from("Booking")
+        .select("id")
+        .eq("teacher_id", teacherId)
+        .or(`phone.eq.${cleanPhone},email.eq.${cleanEmail}`)
+        .in("status", ["PENDING", "CONFIRMED"])
+        .maybeSingle()
 
-      if (!res.ok || edgeData?.error) {
-        throw new Error(edgeData?.error || "Error al crear la cuenta. Intenta con otro correo.")
+      if (existingBooking) {
+        throw new Error("Ya registraste una solicitud de clase de prueba o tienes una cuenta activa con este correo o teléfono. Por favor contáctanos directamente para coordinar tu clase.")
       }
 
-      const newUserId = edgeData.userId
-
-      // 2. Actualizar el perfil del prospecto en Khora
-      await supabase
-        .from("StudentProfile")
-        .update({
-          modalidad: form.modalidad,
-          preferred_day: DAY_NAMES[new Date(selectedDate + "T12:00").getDay()],
-          preferred_time: selectedSlot,
-          status: "TRIAL", // Pasa a clase de prueba directamente
-          lead_source: "WEBSITE"
-        })
-        .eq("user_id", newUserId)
-
-      // 3. Crear el agendamiento (Booking) físico en Khora
-      const [h, m] = selectedSlot.split(":").map(Number)
-      const endD = new Date()
-      endD.setHours(h, m + 60, 0, 0)
-      const endTimeStr = `${String(endD.getHours()).padStart(2, "0")}:${String(endD.getMinutes()).padStart(2, "0")}:00`
-
-      await supabase.from("Booking").insert({
-        teacher_id: teacherId,
-        name: form.name.trim(),
-        email: form.email.trim().toLowerCase(),
-        phone: whatsapp,
-        date: selectedDate,
-        start_time: selectedSlot,
-        end_time: endTimeStr,
-        total_price: 0,
-        status: "PENDING"
-      })
-
-      // 4. Si es Arnaldo y la pasarela de pagos está configurada, generar link de cobro e ir a Mercado Pago
+      // 2. Si es Arnaldo y la pasarela de pagos está configurada, generar link de cobro e ir a Mercado Pago directamente
+      // NOTA: Para evitar "reservas basura" que bloqueen horarios a otros, NO insertamos el Booking ni creamos el alumno
+      // en la base de datos hasta que el Webhook confirme que el pago fue APROBADO.
       if (isArnaldo) {
         try {
           const checkoutRes = await fetch(`${supabaseUrl}/functions/v1/mercadopago-checkout`, {
@@ -238,8 +201,11 @@ function RegistrationForm() {
               student_id: null,
               item_type: "TRIAL",
               prospect_name: form.name.trim(),
-              prospect_email: form.email.trim().toLowerCase(),
-              prospect_phone: whatsapp
+              prospect_email: cleanEmail,
+              prospect_phone: cleanPhone,
+              selected_date: selectedDate,
+              selected_slot: selectedSlot,
+              modalidad: form.modalidad
             })
           })
 
@@ -252,7 +218,7 @@ function RegistrationForm() {
             setTimeout(() => {
               window.location.href = checkoutData.checkoutUrl
             }, 1500)
-            return // Detiene el flujo estándar de redirección inmediata a WhatsApp
+            return // Detiene el flujo para evitar el fallback manual de WhatsApp
           }
         } catch (checkoutErr) {
           console.error("Error al generar checkout de pago:", checkoutErr)
@@ -260,10 +226,66 @@ function RegistrationForm() {
         }
       }
 
-      // 5. Medir conversión en Meta Ads
+      // 3. FLUJO DE WHATSAPP (FALLBACK si falla o está desactivada la pasarela automática)
+      // A. Crear al alumno mediante nuestra Edge Function create-student
+      const res = await fetch(`${supabaseUrl}/functions/v1/create-student`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": anonKey || "",
+          "Authorization": `Bearer ${anonKey}`
+        },
+        body: JSON.stringify({
+          email: cleanEmail,
+          password: "student123", // Contraseña temporal
+          name: form.name.trim(),
+          phone: cleanPhone,
+          teacher_id: teacherId
+        })
+      })
+
+      const edgeData = await res.json()
+
+      if (!res.ok || edgeData?.error) {
+        throw new Error(edgeData?.error || "Error al crear la cuenta. Intenta con otro correo.")
+      }
+
+      const newUserId = edgeData.userId
+
+      // B. Actualizar el perfil del prospecto en Khora
+      await supabase
+        .from("StudentProfile")
+        .update({
+          modalidad: form.modalidad,
+          preferred_day: DAY_NAMES[new Date(selectedDate + "T12:00").getDay()],
+          preferred_time: selectedSlot,
+          status: "TRIAL", // Pasa a clase de prueba directamente
+          lead_source: "WEBSITE"
+        })
+        .eq("user_id", newUserId)
+
+      // C. Crear el agendamiento (Booking) físico en Khora con estado PENDING para WhatsApp manual
+      const [h, m] = selectedSlot.split(":").map(Number)
+      const endD = new Date()
+      endD.setHours(h, m + 60, 0, 0)
+      const endTimeStr = `${String(endD.getHours()).padStart(2, "0")}:${String(endD.getMinutes()).padStart(2, "0")}:00`
+
+      await supabase.from("Booking").insert({
+        teacher_id: teacherId,
+        name: form.name.trim(),
+        email: cleanEmail,
+        phone: cleanPhone,
+        date: selectedDate,
+        start_time: selectedSlot,
+        end_time: endTimeStr,
+        total_price: 0,
+        status: "PENDING"
+      })
+
+      // D. Medir conversión en Meta Ads
       trackMetaLead()
 
-      // 6. Redireccionar directamente a WhatsApp con el mensaje pre-armado
+      // E. Redireccionar directamente a WhatsApp con el mensaje pre-armado
       setSuccess(true)
       const formattedDate = new Date(selectedDate + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
       const textMsg = encodeURIComponent(

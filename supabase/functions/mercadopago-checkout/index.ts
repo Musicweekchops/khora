@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { teacher_id, student_id, item_type, item_id, prospect_name, prospect_email, prospect_phone } = await req.json()
+    const { teacher_id, student_id, item_type, item_id, prospect_name, prospect_email, prospect_phone, selected_date, selected_slot, modalidad } = await req.json()
 
     if (!teacher_id || !item_type) {
       throw new Error("Missing required fields: teacher_id and item_type are mandatory.")
@@ -156,7 +156,10 @@ serve(async (req) => {
         item_id: item_id || null,
         prospect_name: payerName,
         prospect_email: payerEmail,
-        prospect_phone: payerPhone
+        prospect_phone: payerPhone,
+        selected_date: selected_date || null,
+        selected_slot: selected_slot || null,
+        modalidad: modalidad || null
       },
       // URL del Webhook seguro
       notification_url: `${supabaseUrl}/functions/v1/mercadopago-webhook`
