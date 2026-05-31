@@ -165,7 +165,7 @@ serve(async (req) => {
       notification_url: `${supabaseUrl}/functions/v1/mercadopago-webhook`
     }
 
-    const mpRes = await fetch("https://api.mercadopago.com/v1/preferences", {
+    const mpRes = await fetch("https://api.mercadopago.com/checkout/preferences", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
