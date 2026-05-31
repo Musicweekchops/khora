@@ -7,14 +7,14 @@ import { formatTime } from "@/lib/utils"
 import { getAvailableSlots } from "@/lib/availability"
 import { DAY_NAMES } from "@/lib/schedule"
 import { useToast } from "@/components/ui/Toast"
-import { 
-  Phone, 
-  User, 
-  Mail, 
-  Calendar, 
-  Clock, 
-  Check, 
-  ChevronRight, 
+import {
+  Phone,
+  User,
+  Mail,
+  Calendar,
+  Clock,
+  Check,
+  ChevronRight,
   Sparkles,
   ArrowRight,
   ShieldCheck,
@@ -26,7 +26,7 @@ function RegistrationForm() {
   const searchParams = useSearchParams()
   const teacherId = searchParams.get("teacherId")
   const { toast } = useToast()
-  
+
   const [teacherName, setTeacherName] = useState("")
   const [teacherEmail, setTeacherEmail] = useState("")
   const [loadingTeacher, setLoadingTeacher] = useState(true)
@@ -41,7 +41,7 @@ function RegistrationForm() {
   const [availableSlots, setAvailableSlots] = useState<string[]>([])
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null)
-  
+
   // Datos del Formulario
   const [form, setForm] = useState({
     name: "",
@@ -73,7 +73,7 @@ function RegistrationForm() {
         .select("id, User ( name, email )")
         .eq("id", teacherId)
         .maybeSingle()
-      
+
       if (data?.User) {
         const userObj: any = data.User
         const name = Array.isArray(userObj) ? userObj[0]?.name : userObj.name
@@ -171,7 +171,7 @@ function RegistrationForm() {
       // 1. Crear al alumno mediante nuestra Edge Function create-student
       const res = await fetch(`${supabaseUrl}/functions/v1/create-student`, {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           "apikey": anonKey || "",
           "Authorization": `Bearer ${anonKey}`
@@ -247,7 +247,7 @@ function RegistrationForm() {
           if (checkoutRes.ok && checkoutData.checkoutUrl) {
             // Medir conversión en Meta Ads antes de irse
             trackMetaLead()
-            
+
             toast("¡Reserva iniciada! Redireccionando a Mercado Pago para confirmar...", "success")
             setTimeout(() => {
               window.location.href = checkoutData.checkoutUrl
@@ -269,11 +269,11 @@ function RegistrationForm() {
       const textMsg = encodeURIComponent(
         `¡Hola Arnaldo! Mi nombre es ${form.name.trim()}. Acabo de registrarme para una clase de prueba de batería este ${formattedDate} a las ${formatTime(selectedSlot)} hs. ¿Me podrías confirmar si queda reservada?`
       )
-      
+
       toast("¡Inscripción exitosa! Abriendo tu WhatsApp...", "success")
-      
+
       setTimeout(() => {
-        window.location.href = `https://wa.me/56984288031?text=${textMsg}` // Número celular de Arnaldo Allende
+        window.location.href = `https://wa.me/56944291538?text=${textMsg}` // Número celular de Arnaldo Allende
       }, 1500)
 
     } catch (err: any) {
@@ -313,7 +313,7 @@ function RegistrationForm() {
 
       setSuccess(true)
       toast("¡Te has unido a la Lista de Espera Prioritaria!", "success")
-      
+
       // WhatsApp Hook de Lista de espera
       const dayName = DAY_NAMES[Number(waitlistPref.day)]
       const textMsg = encodeURIComponent(
@@ -334,7 +334,7 @@ function RegistrationForm() {
   async function handleStandardSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!form.name || !form.email || !form.password || !teacherId) return
-    
+
     setSubmitting(true)
     setError("")
 
@@ -344,7 +344,7 @@ function RegistrationForm() {
 
       const res = await fetch(`${supabaseUrl}/functions/v1/create-student`, {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           "apikey": anonKey || "",
           "Authorization": `Bearer ${anonKey}`
@@ -377,12 +377,12 @@ function RegistrationForm() {
         .eq("user_id", newUserId)
 
       setSuccess(true)
-      
+
       await supabase.auth.signInWithPassword({
         email: form.email.trim().toLowerCase(),
         password: form.password.trim()
       })
-      
+
       setTimeout(() => {
         router.push("/dashboard/tareas")
       }, 2000)
@@ -435,10 +435,10 @@ function RegistrationForm() {
   // ===================================================================
   if (isArnaldo) {
     return (
-      <div 
+      <div
         className="min-h-screen flex flex-col justify-between items-center p-4 md:p-8 bg-cover bg-center bg-no-repeat relative font-sans text-white"
-        style={{ 
-          backgroundImage: "linear-gradient(rgba(18, 18, 20, 0.92), rgba(18, 18, 20, 0.96)), url('/studio.jpg')" 
+        style={{
+          backgroundImage: "linear-gradient(rgba(18, 18, 20, 0.92), rgba(18, 18, 20, 0.96)), url('/studio.jpg')"
         }}
       >
         {/* Glows Ambientales */}
@@ -450,7 +450,7 @@ function RegistrationForm() {
 
         {/* CONTENEDOR CENTRAL */}
         <div className="max-w-2xl w-full mx-auto my-auto py-10 relative z-10 text-center space-y-8">
-          
+
           {step === 1 ? (
             // ── STEP 1: CAPTURA DE WHATSAPP (Aesthetic Drumeo Hero) ──
             <div className="space-y-8 animate-in fade-in duration-300">
@@ -470,16 +470,16 @@ function RegistrationForm() {
               <form onSubmit={handleStartCampaign} className="max-w-md mx-auto bg-neutral-900/50 backdrop-blur-md p-2 rounded-2xl md:rounded-full border border-neutral-800 flex flex-col md:flex-row items-center gap-2 shadow-2xl">
                 <div className="relative w-full flex-1 pl-4">
                   <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-500 w-4 h-4" />
-                  <input 
-                    type="tel" 
-                    required 
-                    value={whatsapp} 
+                  <input
+                    type="tel"
+                    required
+                    value={whatsapp}
                     onChange={e => setWhatsapp(e.target.value)}
-                    placeholder="Ingresa tu WhatsApp" 
+                    placeholder="Ingresa tu WhatsApp"
                     className="w-full pl-6 pr-4 py-3 bg-transparent border-0 outline-none text-sm font-bold text-white placeholder:text-neutral-500 placeholder:font-medium"
                   />
                 </div>
-                <button 
+                <button
                   type="submit"
                   className="w-full md:w-auto px-8 py-3.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl md:rounded-full text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 flex-shrink-0 transition-all active:scale-95 shadow-lg shadow-blue-900/20"
                 >
@@ -493,12 +493,12 @@ function RegistrationForm() {
                 <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">
                   📱 Aplicación exclusiva para el control de tu progreso y agendamiento:
                 </p>
-                
+
                 {/* Smartphone central simulado */}
                 <div className="relative max-w-[280px] mx-auto border-4 border-neutral-800 rounded-[36px] overflow-hidden shadow-2xl bg-neutral-950/90 aspect-[9/18]">
                   {/* Notch del celular */}
                   <div className="absolute top-2 left-1/2 -translate-x-1/2 w-20 h-4 bg-black rounded-full z-20" />
-                  
+
                   {/* UI Interna */}
                   <div className="p-4 pt-8 space-y-4 text-left h-full flex flex-col justify-between">
                     <div className="space-y-4">
@@ -507,7 +507,7 @@ function RegistrationForm() {
                         <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
                       </div>
                       <h4 className="text-xs font-black text-white">Mi Agenda Semanal</h4>
-                      
+
                       {/* Grid de Horarios */}
                       <div className="grid grid-cols-3 gap-1.5 text-[9px]">
                         {["Lun", "Jue", "Mie"].map(d => (
@@ -539,7 +539,7 @@ function RegistrationForm() {
           ) : (
             // ── STEP 2: AGENDA INTERACTIVA (Frictionless Booking & Scarcity) ──
             <div className="bg-neutral-900/60 backdrop-blur-lg border border-neutral-800 rounded-[32px] overflow-hidden shadow-2xl text-left max-w-xl mx-auto animate-in zoom-in duration-300 font-sans">
-              
+
               {/* Encabezado del Widget */}
               <div className="bg-neutral-950 p-6 md:p-8 flex items-center justify-between border-b border-neutral-800">
                 <div>
@@ -549,7 +549,7 @@ function RegistrationForm() {
                   </p>
                   <h2 className="text-lg md:text-xl font-black text-white">Agenda con Arnaldo Allende</h2>
                 </div>
-                <button 
+                <button
                   onClick={() => setStep(1)}
                   className="px-3 py-1.5 bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white rounded-xl text-[10px] font-bold transition-all border border-neutral-800"
                 >
@@ -563,13 +563,13 @@ function RegistrationForm() {
                   {/* Selector de Fecha */}
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest pl-1 block">Elige la Fecha</label>
-                    <input 
-                      type="date" 
-                      required 
-                      value={selectedDate} 
-                      onChange={e => setSelectedDate(e.target.value)} 
+                    <input
+                      type="date"
+                      required
+                      value={selectedDate}
+                      onChange={e => setSelectedDate(e.target.value)}
                       min={new Date(Date.now() + 86400000).toISOString().split("T")[0]} // A partir de mañana
-                      className="w-full px-4 py-3.5 bg-neutral-950 border border-neutral-800 rounded-2xl outline-none focus:border-violet-500 font-bold text-sm text-white" 
+                      className="w-full px-4 py-3.5 bg-neutral-950 border border-neutral-800 rounded-2xl outline-none focus:border-violet-500 font-bold text-sm text-white"
                     />
                   </div>
 
@@ -608,11 +608,10 @@ function RegistrationForm() {
                                 key={slot}
                                 type="button"
                                 onClick={() => setSelectedSlot(slot)}
-                                className={`py-3 px-1 rounded-xl text-xs font-black transition-all ${
-                                  selectedSlot === slot 
-                                    ? "bg-blue-600 text-white shadow-lg scale-95" 
+                                className={`py-3 px-1 rounded-xl text-xs font-black transition-all ${selectedSlot === slot
+                                    ? "bg-blue-600 text-white shadow-lg scale-95"
                                     : "bg-neutral-950 text-neutral-400 border border-neutral-800 hover:border-neutral-500 active:scale-98"
-                                }`}
+                                  }`}
                               >
                                 {formatTime(slot)} hs
                               </button>
@@ -648,28 +647,28 @@ function RegistrationForm() {
                           <label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest pl-1 block mb-1">Nombre Completo</label>
                           <div className="relative">
                             <User className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600 w-3.5 h-3.5" />
-                            <input 
-                              type="text" 
-                              required 
-                              value={form.name} 
+                            <input
+                              type="text"
+                              required
+                              value={form.name}
                               onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
                               placeholder="Ej: Daniel Gómez"
-                              className="w-full pl-9 pr-4 py-2.5 bg-neutral-950 border border-neutral-800 rounded-xl outline-none focus:border-violet-500 text-xs font-bold" 
+                              className="w-full pl-9 pr-4 py-2.5 bg-neutral-950 border border-neutral-800 rounded-xl outline-none focus:border-violet-500 text-xs font-bold"
                             />
                           </div>
                         </div>
-                        
+
                         <div>
                           <label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest pl-1 block mb-1">Correo Electrónico</label>
                           <div className="relative">
                             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600 w-3.5 h-3.5" />
-                            <input 
-                              type="email" 
-                              required 
-                              value={form.email} 
+                            <input
+                              type="email"
+                              required
+                              value={form.email}
                               onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
                               placeholder="daniel@ejemplo.com"
-                              className="w-full pl-9 pr-4 py-2.5 bg-neutral-950 border border-neutral-800 rounded-xl outline-none focus:border-violet-500 text-xs font-bold" 
+                              className="w-full pl-9 pr-4 py-2.5 bg-neutral-950 border border-neutral-800 rounded-xl outline-none focus:border-violet-500 text-xs font-bold"
                             />
                           </div>
                         </div>
@@ -677,13 +676,12 @@ function RegistrationForm() {
 
                       <div className="grid grid-cols-2 gap-2 p-1 bg-neutral-950 border border-neutral-800 rounded-xl">
                         {(["presencial", "online"] as const).map(m => (
-                          <button 
-                            key={m} 
-                            type="button" 
+                          <button
+                            key={m}
+                            type="button"
                             onClick={() => setForm(p => ({ ...p, modalidad: m }))}
-                            className={`py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${
-                              form.modalidad === m ? "bg-neutral-800 text-white shadow" : "text-neutral-500 hover:text-neutral-300"
-                            }`}
+                            className={`py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${form.modalidad === m ? "bg-neutral-800 text-white shadow" : "text-neutral-500 hover:text-neutral-300"
+                              }`}
                           >
                             {m === "presencial" ? "🏠 Presencial" : "📹 Virtual"}
                           </button>
@@ -721,13 +719,13 @@ function RegistrationForm() {
                       <label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest pl-1 block mb-1">Nombre Completo</label>
                       <div className="relative">
                         <User className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600 w-3.5 h-3.5" />
-                        <input 
-                          type="text" 
-                          required 
-                          value={form.name} 
+                        <input
+                          type="text"
+                          required
+                          value={form.name}
                           onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
                           placeholder="Ej: Daniel Gómez"
-                          className="w-full pl-9 pr-4 py-2.5 bg-neutral-950 border border-neutral-800 rounded-xl outline-none focus:border-amber-500 text-xs font-bold text-white" 
+                          className="w-full pl-9 pr-4 py-2.5 bg-neutral-950 border border-neutral-800 rounded-xl outline-none focus:border-amber-500 text-xs font-bold text-white"
                         />
                       </div>
                     </div>
@@ -736,13 +734,13 @@ function RegistrationForm() {
                       <label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest pl-1 block mb-1">Correo Electrónico</label>
                       <div className="relative">
                         <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600 w-3.5 h-3.5" />
-                        <input 
-                          type="email" 
-                          required 
-                          value={form.email} 
+                        <input
+                          type="email"
+                          required
+                          value={form.email}
                           onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
                           placeholder="daniel@ejemplo.com"
-                          className="w-full pl-9 pr-4 py-2.5 bg-neutral-950 border border-neutral-800 rounded-xl outline-none focus:border-amber-500 text-xs font-bold text-white" 
+                          className="w-full pl-9 pr-4 py-2.5 bg-neutral-950 border border-neutral-800 rounded-xl outline-none focus:border-amber-500 text-xs font-bold text-white"
                         />
                       </div>
                     </div>
@@ -764,12 +762,12 @@ function RegistrationForm() {
 
                     <div>
                       <label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest pl-1 block mb-1">Hora Deseada (Estimada)</label>
-                      <input 
-                        type="time" 
-                        required 
-                        value={waitlistPref.time} 
+                      <input
+                        type="time"
+                        required
+                        value={waitlistPref.time}
                         onChange={e => setWaitlistPref(p => ({ ...p, time: e.target.value }))}
-                        className="w-full px-4 py-2.5 bg-neutral-950 border border-neutral-800 rounded-xl outline-none focus:border-amber-500 text-xs font-bold text-white" 
+                        className="w-full px-4 py-2.5 bg-neutral-950 border border-neutral-800 rounded-xl outline-none focus:border-amber-500 text-xs font-bold text-white"
                       />
                     </div>
                   </div>
@@ -777,8 +775,8 @@ function RegistrationForm() {
                   {error && <div className="bg-red-950/20 border border-red-800 text-red-400 p-3 rounded-xl text-xs font-bold">⚠️ {error}</div>}
 
                   <div className="flex gap-2 pt-2">
-                    <button 
-                      type="button" 
+                    <button
+                      type="button"
                       onClick={() => setShowWaitlistForm(false)}
                       className="flex-1 py-3.5 bg-neutral-950 border border-neutral-800 text-neutral-400 hover:text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all"
                     >
@@ -839,29 +837,29 @@ function RegistrationForm() {
           <div className="space-y-4">
             <div>
               <label className="block text-[11px] font-bold text-neutral-400 uppercase tracking-widest mb-1.5 ml-1">Nombre Completo</label>
-              <input type="text" required value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} 
-                className="w-full px-4 py-3.5 bg-neutral-50 border border-neutral-100 rounded-2xl outline-none focus:border-violet-400 focus:bg-white focus:ring-4 focus:ring-violet-50 transition-all text-sm font-bold" 
+              <input type="text" required value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+                className="w-full px-4 py-3.5 bg-neutral-50 border border-neutral-100 rounded-2xl outline-none focus:border-violet-400 focus:bg-white focus:ring-4 focus:ring-violet-50 transition-all text-sm font-bold"
                 placeholder="Ej: María José Salas" />
             </div>
 
             <div>
               <label className="block text-[11px] font-bold text-neutral-400 uppercase tracking-widest mb-1.5 ml-1">Correo Electrónico</label>
-              <input type="email" required value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} 
-                className="w-full px-4 py-3.5 bg-neutral-50 border border-neutral-100 rounded-2xl outline-none focus:border-violet-400 focus:bg-white focus:ring-4 focus:ring-violet-50 transition-all text-sm font-bold" 
+              <input type="email" required value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+                className="w-full px-4 py-3.5 bg-neutral-50 border border-neutral-100 rounded-2xl outline-none focus:border-violet-400 focus:bg-white focus:ring-4 focus:ring-violet-50 transition-all text-sm font-bold"
                 placeholder="maria@ejemplo.com" />
             </div>
 
             <div>
               <label className="block text-[11px] font-bold text-neutral-400 uppercase tracking-widest mb-1.5 ml-1">WhatsApp / Teléfono</label>
-              <input type="tel" required value={whatsapp} onChange={e => setWhatsapp(e.target.value)} 
-                className="w-full px-4 py-3.5 bg-neutral-50 border border-neutral-100 rounded-2xl outline-none focus:border-violet-400 focus:bg-white focus:ring-4 focus:ring-violet-50 transition-all text-sm font-bold" 
+              <input type="tel" required value={whatsapp} onChange={e => setWhatsapp(e.target.value)}
+                className="w-full px-4 py-3.5 bg-neutral-50 border border-neutral-100 rounded-2xl outline-none focus:border-violet-400 focus:bg-white focus:ring-4 focus:ring-violet-50 transition-all text-sm font-bold"
                 placeholder="+56 9 1234 5678" />
             </div>
 
             <div>
               <label className="block text-[11px] font-bold text-neutral-400 uppercase tracking-widest mb-1.5 ml-1">Crea tu contraseña</label>
-              <input type="password" required value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} 
-                className="w-full px-4 py-3.5 bg-neutral-50 border border-neutral-100 rounded-2xl outline-none focus:border-violet-400 focus:bg-white focus:ring-4 focus:ring-violet-50 transition-all text-sm font-bold" 
+              <input type="password" required value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
+                className="w-full px-4 py-3.5 bg-neutral-50 border border-neutral-100 rounded-2xl outline-none focus:border-violet-400 focus:bg-white focus:ring-4 focus:ring-violet-50 transition-all text-sm font-bold"
                 placeholder="Mínimo 6 caracteres" />
             </div>
           </div>
@@ -878,7 +876,7 @@ function RegistrationForm() {
             </div>
           </div>
 
-          <button type="submit" disabled={submitting} 
+          <button type="submit" disabled={submitting}
             className="w-full py-4 mt-4 bg-neutral-900 text-white rounded-2xl font-black text-sm tracking-wide shadow-lg shadow-neutral-900/20 hover:bg-violet-600 transition-colors disabled:opacity-50">
             {submitting ? "Creando perfil..." : "Completar Inscripción"}
           </button>
