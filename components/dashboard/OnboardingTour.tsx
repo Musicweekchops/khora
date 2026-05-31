@@ -135,7 +135,7 @@ export default function OnboardingTour() {
             }
           }
         }
-      })),
+      })) as any,
       onDestroyed: () => {
         // Asegurar que si el usuario salta el tour también guardamos el estado
         handleOnboardingComplete()

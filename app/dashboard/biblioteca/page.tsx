@@ -224,7 +224,7 @@ function PdfThumbnail({ url, fallback }: { url: string; fallback: React.ReactNod
     async function loadPdf() {
       try {
         // Load PDF.js dynamically from CDN if not present in window
-        if (!window['pdfjs-dist/build/pdf']) {
+        if (!(window as any)['pdfjs-dist/build/pdf']) {
           const script = document.createElement('script')
           script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
           script.async = true
@@ -234,7 +234,7 @@ function PdfThumbnail({ url, fallback }: { url: string; fallback: React.ReactNod
           })
         }
 
-        const pdfjs = window['pdfjs-dist/build/pdf']
+        const pdfjs = (window as any)['pdfjs-dist/build/pdf']
         pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
 
         const pdf = await pdfjs.getDocument(url).promise

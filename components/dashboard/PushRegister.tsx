@@ -125,7 +125,7 @@ export default function PushRegister() {
               ¡Activa notificaciones al instante!
             </h4>
             <p className="text-xs text-neutral-500 mt-1 leading-relaxed">
-              Recibe avisos inmediatos en tu celular cuando {profile.role === "TEACHER" ? "un alumno confirme clases" : "tu profesor asigne tareas"} o reprogramaciones.
+              Recibe avisos inmediatos en tu celular cuando {profile?.role === "TEACHER" ? "un alumno confirme clases" : "tu profesor asigne tareas"} o reprogramaciones.
             </p>
             <div className="flex gap-2 mt-4">
               <button

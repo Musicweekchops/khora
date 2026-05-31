@@ -81,8 +81,26 @@ interface SidebarProps {
 
 export default function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname()
-  const { signOut } = useAuth()
-  const navItems = user.role === 'TEACHER' ? TEACHER_NAV : STUDENT_NAV
+  const { profile, signOut } = useAuth()
+  
+  let navItems = user.role === 'TEACHER' ? [...TEACHER_NAV] : [...STUDENT_NAV]
+  
+  const isArnaldo = profile?.email === 'arnaldoallende@hotmail.com'
+  if (isArnaldo && user.role === 'TEACHER') {
+    const crmIndex = navItems.findIndex(item => item.href === "/dashboard/crm")
+    if (crmIndex !== -1) {
+      navItems.splice(crmIndex + 1, 0, {
+        name: "Lista de Espera",
+        href: "/dashboard/espera",
+        icon: (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+          </svg>
+        )
+      })
+    }
+  }
 
   return (
     <>
