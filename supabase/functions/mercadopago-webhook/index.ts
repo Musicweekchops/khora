@@ -142,20 +142,23 @@ serve(async (req) => {
           .from("StudentProfile")
           .update({ status: "ACTIVE" })
           .eq("id", studentId)
-      } else if (itemType === "COURSE" && itemId) {
-        // C. COMPRA DE CURSO DIGITAL / EXTRA: Desbloquear acceso en la biblioteca
+      } else if ((itemType === "COURSE" || itemType === "PRODUCT") && itemId) {
+        // C. COMPRA DE PRODUCTO DIGITAL / EXTRA: Registrar en la tabla Purchase
         if (studentId) {
-          // Insertar acceso a la biblioteca para este recurso
-          const { error: accessErr } = await supabaseAdmin
-            .from("StudentLibraryAccess")
+          const { error: purchaseErr } = await supabaseAdmin
+            .from("Purchase")
             .upsert({
               student_id: studentId,
-              content_id: itemId,
-              assigned_by: teacherId
-            }, { onConflict: "student_id,content_id" })
+              product_id: itemId,
+              teacher_id: teacherId,
+              amount_paid: transaction_amount,
+              payment_method: 'MERCADOPAGO',
+              mp_payment_id: paymentId,
+              status: 'COMPLETED'
+            }, { onConflict: "student_id,product_id" })
 
-          if (accessErr) {
-            console.error("[Webhook] Error otorgando acceso a biblioteca:", accessErr)
+          if (purchaseErr) {
+            console.error("[Webhook] Error registrando compra de producto:", purchaseErr)
           }
         }
       }

@@ -87,18 +87,18 @@ serve(async (req) => {
       payerPhone = sUser?.phone || payerPhone
       itemPrice = Number(student.monthly_fee) || 90000 // Default 90.000 si está en 0
       itemName = `Mensualidad Clases de Batería - ${payerName}`
-    } else if (item_type === "COURSE") {
+    } else if (item_type === "COURSE" || item_type === "PRODUCT") {
       // Compra de Material Digital / Cursos Extras
-      if (!item_id) throw new Error("item_id is required for COURSE purchases.")
+      if (!item_id) throw new Error("item_id is required for COURSE/PRODUCT purchases.")
       
-      // Buscar el curso en la biblioteca
-      const { data: libraryItem, error: libErr } = await supabaseAdmin
-        .from("LibraryContent")
-        .select("title")
+      // Buscar el producto en la tabla Product
+      const { data: productItem, error: prodErr } = await supabaseAdmin
+        .from("Product")
+        .select("title, price")
         .eq("id", item_id)
         .maybeSingle()
 
-      if (libErr || !libraryItem) throw new Error("Digital course not found in library.")
+      if (prodErr || !productItem) throw new Error("Digital product not found.")
       
       if (student_id) {
         const { data: student } = await supabaseAdmin
@@ -114,8 +114,8 @@ serve(async (req) => {
         }
       }
 
-      itemName = `Curso Digital: ${libraryItem.title}`
-      itemPrice = 20000 // $20.000 CLP como solicitó el usuario para rítmica
+      itemName = `Producto Digital: ${productItem.title}`
+      itemPrice = Number(productItem.price)
     } else {
       throw new Error("Invalid item_type provided.")
     }

@@ -13,7 +13,9 @@ import {
   CreditCard,
   Sparkles,
   Award,
-  ShieldCheck
+  ShieldCheck,
+  ExternalLink,
+  ShoppingBag
 } from "lucide-react"
 import Link from "next/link"
 
@@ -34,6 +36,8 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
   const [monthlyFee, setMonthlyFee] = useState(0)
   const [studentStatus, setStudentStatus] = useState("PROSPECT")
   const [availableCourses, setAvailableCourses] = useState<any[]>([])
+  const [purchases, setPurchases] = useState<any[]>([])
+  const [activeTab, setActiveTab] = useState<'store' | 'purchases'>('purchases')
   const [paying, setPaying] = useState<string | null>(null)
 
   useEffect(() => {
@@ -194,24 +198,34 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
           setStudentStatus(student.status || "PROSPECT")
         }
 
-        // Cargar cursos digitales de la biblioteca de Arnaldo
-        const { data: courses } = await supabase
-          .from("LibraryContent")
-          .select("*")
-          .eq("teacher_id", profile.teacherProfileId!)
-          .or("category.ilike.%Curso%,category.ilike.%Masterclass%")
-
-        // Cargar accesos concedidos
-        const { data: accesses } = await supabase
-          .from("StudentLibraryAccess")
-          .select("content_id")
+        // Cargar compras realizadas
+        const { data: purchasesData } = await supabase
+          .from("Purchase")
+          .select("id, product_id, amount_paid, payment_method, purchase_date, Product(*)")
           .eq("student_id", profile.studentProfileId!)
 
-        const unlockedIds = new Set((accesses || []).map(a => a.content_id))
+        const loadedPurchases = purchasesData || []
+        setPurchases(loadedPurchases)
 
-        // Filtrar cursos no comprados aún
-        const filteredCourses = (courses || []).filter(c => !unlockedIds.has(c.id))
-        setAvailableCourses(filteredCourses)
+        // Cargar todos los productos del profesor
+        const { data: products } = await supabase
+          .from("Product")
+          .select("*")
+          .eq("teacher_id", profile.teacherProfileId!)
+          .eq("is_active", true)
+
+        const purchasedIds = new Set(loadedPurchases.map(p => p.product_id))
+
+        // Filtrar productos no comprados aún para la Tienda
+        const filteredProducts = (products || []).filter(p => !purchasedIds.has(p.id))
+        setAvailableCourses(filteredProducts)
+
+        // Determinar pestaña activa por defecto
+        if (loadedPurchases.length > 0) {
+          setActiveTab('purchases')
+        } else {
+          setActiveTab('store')
+        }
       }
     } catch (err) {
       console.error("Error loading student billing panel:", err)
@@ -363,51 +377,136 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
             </div>
           </div>
 
-          {/* Catálogo de Cursos Digitales (Upsell Store) */}
+          {/* Catálogo de Cursos & Mis Compras (Split Decoupled Panel) */}
           <div className="bg-white rounded-3xl md:rounded-[40px] border border-neutral-100 p-6 md:p-8 shadow-sm flex flex-col justify-between relative overflow-hidden">
-            <div className="absolute bottom-[-15%] left-[5%] w-36 h-36 bg-emerald-500/5 blur-[50px] rounded-full pointer-events-none" />
+            <div className="absolute bottom-[-15%] left-[5%] w-36 h-36 bg-indigo-500/5 blur-[50px] rounded-full pointer-events-none" />
             
-            <div className="space-y-4 relative z-10 w-full">
-              <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 w-fit">
-                <Sparkles className="w-3.5 h-3.5" />
-                Cursos & Material Digital
-              </span>
-
-              <div className="space-y-1">
-                <h3 className="text-xl font-black text-neutral-900 tracking-tight">Potencia tu Aprendizaje</h3>
-                <p className="text-neutral-500 text-xs font-semibold leading-relaxed">
-                  Adquiere cursos premium y desbloquea material exclusivo de batería de forma instantánea en tu biblioteca.
-                </p>
+            <div className="space-y-4 relative z-10 w-full flex-1 flex flex-col">
+              {/* Tab Selector */}
+              <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setActiveTab('purchases')}
+                    className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                      activeTab === 'purchases'
+                        ? 'bg-neutral-900 text-white shadow-sm'
+                        : 'bg-neutral-50 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900'
+                    }`}
+                  >
+                    <Award className="w-3.5 h-3.5" />
+                    <span>Mis Compras ({purchases.length})</span>
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('store')}
+                    className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                      activeTab === 'store'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'bg-neutral-50 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900'
+                    }`}
+                  >
+                    <ShoppingBag className="w-3.5 h-3.5" />
+                    <span>Tienda ({availableCourses.length})</span>
+                  </button>
+                </div>
               </div>
 
-              {availableCourses.length === 0 ? (
-                <div className="py-8 text-center bg-neutral-50 rounded-2xl border border-dashed border-neutral-200">
-                  <p className="text-xs text-neutral-400 font-bold italic">¡Ya tienes acceso a todos los cursos disponibles! 🎉</p>
-                </div>
-              ) : (
-                <div className="space-y-3 max-h-[180px] overflow-y-auto pr-1 scrollbar-thin">
-                  {availableCourses.map(course => (
-                    <div key={course.id} className="bg-neutral-50 border border-neutral-100 rounded-2xl p-4 flex justify-between items-center gap-4 group">
-                      <div className="min-w-0 flex-1">
-                        <h4 className="text-xs font-black text-neutral-900 truncate">{course.title}</h4>
-                        <p className="text-[10px] text-neutral-400 truncate mt-0.5">{course.description || "Curso premium completo."}</p>
-                        <p className="text-xs font-black text-emerald-600 mt-1">$20.000 <span className="text-[9px] font-bold text-neutral-400 uppercase">CLP</span></p>
-                      </div>
+              {/* Tab: Mis Compras */}
+              {activeTab === 'purchases' && (
+                <div className="flex-1 flex flex-col justify-between pt-2">
+                  <div className="space-y-1 mb-4">
+                    <h3 className="text-lg font-black text-neutral-900 tracking-tight">Tu Material Adquirido</h3>
+                    <p className="text-neutral-500 text-[11px] font-semibold leading-relaxed">
+                      Accede de forma directa a tus masterclasses, cursos en video y material digital exclusivo en cualquier momento.
+                    </p>
+                  </div>
 
-                      <button
-                        onClick={() => handleBuyCourse(course.id)}
-                        disabled={paying !== null}
-                        className="px-4 py-2.5 bg-neutral-900 hover:bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-50 flex items-center gap-1.5 flex-shrink-0"
-                      >
-                        {paying === course.id ? (
-                          <div className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                        ) : (
-                          <CreditCard className="w-3.5 h-3.5" />
-                        )}
-                        <span>Comprar</span>
-                      </button>
+                  {purchases.length === 0 ? (
+                    <div className="py-8 text-center bg-neutral-50 rounded-2xl border border-dashed border-neutral-200 flex-1 flex flex-col items-center justify-center">
+                      <BookOpen className="w-8 h-8 text-neutral-300 mb-2" />
+                      <p className="text-xs text-neutral-400 font-bold max-w-[240px] leading-relaxed">Aún no has adquirido cursos premium o material digital.</p>
+                      <p className="text-[10px] text-neutral-400 mt-1 font-semibold">¡Revisa la pestaña "Tienda" para ver opciones!</p>
                     </div>
-                  ))}
+                  ) : (
+                    <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1 scrollbar-thin flex-1">
+                      {purchases.map(purchase => {
+                        const product = purchase.Product
+                        if (!product) return null
+                        return (
+                          <div key={purchase.id} className="bg-neutral-50 border border-neutral-100 rounded-2xl p-4 flex justify-between items-center gap-4 group hover:border-neutral-200 transition-all">
+                            <div className="min-w-0 flex-1">
+                              <h4 className="text-xs font-black text-neutral-900 truncate flex items-center gap-1.5">
+                                <Award className="w-3.5 h-3.5 text-violet-500 flex-shrink-0" />
+                                {product.title}
+                              </h4>
+                              <p className="text-[10px] text-neutral-400 truncate mt-0.5">{product.description || "Curso premium completo."}</p>
+                              <div className="flex items-center gap-2 mt-1.5 text-[9px] font-bold text-neutral-400 uppercase">
+                                <span>{purchase.payment_method === 'MERCADOPAGO' ? 'Mercado Pago' : 'Manual'}</span>
+                                <span>•</span>
+                                <span>{new Date(purchase.purchase_date).toLocaleDateString('es-CL')}</span>
+                              </div>
+                            </div>
+
+                            <a
+                              href={product.content_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-4 py-2.5 bg-neutral-900 hover:bg-violet-600 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 flex-shrink-0 shadow-sm"
+                            >
+                              <span>Acceder</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Tab: Tienda */}
+              {activeTab === 'store' && (
+                <div className="flex-1 flex flex-col justify-between pt-2">
+                  <div className="space-y-1 mb-4">
+                    <h3 className="text-lg font-black text-neutral-900 tracking-tight">Cursos Disponibles</h3>
+                    <p className="text-neutral-500 text-[11px] font-semibold leading-relaxed">
+                      Adquiere cursos premium y desbloquea material exclusivo de batería de forma instantánea.
+                    </p>
+                  </div>
+
+                  {availableCourses.length === 0 ? (
+                    <div className="py-8 text-center bg-neutral-50 rounded-2xl border border-dashed border-neutral-200 flex-1 flex flex-col items-center justify-center">
+                      <Sparkles className="w-8 h-8 text-emerald-400 mb-2 animate-bounce" />
+                      <p className="text-xs text-neutral-400 font-bold max-w-[240px] leading-relaxed">¡Tienes acceso a todo nuestro catálogo! 🎉</p>
+                      <p className="text-[10px] text-neutral-400 mt-1 font-semibold">Muchas gracias por confiar en nosotros.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1 scrollbar-thin flex-1">
+                      {availableCourses.map(course => (
+                        <div key={course.id} className="bg-neutral-50 border border-neutral-100 rounded-2xl p-4 flex justify-between items-center gap-4 group hover:border-neutral-200 transition-all">
+                          <div className="min-w-0 flex-1">
+                            <h4 className="text-xs font-black text-neutral-900 truncate">{course.title}</h4>
+                            <p className="text-[10px] text-neutral-400 truncate mt-0.5">{course.description || "Curso premium completo."}</p>
+                            <p className="text-xs font-black text-emerald-600 mt-1">
+                              ${Number(course.price).toLocaleString("es-CL")} <span className="text-[9px] font-bold text-neutral-400 uppercase">CLP</span>
+                            </p>
+                          </div>
+
+                          <button
+                            onClick={() => handleBuyCourse(course.id)}
+                            disabled={paying !== null}
+                            className="px-4 py-2.5 bg-neutral-900 hover:bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-50 flex items-center gap-1.5 flex-shrink-0"
+                          >
+                            {paying === course.id ? (
+                              <div className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                            ) : (
+                              <CreditCard className="w-3.5 h-3.5" />
+                            )}
+                            <span>Comprar</span>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
