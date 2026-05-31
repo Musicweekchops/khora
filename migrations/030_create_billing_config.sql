@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS public."TeacherBillingConfig" (
 ALTER TABLE public."TeacherBillingConfig" ENABLE ROW LEVEL SECURITY;
 
 -- Security Policy: Teachers can read, insert, update and manage their own billing credentials
+DROP POLICY IF EXISTS "Teachers can manage their own billing config" ON public."TeacherBillingConfig";
 CREATE POLICY "Teachers can manage their own billing config"
 ON public."TeacherBillingConfig"
 FOR ALL

@@ -764,7 +764,8 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
             </div>
 
           </div>
-        </div>}
+        </div>
+      )}
     </div>
   )
 }
