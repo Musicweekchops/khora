@@ -143,8 +143,9 @@ serve(async (req) => {
           .update({ status: "ACTIVE" })
           .eq("id", studentId)
       } else if ((itemType === "COURSE" || itemType === "PRODUCT") && itemId) {
-        // C. COMPRA DE PRODUCTO DIGITAL / EXTRA: Registrar en la tabla Purchase
+        // C. COMPRA DE PRODUCTO DIGITAL / PLAN / EXTRA: Registrar en la tabla Purchase
         if (studentId) {
+          // 1. Registrar la compra
           const { error: purchaseErr } = await supabaseAdmin
             .from("Purchase")
             .upsert({
@@ -159,6 +160,31 @@ serve(async (req) => {
 
           if (purchaseErr) {
             console.error("[Webhook] Error registrando compra de producto:", purchaseErr)
+          }
+
+          // 2. Consultar si el producto es de tipo 'PLAN'
+          const { data: product } = await supabaseAdmin
+            .from("Product")
+            .select("type, duration_months")
+            .eq("id", itemId)
+            .maybeSingle()
+
+          if (product && product.type === "PLAN") {
+            const months = Number(product.duration_months || 1)
+            const expirationDate = new Date()
+            expirationDate.setMonth(expirationDate.getMonth() + months)
+
+            const { error: profileErr } = await supabaseAdmin
+              .from("StudentProfile")
+              .update({
+                status: "ACTIVE",
+                subscription_expires_at: expirationDate.toISOString()
+              })
+              .eq("id", studentId)
+
+            if (profileErr) {
+              console.error("[Webhook] Error actualizando membresía del alumno:", profileErr)
+            }
           }
         }
       }
