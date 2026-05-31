@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useAuth } from "@/lib/context/AuthContext"
 import { supabase } from "@/lib/supabase"
 import { toast } from "sonner"
@@ -12,7 +12,8 @@ import {
   ShieldCheck, 
   Save,
   Eye,
-  EyeOff
+  EyeOff,
+  CreditCard
 } from "lucide-react"
 
 export default function AjustesPage() {
@@ -27,6 +28,86 @@ export default function AjustesPage() {
 
   const [instrumento, setInstrumento] = useState(profile?.instrumento || "")
   const [savingInstrumento, setSavingInstrumento] = useState(false)
+
+  // MERCADO PAGO STATE HOOKS (Exclusive for Arnaldo)
+  const isArnaldo = profile?.email === "arnaldoallende@hotmail.com"
+  const [billing, setBilling] = useState({
+    gateway_enabled: false,
+    sandbox_mode: true,
+    mp_access_token: "",
+    mp_public_key: "",
+    mp_sandbox_token: "",
+    mp_sandbox_key: "",
+    trial_class_price: 25000
+  })
+  const [loadingBilling, setLoadingBilling] = useState(false)
+  const [savingBilling, setSavingBilling] = useState(false)
+
+  useEffect(() => {
+    if (isArnaldo && profile?.teacherProfileId) {
+      loadBillingConfig()
+    }
+  }, [profile])
+
+  async function loadBillingConfig() {
+    setLoadingBilling(true)
+    try {
+      const { data, error } = await supabase
+        .from("TeacherBillingConfig")
+        .select("*")
+        .eq("teacher_id", profile?.teacherProfileId)
+        .maybeSingle()
+
+      if (error) {
+        console.error("Error loading billing config:", error)
+      } else if (data) {
+        setBilling({
+          gateway_enabled: data.gateway_enabled,
+          sandbox_mode: data.sandbox_mode,
+          mp_access_token: data.mp_access_token || "",
+          mp_public_key: data.mp_public_key || "",
+          mp_sandbox_token: data.mp_sandbox_token || "",
+          mp_sandbox_key: data.mp_sandbox_key || "",
+          trial_class_price: data.trial_class_price || 25000
+        })
+      }
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoadingBilling(false)
+    }
+  }
+
+  async function handleUpdateBilling(e: React.FormEvent) {
+    e.preventDefault()
+    if (!profile?.teacherProfileId) return
+    setSavingBilling(true)
+
+    try {
+      const { error } = await supabase
+        .from("TeacherBillingConfig")
+        .upsert({
+          teacher_id: profile.teacherProfileId,
+          gateway_enabled: billing.gateway_enabled,
+          sandbox_mode: billing.sandbox_mode,
+          mp_access_token: billing.mp_access_token.trim() || null,
+          mp_public_key: billing.mp_public_key.trim() || null,
+          mp_sandbox_token: billing.mp_sandbox_token.trim() || null,
+          mp_sandbox_key: billing.mp_sandbox_key.trim() || null,
+          trial_class_price: Number(billing.trial_class_price) || 25000
+        }, { onConflict: "teacher_id" })
+
+      if (error) {
+        toast.error("Error al guardar credenciales: " + error.message)
+      } else {
+        toast.success("Credenciales de Mercado Pago guardadas con éxito")
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Error al guardar")
+    } finally {
+      setSavingBilling(false)
+    }
+  }
 
   async function handleUpdateInstrumento(e: React.FormEvent) {
     e.preventDefault()
@@ -174,6 +255,139 @@ export default function AjustesPage() {
                   Guardar Especialidad
                 </button>
               </form>
+            </section>
+          )}
+
+          {/* Mercado Pago Gateway Section (Exclusive to Arnaldo Allende) */}
+          {isArnaldo && (
+            <section className="bg-white rounded-[40px] border border-neutral-100 p-10 shadow-sm space-y-8 relative overflow-hidden">
+              <div className="absolute top-[-20%] right-[-10%] w-36 h-36 bg-emerald-500/5 blur-[50px] rounded-full pointer-events-none" />
+              
+              <h3 className="text-xl font-black text-neutral-900 flex items-center gap-3 relative z-10">
+                <CreditCard className="w-5 h-5 text-emerald-500" />
+                Pasarela de Pagos (Mercado Pago)
+              </h3>
+
+              {loadingBilling ? (
+                <div className="space-y-4 py-4 animate-pulse">
+                  <div className="h-10 bg-neutral-50 rounded-xl" />
+                  <div className="h-10 bg-neutral-50 rounded-xl" />
+                </div>
+              ) : (
+                <form onSubmit={handleUpdateBilling} className="space-y-6 relative z-10 font-sans">
+                  {/* Gateway Toggle Controls */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="flex items-center justify-between p-4 bg-neutral-50 rounded-2xl border border-neutral-100">
+                      <div>
+                        <p className="text-xs font-bold text-neutral-800">Pasarela de Pagos</p>
+                        <p className="text-[10px] text-neutral-400 font-medium mt-0.5">Activar cobros con Mercado Pago</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setBilling(b => ({ ...b, gateway_enabled: !b.gateway_enabled }))}
+                        className={`w-12 h-6 rounded-full p-1 transition-all ${billing.gateway_enabled ? "bg-emerald-500 flex justify-end" : "bg-neutral-200 flex justify-start"}`}
+                      >
+                        <span className="w-4 h-4 bg-white rounded-full shadow" />
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between p-4 bg-neutral-50 rounded-2xl border border-neutral-100">
+                      <div>
+                        <p className="text-xs font-bold text-neutral-800">Modo de Pruebas (Sandbox)</p>
+                        <p className="text-[10px] text-neutral-400 font-medium mt-0.5">Usar credenciales simulatorias</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setBilling(b => ({ ...b, sandbox_mode: !b.sandbox_mode }))}
+                        className={`w-12 h-6 rounded-full p-1 transition-all ${billing.sandbox_mode ? "bg-amber-500 flex justify-end" : "bg-neutral-200 flex justify-start"}`}
+                      >
+                        <span className="w-4 h-4 bg-white rounded-full shadow" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Config: Trial Price */}
+                  <div className="space-y-3">
+                    <label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest px-1">Valor Clase de Prueba (CLP)</label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400 font-bold text-sm">$</span>
+                      <input
+                        type="number"
+                        value={billing.trial_class_price}
+                        onChange={e => setBilling(b => ({ ...b, trial_class_price: Number(e.target.value) }))}
+                        className="w-full bg-neutral-50 border border-neutral-100 rounded-2xl pl-10 pr-6 py-4 text-sm font-bold outline-none focus:bg-white focus:border-emerald-300 transition-all"
+                        placeholder="25000"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {billing.sandbox_mode ? (
+                    // SANDBOX CREDENTIALS
+                    <div className="space-y-4 p-5 bg-amber-500/5 border border-amber-200/40 rounded-3xl space-y-4 animate-in fade-in duration-300">
+                      <p className="text-[10px] font-black text-amber-700 uppercase tracking-wider pl-1">Credenciales Sandbox (Pruebas)</p>
+                      
+                      <div className="space-y-3">
+                        <label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest px-1">Public Key Sandbox</label>
+                        <input
+                          type="text"
+                          value={billing.mp_sandbox_key}
+                          onChange={e => setBilling(b => ({ ...b, mp_sandbox_key: e.target.value }))}
+                          className="w-full bg-neutral-50 border border-neutral-100 rounded-2xl px-6 py-4 text-xs font-mono font-bold outline-none focus:bg-white focus:border-amber-300 transition-all"
+                          placeholder="TEST-c12b7..."
+                        />
+                      </div>
+
+                      <div className="space-y-3">
+                        <label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest px-1">Access Token Sandbox</label>
+                        <input
+                          type="password"
+                          value={billing.mp_sandbox_token}
+                          onChange={e => setBilling(b => ({ ...b, mp_sandbox_token: e.target.value }))}
+                          className="w-full bg-neutral-50 border border-neutral-100 rounded-2xl px-6 py-4 text-xs font-mono font-bold outline-none focus:bg-white focus:border-amber-300 transition-all"
+                          placeholder="TEST-4839210..."
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    // PRODUCTION CREDENTIALS
+                    <div className="space-y-4 p-5 bg-emerald-500/5 border border-emerald-200/40 rounded-3xl space-y-4 animate-in fade-in duration-300">
+                      <p className="text-[10px] font-black text-emerald-700 uppercase tracking-wider pl-1">Credenciales de Producción (Dinero Real)</p>
+                      
+                      <div className="space-y-3">
+                        <label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest px-1">Public Key Producción</label>
+                        <input
+                          type="text"
+                          value={billing.mp_public_key}
+                          onChange={e => setBilling(b => ({ ...b, mp_public_key: e.target.value }))}
+                          className="w-full bg-neutral-50 border border-neutral-100 rounded-2xl px-6 py-4 text-xs font-mono font-bold outline-none focus:bg-white focus:border-emerald-300 transition-all"
+                          placeholder="APP_USR-..."
+                        />
+                      </div>
+
+                      <div className="space-y-3">
+                        <label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest px-1">Access Token Producción</label>
+                        <input
+                          type="password"
+                          value={billing.mp_access_token}
+                          onChange={e => setBilling(b => ({ ...b, mp_access_token: e.target.value }))}
+                          className="w-full bg-neutral-50 border border-neutral-100 rounded-2xl px-6 py-4 text-xs font-mono font-bold outline-none focus:bg-white focus:border-emerald-300 transition-all"
+                          placeholder="APP_USR-..."
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={savingBilling}
+                    className="w-full sm:w-auto px-10 py-4 bg-neutral-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-xl disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+                  >
+                    {savingBilling ? <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" /> : <Save className="w-4 h-4" />}
+                    Guardar Configuración de Pago
+                  </button>
+                </form>
+              )}
             </section>
           )}
 

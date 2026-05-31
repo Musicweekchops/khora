@@ -223,10 +223,47 @@ function RegistrationForm() {
         status: "PENDING"
       })
 
-      // 4. Medir conversión en Meta Ads
+      // 4. Si es Arnaldo y la pasarela de pagos está configurada, generar link de cobro e ir a Mercado Pago
+      if (isArnaldo) {
+        try {
+          const checkoutRes = await fetch(`${supabaseUrl}/functions/v1/mercadopago-checkout`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "apikey": anonKey || "",
+              "Authorization": `Bearer ${anonKey}`
+            },
+            body: JSON.stringify({
+              teacher_id: teacherId,
+              student_id: null,
+              item_type: "TRIAL",
+              prospect_name: form.name.trim(),
+              prospect_email: form.email.trim().toLowerCase(),
+              prospect_phone: whatsapp
+            })
+          })
+
+          const checkoutData = await checkoutRes.json()
+          if (checkoutRes.ok && checkoutData.checkoutUrl) {
+            // Medir conversión en Meta Ads antes de irse
+            trackMetaLead()
+            
+            toast("¡Reserva iniciada! Redireccionando a Mercado Pago para confirmar...", "success")
+            setTimeout(() => {
+              window.location.href = checkoutData.checkoutUrl
+            }, 1500)
+            return // Detiene el flujo estándar de redirección inmediata a WhatsApp
+          }
+        } catch (checkoutErr) {
+          console.error("Error al generar checkout de pago:", checkoutErr)
+          // Si falla la pasarela, continuamos con el flujo tradicional de WhatsApp
+        }
+      }
+
+      // 5. Medir conversión en Meta Ads
       trackMetaLead()
 
-      // 5. Redireccionar directamente a WhatsApp con el mensaje pre-armado
+      // 6. Redireccionar directamente a WhatsApp con el mensaje pre-armado
       setSuccess(true)
       const formattedDate = new Date(selectedDate + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
       const textMsg = encodeURIComponent(

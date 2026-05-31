@@ -9,7 +9,11 @@ import {
   ClipboardList, 
   Video, 
   ChevronRight,
-  BookOpen
+  BookOpen,
+  CreditCard,
+  Sparkles,
+  Award,
+  ShieldCheck
 } from "lucide-react"
 import Link from "next/link"
 
@@ -24,9 +28,84 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
   const [nextClass, setNextClass] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
+  // MERCADO PAGO STATE HOOKS
+  const [isArnaldosStudent, setIsArnaldosStudent] = useState(false)
+  const [gatewayEnabled, setGatewayEnabled] = useState(false)
+  const [monthlyFee, setMonthlyFee] = useState(0)
+  const [studentStatus, setStudentStatus] = useState("PROSPECT")
+  const [availableCourses, setAvailableCourses] = useState<any[]>([])
+  const [paying, setPaying] = useState<string | null>(null)
+
   useEffect(() => {
     if (profile?.studentProfileId) loadData()
   }, [profile?.studentProfileId])
+
+  const handlePayMonthly = async () => {
+    setPaying("monthly")
+    try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+      const res = await fetch(`${supabaseUrl}/functions/v1/mercadopago-checkout`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": anonKey || "",
+          "Authorization": `Bearer ${anonKey}`
+        },
+        body: JSON.stringify({
+          teacher_id: profile.teacherProfileId,
+          student_id: profile.studentProfileId,
+          item_type: "MONTHLY"
+        })
+      })
+
+      const data = await res.json()
+      if (res.ok && data.checkoutUrl) {
+        window.location.href = data.checkoutUrl
+      } else {
+        alert(data.error || "No se pudo generar el cobro mensual.")
+      }
+    } catch (err) {
+      alert("Error al conectar con la pasarela de pagos.")
+    } finally {
+      setPaying(null)
+    }
+  }
+
+  const handleBuyCourse = async (courseId: string) => {
+    setPaying(courseId)
+    try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+      const res = await fetch(`${supabaseUrl}/functions/v1/mercadopago-checkout`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": anonKey || "",
+          "Authorization": `Bearer ${anonKey}`
+        },
+        body: JSON.stringify({
+          teacher_id: profile.teacherProfileId,
+          student_id: profile.studentProfileId,
+          item_type: "COURSE",
+          item_id: courseId
+        })
+      })
+
+      const data = await res.json()
+      if (res.ok && data.checkoutUrl) {
+        window.location.href = data.checkoutUrl
+      } else {
+        alert(data.error || "No se pudo procesar la compra del curso.")
+      }
+    } catch (err) {
+      alert("Error al conectar con la pasarela de pagos.")
+    } finally {
+      setPaying(null)
+    }
+  }
 
   async function loadData() {
     setLoading(true)
@@ -81,6 +160,62 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
       pendingTasks: tasks || 0,
       totalMaterials: allowedItems.size
     })
+
+    // 4. Mercado Pago Paid Student Experience (Arnaldo)
+    try {
+      const { data: teacherProfile } = await supabase
+        .from("TeacherProfile")
+        .select("id, User ( email )")
+        .eq("id", profile.teacherProfileId!)
+        .maybeSingle()
+
+      const arnaldoCheck = (teacherProfile?.User as any)?.email === "arnaldoallende@hotmail.com"
+      setIsArnaldosStudent(arnaldoCheck)
+
+      if (arnaldoCheck) {
+        // Cargar Billing Config
+        const { data: config } = await supabase
+          .from("TeacherBillingConfig")
+          .select("gateway_enabled")
+          .eq("teacher_id", profile.teacherProfileId!)
+          .maybeSingle()
+
+        setGatewayEnabled(config?.gateway_enabled || false)
+
+        // Cargar detalles de mensualidad
+        const { data: student } = await supabase
+          .from("StudentProfile")
+          .select("monthly_fee, status")
+          .eq("id", profile.studentProfileId!)
+          .maybeSingle()
+
+        if (student) {
+          setMonthlyFee(Number(student.monthly_fee) || 90000)
+          setStudentStatus(student.status || "PROSPECT")
+        }
+
+        // Cargar cursos digitales de la biblioteca de Arnaldo
+        const { data: courses } = await supabase
+          .from("LibraryContent")
+          .select("*")
+          .eq("teacher_id", profile.teacherProfileId!)
+          .or("category.ilike.%Curso%,category.ilike.%Masterclass%")
+
+        // Cargar accesos concedidos
+        const { data: accesses } = await supabase
+          .from("StudentLibraryAccess")
+          .select("content_id")
+          .eq("student_id", profile.studentProfileId!)
+
+        const unlockedIds = new Set((accesses || []).map(a => a.content_id))
+
+        // Filtrar cursos no comprados aún
+        const filteredCourses = (courses || []).filter(c => !unlockedIds.has(c.id))
+        setAvailableCourses(filteredCourses)
+      }
+    } catch (err) {
+      console.error("Error loading student billing panel:", err)
+    }
 
     setLoading(false)
   }
@@ -164,6 +299,118 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
             >
               Ver Detalles
             </Link>
+          </div>
+        </div>
+      )}
+
+      {/* SECCIÓN DE PAGOS & CURSOS DE MERCADO PAGO (Exclusivo Alumnos de Arnaldo) */}
+      {isArnaldosStudent && gatewayEnabled && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
+          {/* Tarjeta de Cobro Mensual */}
+          <div className="bg-white rounded-3xl md:rounded-[40px] border border-neutral-100 p-6 md:p-8 shadow-sm flex flex-col justify-between relative overflow-hidden">
+            <div className="absolute top-[-20%] right-[-10%] w-36 h-36 bg-violet-500/5 blur-[50px] rounded-full pointer-events-none" />
+            
+            <div className="space-y-4 relative z-10">
+              <span className="bg-violet-50 text-violet-700 border border-violet-100 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 w-fit">
+                <CreditCard className="w-3.5 h-3.5" />
+                Control de Mensualidad
+              </span>
+              
+              <div className="space-y-1">
+                <h3 className="text-xl font-black text-neutral-900 tracking-tight">Tu Mensualidad de Clases</h3>
+                <p className="text-neutral-500 text-xs font-semibold leading-relaxed">
+                  Realiza el pago seguro de tu mensualidad fija para mantener activo tu horario y bloque de clases.
+                </p>
+              </div>
+
+              <div className="bg-neutral-50 border border-neutral-100 rounded-2xl p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-[9px] font-black text-neutral-400 uppercase tracking-widest">Monto a pagar</p>
+                  <p className="text-2xl font-black text-neutral-900 mt-0.5">
+                    ${monthlyFee.toLocaleString("es-CL")} <span className="text-xs font-bold text-neutral-400">CLP</span>
+                  </p>
+                </div>
+                <span className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest ${
+                  studentStatus === "ACTIVE" 
+                    ? "bg-emerald-50 text-emerald-700 border border-emerald-100" 
+                    : "bg-amber-50 text-amber-700 border border-amber-100 animate-pulse"
+                }`}>
+                  {studentStatus === "ACTIVE" ? "✓ Al Día" : "⚠️ Pendiente"}
+                </span>
+              </div>
+            </div>
+
+            <div className="pt-6 relative z-10">
+              {studentStatus === "ACTIVE" ? (
+                <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl flex items-center gap-3 text-emerald-800 text-xs font-bold">
+                  <ShieldCheck className="w-5 h-5 text-emerald-500 flex-shrink-0" />
+                  <span>Tu cuenta de clases se encuentra al día. ¡Gracias por tu puntualidad!</span>
+                </div>
+              ) : (
+                <button
+                  onClick={handlePayMonthly}
+                  disabled={paying !== null}
+                  className="w-full py-4 bg-neutral-900 hover:bg-emerald-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-xl disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {paying === "monthly" ? (
+                    <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <CreditCard className="w-4 h-4" />
+                  )}
+                  <span>Pagar Mensualidad Seguro</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Catálogo de Cursos Digitales (Upsell Store) */}
+          <div className="bg-white rounded-3xl md:rounded-[40px] border border-neutral-100 p-6 md:p-8 shadow-sm flex flex-col justify-between relative overflow-hidden">
+            <div className="absolute bottom-[-15%] left-[5%] w-36 h-36 bg-emerald-500/5 blur-[50px] rounded-full pointer-events-none" />
+            
+            <div className="space-y-4 relative z-10 w-full">
+              <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 w-fit">
+                <Sparkles className="w-3.5 h-3.5" />
+                Cursos & Material Digital
+              </span>
+
+              <div className="space-y-1">
+                <h3 className="text-xl font-black text-neutral-900 tracking-tight">Potencia tu Aprendizaje</h3>
+                <p className="text-neutral-500 text-xs font-semibold leading-relaxed">
+                  Adquiere cursos premium y desbloquea material exclusivo de batería de forma instantánea en tu biblioteca.
+                </p>
+              </div>
+
+              {availableCourses.length === 0 ? (
+                <div className="py-8 text-center bg-neutral-50 rounded-2xl border border-dashed border-neutral-200">
+                  <p className="text-xs text-neutral-400 font-bold italic">¡Ya tienes acceso a todos los cursos disponibles! 🎉</p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-[180px] overflow-y-auto pr-1 scrollbar-thin">
+                  {availableCourses.map(course => (
+                    <div key={course.id} className="bg-neutral-50 border border-neutral-100 rounded-2xl p-4 flex justify-between items-center gap-4 group">
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-xs font-black text-neutral-900 truncate">{course.title}</h4>
+                        <p className="text-[10px] text-neutral-400 truncate mt-0.5">{course.description || "Curso premium completo."}</p>
+                        <p className="text-xs font-black text-emerald-600 mt-1">$20.000 <span className="text-[9px] font-bold text-neutral-400 uppercase">CLP</span></p>
+                      </div>
+
+                      <button
+                        onClick={() => handleBuyCourse(course.id)}
+                        disabled={paying !== null}
+                        className="px-4 py-2.5 bg-neutral-900 hover:bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-50 flex items-center gap-1.5 flex-shrink-0"
+                      >
+                        {paying === course.id ? (
+                          <div className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                        ) : (
+                          <CreditCard className="w-3.5 h-3.5" />
+                        )}
+                        <span>Comprar</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
