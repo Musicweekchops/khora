@@ -107,7 +107,8 @@ serve(async (req) => {
       console.error("Error calling send-email function for student welcome:", err)
     }
 
-    // 5. Enviar correo de notificación al Profesor
+    // 5. Enviar correo de notificación al Profesor (Desactivado a petición del usuario: prefiere solo Push)
+    /*
     if (teacherEmail) {
       try {
         const teacherEmailRes = await fetch(`${supabaseUrl}/functions/v1/send-email`, {
@@ -134,6 +135,7 @@ serve(async (req) => {
         console.error("Error calling send-email function for teacher notification:", err)
       }
     }
+    */
 
     // 6. Enviar Notificación Push Instantánea al Profesor (si tiene PWA instalada y suscripción activa)
     if (teacherUserId) {
