@@ -177,8 +177,9 @@ serve(async (req) => {
       throw new Error("Error al comunicarse con Mercado Pago usando el SDK oficial.")
     }
 
-    // Retornar el link adecuado según el modo
-    const checkoutUrl = isSandbox ? mpData.sandbox_init_point : mpData.init_point
+    // Prevenir incompatibilidades: Si el token es de producción (APP_USR-), usamos init_point
+    const isProductionToken = accessToken.startsWith("APP_USR-")
+    const checkoutUrl = (isSandbox && !isProductionToken) ? mpData.sandbox_init_point : mpData.init_point
 
     return new Response(JSON.stringify({ 
       success: true, 
