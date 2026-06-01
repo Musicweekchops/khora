@@ -123,9 +123,17 @@ serve(async (req) => {
 
     // 4. Crear la preferencia en Mercado Pago
     // URL de retorno de éxito
-    const protocol = req.headers.get("x-forwarded-proto") || "https"
-    const host = req.headers.get("host") || "khora.cl"
-    const origin = `${protocol}://${host}`
+    // Obtener el origen real de la petición desde el referer para evitar redireccionamientos al dominio de Supabase
+    const referer = req.headers.get("referer")
+    let origin = "https://khora.cl"
+    if (referer) {
+      try {
+        const refUrl = new URL(referer)
+        origin = refUrl.origin
+      } catch (_) {
+        // Fallback
+      }
+    }
 
     const mpPayload = {
       items: [

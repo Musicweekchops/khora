@@ -232,6 +232,67 @@ serve(async (req) => {
             if (classInsertErr) {
               console.error("[Webhook] Error al insertar clase física:", classInsertErr)
             }
+
+            // A. Enviar correo de confirmación de clase al alumno
+            try {
+              console.log(`[Webhook] Enviando correo de confirmación de clase al alumno: ${payerEmail}`)
+              const emailConfirmRes = await fetch(`${supabaseUrl}/functions/v1/send-email`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "apikey": supabaseKey,
+                  "Authorization": `Bearer ${supabaseKey}`
+                },
+                body: JSON.stringify({
+                  to: payerEmail.trim().toLowerCase(),
+                  type: "CLASS_CONFIRMATION",
+                  params: {
+                    studentName: payerName.trim(),
+                    modalidad: modalidad === "online" ? "Virtual (📹 Zoom/Meet)" : "Presencial (🏠 Estudio)",
+                    date: new Date(selectedDate + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" }),
+                    time: selectedSlot.slice(0, 5),
+                    link: "https://khora.cl/login"
+                  }
+                })
+              })
+              if (!emailConfirmRes.ok) {
+                console.error("[Webhook] Error response from class confirmation email to student:", await emailConfirmRes.text())
+              }
+            } catch (err) {
+              console.error("[Webhook] Error al enviar confirmación de clase por correo al alumno:", err)
+            }
+
+            // B. Enviar correo de notificación de nuevo alumno al profesor
+            const teacherEmail = matchedConfig.TeacherProfile?.User?.email
+            const teacherName = matchedConfig.TeacherProfile?.User?.name || "Profesor"
+            if (teacherEmail) {
+              try {
+                console.log(`[Webhook] Enviando correo de notificación de nuevo alumno al profesor: ${teacherEmail}`)
+                const teacherEmailRes = await fetch(`${supabaseUrl}/functions/v1/send-email`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "apikey": supabaseKey,
+                    "Authorization": `Bearer ${supabaseKey}`
+                  },
+                  body: JSON.stringify({
+                    to: teacherEmail,
+                    type: "TEACHER_NEW_STUDENT",
+                    params: {
+                      teacherName: teacherName,
+                      studentName: payerName.trim(),
+                      email: payerEmail.trim().toLowerCase(),
+                      phone: payerPhone
+                    }
+                  })
+                })
+                if (!teacherEmailRes.ok) {
+                  console.error("[Webhook] Error response from new student email to teacher:", await teacherEmailRes.text())
+                }
+              } catch (err) {
+                console.error("[Webhook] Error al enviar notificación de nuevo alumno por correo al profesor:", err)
+              }
+            }
           }
         }
       } else if (itemType === "MONTHLY" && studentId) {
@@ -295,7 +356,7 @@ serve(async (req) => {
             student_id: targetStudentId,
             teacher_id: teacherId,
             amount: transaction_amount,
-            method: "CARD",
+            method: "MERCADOPAGO",
             date: new Date().toISOString().split("T")[0],
             notes: `Pago automático aprobado vía Mercado Pago. (${paymentDetails.description || itemType})`,
             payment_type: itemType === "MONTHLY" ? "MONTHLY" : "SINGLE",
@@ -339,12 +400,22 @@ serve(async (req) => {
               "HTsnrmAK-XWgfOHMO2u2I_t9rbL-4qmaisaF00mcEdI"
             )
 
+            let pushTitle = "💰 ¡Pago Recibido Exitosamente!"
             let pushMsg = `${payerName} acaba de realizar un pago de $${transaction_amount.toLocaleString("es-CL")} CLP.`
-            if (itemType === "TRIAL") pushMsg = `🥁 ¡Clase de Prueba PAGADA y confirmada por ${payerName}!`
-            if (itemType === "COURSE") pushMsg = `📚 ¡${payerName} compró el curso: ${paymentDetails.description}!`
+            
+            if (itemType === "TRIAL") {
+              pushTitle = "👤 ¡Nuevo Alumno e Ingreso! 🎉"
+              pushMsg = `🥁 ${payerName} pagó su clase de prueba ($${transaction_amount.toLocaleString("es-CL")} CLP) y está confirmada.`
+            } else if (itemType === "COURSE" || itemType === "PRODUCT") {
+              pushTitle = "📚 ¡Nueva Venta de Curso! 💰"
+              pushMsg = `${payerName} compró un producto/curso por $${transaction_amount.toLocaleString("es-CL")} CLP.`
+            } else if (itemType === "MONTHLY") {
+              pushTitle = "💵 ¡Mensualidad Recibida! 💳"
+              pushMsg = `Alumno ${payerName} registró pago mensual de $${transaction_amount.toLocaleString("es-CL")} CLP.`
+            }
 
             const payload = JSON.stringify({
-              title: "💰 ¡Pago Recibido Exitosamente!",
+              title: pushTitle,
               body: pushMsg,
               url: "/dashboard/financiero"
             })

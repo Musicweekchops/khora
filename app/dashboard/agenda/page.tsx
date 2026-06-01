@@ -160,6 +160,24 @@ export default function AgendaPage() {
     }
   }
 
+  async function handleDeleteBooking(bookingId: string) {
+    if (!confirm("¿Seguro que deseas eliminar esta solicitud de reserva? Esto liberará el horario de inmediato.")) return
+    try {
+      const { error } = await supabase
+        .from("Booking")
+        .delete()
+        .eq("id", bookingId)
+
+      if (error) {
+        alert("Error al eliminar la reserva: " + error.message)
+      } else {
+        await loadClasses()
+      }
+    } catch (err: any) {
+      alert("Error excepcional: " + err.message)
+    }
+  }
+
   async function loadStudents() {
     const { data } = await supabase
       .from("StudentProfile")
@@ -336,35 +354,53 @@ export default function AgendaPage() {
                       const topPx = startMins
 
                       return (
-                        <Link 
-                          key={cls.id} 
-                          href={cls.is_booking ? `/dashboard/crm` : `/dashboard/clases/detalles?id=${cls.id}`} 
-                          onClick={e => e.stopPropagation()}
-                          className="absolute z-10 block"
+                        <div
+                          key={cls.id}
+                          className="absolute z-10 block group"
                           style={{
                             top: `${topPx}px`,
                             height: `${heightPx}px`,
                             left: '2px',
                             right: '2px'
                           }}
+                          onClick={e => e.stopPropagation()}
                         >
-                          <div
-                            className={`h-full rounded-md p-1.5 text-xs hover:shadow-lg hover:z-20 transition-all cursor-pointer overflow-hidden flex flex-col shadow-sm border ${
-                              cls.status === "COMPLETED"
-                                ? "bg-emerald-50/95 border-emerald-200 border-l-4 border-l-emerald-400 text-emerald-700"
-                                : cls.is_booking 
-                                  ? "bg-amber-50/95 border-amber-200 border-l-4 border-l-amber-400 text-amber-700 border-dashed"
-                                  : "bg-violet-50/95 border-violet-200 border-l-4 border-l-violet-400 text-violet-700"
-                            }`}
+                          <Link 
+                            href={cls.is_booking ? `/dashboard/crm` : `/dashboard/clases/detalles?id=${cls.id}`}
+                            className="block w-full h-full"
                           >
-                            <div className="flex items-start justify-between gap-1 leading-tight">
-                              <p className="font-black truncate">{cls.student_name}</p>
-                              {cls.is_recurring && <span className="text-[9px] opacity-70 flex-shrink-0" title="Clase recurrente">↻</span>}
-                              {cls.is_booking && <span className="text-[9px] animate-pulse flex-shrink-0">🔔</span>}
+                            <div
+                              className={`h-full rounded-md p-1.5 text-xs hover:shadow-lg hover:z-20 transition-all cursor-pointer overflow-hidden flex flex-col shadow-sm border ${
+                                cls.status === "COMPLETED"
+                                  ? "bg-emerald-50/95 border-emerald-200 border-l-4 border-l-emerald-400 text-emerald-700"
+                                  : cls.is_booking 
+                                    ? "bg-amber-50/95 border-amber-200 border-l-4 border-l-amber-400 text-amber-700 border-dashed"
+                                    : "bg-violet-50/95 border-violet-200 border-l-4 border-l-violet-400 text-violet-700"
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-1 leading-tight">
+                                <p className="font-black truncate pr-4">{cls.student_name}</p>
+                                {cls.is_recurring && <span className="text-[9px] opacity-70 flex-shrink-0" title="Clase recurrente">↻</span>}
+                                {cls.is_booking && <span className="text-[9px] animate-pulse flex-shrink-0">🔔</span>}
+                              </div>
+                              <p className="opacity-70 text-[9px] font-medium mt-auto truncate">{formatTime(cls.start_time)} - {formatTime(cls.end_time)}</p>
                             </div>
-                            <p className="opacity-70 text-[9px] font-medium mt-auto truncate">{formatTime(cls.start_time)} - {formatTime(cls.end_time)}</p>
-                          </div>
-                        </Link>
+                          </Link>
+
+                          {cls.is_booking && (
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                handleDeleteBooking(cls.id)
+                              }}
+                              title="Eliminar Solicitud de Reserva"
+                              className="absolute top-1 right-1 w-5 h-5 rounded-md bg-red-50 text-red-500 hover:bg-red-500 hover:text-white border border-red-100 flex items-center justify-center transition-all shadow-sm opacity-0 group-hover:opacity-100 z-30 text-[10px]"
+                            >
+                              🗑️
+                            </button>
+                          )}
+                        </div>
                       )
                     })}
                   </div>
@@ -533,30 +569,46 @@ export default function AgendaPage() {
               }
 
               return (
-                <div key={cls.id} className="flex gap-4 items-start relative group">
+                <div key={cls.id} className="flex gap-4 items-start relative group animate-in fade-in slide-in-from-bottom-2 duration-300">
                   <div className="flex flex-col items-center w-10 flex-shrink-0 pt-3">
                     <span className="text-[10px] font-black text-neutral-400 uppercase tracking-tight">{cls.start_time.split(":")[0]} Hr</span>
                     <div className={`w-3.5 h-3.5 rounded-full ${bulletColor} border-4 border-white shadow-sm mt-1 z-10`} />
                   </div>
 
-                  <Link
-                    href={cls.is_booking ? `/dashboard/crm` : `/dashboard/clases/detalles?id=${cls.id}`}
-                    className="flex-1 min-w-0"
-                  >
-                    <div className={`rounded-[24px] border p-4 shadow-sm transition-all flex items-center justify-between gap-4 cursor-pointer hover:shadow-md ${cardBg}`}>
-                      <div className="min-w-0 flex-1">
-                        <h4 className="font-black text-sm md:text-base truncate">{cls.student_name}</h4>
-                        <p className="text-[10px] font-bold opacity-75 uppercase tracking-wider mt-1 flex items-center gap-1.5">
-                          <span>🕒 {formatTime(cls.start_time)} - {formatTime(cls.end_time)}</span>
-                          <span>•</span>
-                          <span>{cls.modalidad === "online" ? "📹 Virtual" : "🏠 Presencial"}</span>
-                        </p>
+                  <div className="flex-1 min-w-0 flex items-center gap-2">
+                    <Link
+                      href={cls.is_booking ? `/dashboard/crm` : `/dashboard/clases/detalles?id=${cls.id}`}
+                      className="flex-1 min-w-0"
+                    >
+                      <div className={`rounded-[24px] border p-4 shadow-sm transition-all flex items-center justify-between gap-4 cursor-pointer hover:shadow-md ${cardBg}`}>
+                        <div className="min-w-0 flex-1">
+                          <h4 className="font-black text-sm md:text-base truncate">{cls.student_name}</h4>
+                          <p className="text-[10px] font-bold opacity-75 uppercase tracking-wider mt-1 flex items-center gap-1.5">
+                            <span>🕒 {formatTime(cls.start_time)} - {formatTime(cls.end_time)}</span>
+                            <span>•</span>
+                            <span>{cls.modalidad === "online" ? "📹 Virtual" : "🏠 Presencial"}</span>
+                          </p>
+                        </div>
+                        <div className="w-8 h-8 rounded-full bg-white/70 flex items-center justify-center text-neutral-500 hover:text-neutral-900 font-bold transition-all shadow-sm flex-shrink-0">
+                          →
+                        </div>
                       </div>
-                      <div className="w-8 h-8 rounded-full bg-white/70 flex items-center justify-center text-neutral-500 hover:text-neutral-900 font-bold transition-all shadow-sm flex-shrink-0">
-                        →
-                      </div>
-                    </div>
-                  </Link>
+                    </Link>
+
+                    {cls.is_booking && (
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          handleDeleteBooking(cls.id)
+                        }}
+                        title="Eliminar Solicitud de Reserva"
+                        className="w-12 h-12 rounded-full bg-red-50 text-red-500 hover:bg-red-500 hover:text-white border border-red-100 flex items-center justify-center transition-all shadow-sm flex-shrink-0 text-sm hover:scale-105 active:scale-95"
+                      >
+                        🗑️
+                      </button>
+                    )}
+                  </div>
                 </div>
               )
             })

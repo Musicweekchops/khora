@@ -371,6 +371,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
               <InfoRow label="Día preferido" value={student.preferred_day || "—"} />
               <InfoRow label="Hora preferida" value={student.preferred_time || "—"} />
               <InfoRow label="Miembro desde" value={new Date(student.created_at).toLocaleDateString("es-CL")} />
+              <InfoRow label="Canal de Pago" value={payments.some(p => p.method === "MERCADOPAGO") ? "💳 Mercado Pago (Automatizado)" : "💵 Registro Manual"} />
             </div>
             {/* Emergency */}
             <div className="bg-white rounded-3xl border border-neutral-100 p-6 space-y-4">
@@ -536,7 +537,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
                           {formatCurrency(p.amount)}
                         </td>
                         <td className="px-6 py-4 text-neutral-500 font-medium whitespace-nowrap">
-                          {p.method === "TRANSFER" ? "💸 Transferencia" : p.method === "CASH" ? "💵 Efectivo" : p.method === "CARD" ? "💳 Tarjeta" : p.method ?? "—"}
+                          {p.method === "TRANSFER" ? "💸 Transferencia" : p.method === "CASH" ? "💵 Efectivo" : p.method === "CARD" ? "💳 Tarjeta" : p.method === "MERCADOPAGO" ? "💳 Mercado Pago" : p.method ?? "—"}
                         </td>
                         <td className="px-6 py-4 text-neutral-600 text-xs">
                           {p.notes ? (
