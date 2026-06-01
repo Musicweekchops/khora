@@ -61,6 +61,12 @@ const Icons = {
       <polyline points="9 22 9 12 15 12 15 22" />
     </svg>
   ),
+  courses: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="7" width="20" height="15" rx="2" ry="2" />
+      <polyline points="17 2 12 7 7 2" />
+    </svg>
+  ),
 }
 
 const TEACHER_NAV = [
@@ -69,6 +75,7 @@ const TEACHER_NAV = [
   { name: "CRM", href: "/dashboard/crm", icon: Icons.crm },
   { name: "Agenda", href: "/dashboard/agenda", icon: Icons.calendar },
   { name: "Roadmap LMS", href: "/dashboard/roadmap", icon: Icons.roadmap },
+  { name: "Mis Cursos", href: "/dashboard/cursos", icon: Icons.courses },
   { name: "Clases", href: "/dashboard/clases", icon: Icons.classes },
   { name: "Biblioteca", href: "/dashboard/biblioteca", icon: Icons.library },
   { name: "Financiero", href: "/dashboard/financiero", icon: Icons.financial },
