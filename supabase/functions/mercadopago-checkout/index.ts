@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3"
+import { MercadoPagoConfig, Preference } from 'npm:mercadopago'
 
 serve(async (req) => {
   // CORS Headers
@@ -165,19 +166,15 @@ serve(async (req) => {
       notification_url: `${supabaseUrl}/functions/v1/mercadopago-webhook`
     }
 
-    const mpRes = await fetch("https://api.mercadopago.com/checkout/preferences", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`
-      },
-      body: JSON.stringify(mpPayload)
-    })
+    // Inicializar el SDK oficial de Mercado Pago
+    const client = new MercadoPagoConfig({ accessToken: accessToken })
+    const preference = new Preference(client)
 
-    const mpData = await mpRes.json()
+    // Crear la preferencia utilizando el SDK oficial
+    const mpData = await preference.create({ body: mpPayload })
 
-    if (!mpRes.ok || mpData.error) {
-      throw new Error(mpData.message || "Error al comunicarse con Mercado Pago.")
+    if (!mpData || !mpData.id) {
+      throw new Error("Error al comunicarse con Mercado Pago usando el SDK oficial.")
     }
 
     // Retornar el link adecuado según el modo
