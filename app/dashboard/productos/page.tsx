@@ -131,8 +131,29 @@ export default function ProductosPage() {
   const [manualAmount, setManualAmount] = useState("")
   const [paymentMethod, setPaymentMethod] = useState<"MANUAL_TRANSFER" | "MANUAL_CASH" | "OTHER">("MANUAL_TRANSFER")
   const [submittingSale, setSubmittingSale] = useState(false)
+  const [copiedProductId, setCopiedProductId] = useState<string | null>(null)
 
   const isArnaldo = profile?.email === "arnaldoallende@hotmail.com"
+
+  function copyProductLink(productId: string) {
+    const url = `${window.location.origin}/comprar?id=${productId}`
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedProductId(productId)
+      toast("¡Link de pago copiado al portapapeles! Pégalo en WhatsApp o correo.", "success")
+      setTimeout(() => setCopiedProductId(null), 3000)
+    }).catch(() => {
+      // Fallback
+      const ta = document.createElement("textarea")
+      ta.value = `${window.location.origin}/comprar?id=${productId}`
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand("copy")
+      document.body.removeChild(ta)
+      toast("Link copiado.", "success")
+      setCopiedProductId(productId)
+      setTimeout(() => setCopiedProductId(null), 3000)
+    })
+  }
 
   useEffect(() => {
     if (profile?.teacherProfileId && isArnaldo) {
@@ -810,7 +831,32 @@ export default function ProductosPage() {
                         </div>
 
                         {/* Top action buttons */}
-                        <div className="flex items-center gap-2 flex-shrink-0 w-full sm:w-auto pt-3 sm:pt-0 border-t sm:border-t-0 border-neutral-100 justify-end">
+                        <div className="flex items-center gap-2 flex-shrink-0 w-full sm:w-auto pt-3 sm:pt-0 border-t sm:border-t-0 border-neutral-100 justify-end flex-wrap">
+                          {/* 🔗 Copy payment link */}
+                          <button
+                            onClick={() => copyProductLink(product.id)}
+                            title={`Copiar link de pago: /comprar/${product.id}`}
+                            className={`px-3 py-2 border rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                              copiedProductId === product.id
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                : "bg-neutral-50 hover:bg-violet-50 text-neutral-600 hover:text-violet-700 border-neutral-200 hover:border-violet-200"
+                            }`}
+                          >
+                            <Link2 className="w-3.5 h-3.5" />
+                            <span>{copiedProductId === product.id ? "¡Copiado!" : "Copiar Link"}</span>
+                          </button>
+
+                          {/* 🔍 Open public page */}
+                          <a
+                            href={`/comprar?id=${product.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Ver página pública de compra"
+                            className="p-2 text-neutral-400 hover:text-indigo-600 rounded-xl hover:bg-indigo-50 border border-transparent hover:border-indigo-100 transition-all"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </a>
+
                           {product.type === "COURSE" && (
                             <button
                               onClick={() => setExpandedProductId(isExpanded ? null : product.id)}
