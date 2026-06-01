@@ -55,6 +55,12 @@ const Icons = {
       <circle cx="12" cy="12" r="3" />
     </svg>
   ),
+  roadmap: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <polyline points="9 22 9 12 15 12 15 22" />
+    </svg>
+  ),
 }
 
 const TEACHER_NAV = [
@@ -62,6 +68,7 @@ const TEACHER_NAV = [
   { name: "Alumnos", href: "/dashboard/alumnos", icon: Icons.students },
   { name: "CRM", href: "/dashboard/crm", icon: Icons.crm },
   { name: "Agenda", href: "/dashboard/agenda", icon: Icons.calendar },
+  { name: "Roadmap LMS", href: "/dashboard/roadmap", icon: Icons.roadmap },
   { name: "Clases", href: "/dashboard/clases", icon: Icons.classes },
   { name: "Biblioteca", href: "/dashboard/biblioteca", icon: Icons.library },
   { name: "Financiero", href: "/dashboard/financiero", icon: Icons.financial },
@@ -70,6 +77,7 @@ const TEACHER_NAV = [
 
 const STUDENT_NAV = [
   { name: "Dashboard", href: "/dashboard", icon: Icons.dashboard },
+  { name: "Mi Roadmap", href: "/dashboard/roadmap", icon: Icons.roadmap },
   { name: "Mis Clases", href: "/dashboard/clases", icon: Icons.calendar },
   { name: "Mi Biblioteca", href: "/dashboard/biblioteca", icon: Icons.library },
   { name: "Ajustes", href: "/dashboard/ajustes", icon: Icons.settings },
