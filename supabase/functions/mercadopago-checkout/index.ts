@@ -23,6 +23,9 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     const supabaseAdmin = createClient(supabaseUrl, supabaseKey)
 
+    // Obtener la anon key enviada por el cliente en las cabeceras para autorizar los webhooks entrantes
+    const clientApiKey = req.headers.get("apikey") || req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "") || Deno.env.get("SUPABASE_ANON_KEY") || ""
+
     // 1. Obtener perfil del profesor
     const { data: teacherProfile, error: profileErr } = await supabaseAdmin
       .from("TeacherProfile")
@@ -169,7 +172,7 @@ serve(async (req) => {
         modalidad: modalidad ? String(modalidad) : ""
       },
       // URL del Webhook seguro con api key de Supabase
-      notification_url: `${supabaseUrl}/functions/v1/mercadopago-webhook?apikey=${Deno.env.get("SUPABASE_ANON_KEY") ?? ""}`
+      notification_url: `${supabaseUrl}/functions/v1/mercadopago-webhook?apikey=${clientApiKey}`
     }
 
     // Inicializar el SDK oficial de Mercado Pago
