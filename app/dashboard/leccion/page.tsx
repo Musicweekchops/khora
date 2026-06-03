@@ -2,9 +2,11 @@
 
 import React, { useState, useEffect, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
-import ReactPlayer from "react-player"
+import dynamic from "next/dynamic"
 import confetti from "canvas-confetti"
 import { ArrowLeft, CheckCircle2, Download, FileText } from "lucide-react"
+
+const ReactPlayer = dynamic(() => import("react-player"), { ssr: false }) as any
 
 // Mock data (replace with Supabase fetch later)
 const MOCK_LESSON = {
@@ -93,7 +95,7 @@ function LessonPlayerInner() {
                   color: '6366f1' // Indigo accent color
                 }
               }
-            }}
+            } as any}
           />
         </div>
       </div>

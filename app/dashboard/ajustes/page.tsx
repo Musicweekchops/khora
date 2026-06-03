@@ -29,8 +29,8 @@ export default function AjustesPage() {
   const [instrumento, setInstrumento] = useState(profile?.instrumento || "")
   const [savingInstrumento, setSavingInstrumento] = useState(false)
 
-  // MERCADO PAGO STATE HOOKS (Exclusive for Arnaldo)
-  const isArnaldo = profile?.email === "arnaldoallende@hotmail.com"
+  // MERCADO PAGO STATE HOOKS (For all Teachers)
+  const isTeacher = profile?.role === "TEACHER"
   const [billing, setBilling] = useState({
     gateway_enabled: false,
     sandbox_mode: true,
@@ -38,13 +38,14 @@ export default function AjustesPage() {
     mp_public_key: "",
     mp_sandbox_token: "",
     mp_sandbox_key: "",
-    trial_class_price: 25000
+    trial_class_price: 25000,
+    meta_pixel_id: ""
   })
   const [loadingBilling, setLoadingBilling] = useState(false)
   const [savingBilling, setSavingBilling] = useState(false)
 
   useEffect(() => {
-    if (isArnaldo && profile?.teacherProfileId) {
+    if (isTeacher && profile?.teacherProfileId) {
       loadBillingConfig()
     }
   }, [profile])
@@ -68,7 +69,8 @@ export default function AjustesPage() {
           mp_public_key: data.mp_public_key || "",
           mp_sandbox_token: data.mp_sandbox_token || "",
           mp_sandbox_key: data.mp_sandbox_key || "",
-          trial_class_price: data.trial_class_price || 25000
+          trial_class_price: data.trial_class_price || 25000,
+          meta_pixel_id: data.meta_pixel_id || ""
         })
       }
     } catch (err) {
@@ -94,7 +96,8 @@ export default function AjustesPage() {
           mp_public_key: billing.mp_public_key.trim() || null,
           mp_sandbox_token: billing.mp_sandbox_token.trim() || null,
           mp_sandbox_key: billing.mp_sandbox_key.trim() || null,
-          trial_class_price: Number(billing.trial_class_price) || 25000
+          trial_class_price: Number(billing.trial_class_price) || 25000,
+          meta_pixel_id: billing.meta_pixel_id.trim() || null
         }, { onConflict: "teacher_id" })
 
       if (error) {
@@ -259,13 +262,13 @@ export default function AjustesPage() {
           )}
 
           {/* Mercado Pago Gateway Section (Exclusive to Arnaldo Allende) */}
-          {isArnaldo && (
+          {isTeacher && (
             <section className="bg-white rounded-[40px] border border-neutral-100 p-10 shadow-sm space-y-8 relative overflow-hidden">
               <div className="absolute top-[-20%] right-[-10%] w-36 h-36 bg-emerald-500/5 blur-[50px] rounded-full pointer-events-none" />
               
               <h3 className="text-xl font-black text-neutral-900 flex items-center gap-3 relative z-10">
                 <CreditCard className="w-5 h-5 text-emerald-500" />
-                Pasarela de Pagos (Mercado Pago)
+                Pasarela de Pagos y Marketing
               </h3>
 
               {loadingBilling ? (
@@ -306,18 +309,31 @@ export default function AjustesPage() {
                     </div>
                   </div>
 
-                  {/* Config: Trial Price */}
-                  <div className="space-y-3">
-                    <label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest px-1">Valor Clase de Prueba (CLP)</label>
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400 font-bold text-sm">$</span>
+                  {/* Config: Trial Price and Meta Pixel ID */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div className="space-y-3">
+                      <label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest px-1">Valor Clase de Prueba (CLP)</label>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400 font-bold text-sm">$</span>
+                        <input
+                          type="number"
+                          value={billing.trial_class_price}
+                          onChange={e => setBilling(b => ({ ...b, trial_class_price: Number(e.target.value) }))}
+                          className="w-full bg-neutral-50 border border-neutral-100 rounded-2xl pl-10 pr-6 py-4 text-sm font-bold outline-none focus:bg-white focus:border-emerald-300 transition-all"
+                          placeholder="25000"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest px-1">ID del Píxel de Meta (Facebook Pixel)</label>
                       <input
-                        type="number"
-                        value={billing.trial_class_price}
-                        onChange={e => setBilling(b => ({ ...b, trial_class_price: Number(e.target.value) }))}
-                        className="w-full bg-neutral-50 border border-neutral-100 rounded-2xl pl-10 pr-6 py-4 text-sm font-bold outline-none focus:bg-white focus:border-emerald-300 transition-all"
-                        placeholder="25000"
-                        required
+                        type="text"
+                        value={billing.meta_pixel_id}
+                        onChange={e => setBilling(b => ({ ...b, meta_pixel_id: e.target.value }))}
+                        className="w-full bg-neutral-50 border border-neutral-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:bg-white focus:border-emerald-300 transition-all"
+                        placeholder="ID del Pixel"
                       />
                     </div>
                   </div>

@@ -23,10 +23,10 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     const supabaseAdmin = createClient(supabaseUrl, supabaseKey)
 
-    // 1. Verificar exclusividad: Solo habilitado para arnaldoallende@hotmail.com por ahora
+    // 1. Obtener perfil del profesor
     const { data: teacherProfile, error: profileErr } = await supabaseAdmin
       .from("TeacherProfile")
-      .select("id, User ( email )")
+      .select("id, instrumento, User ( name, email )")
       .eq("id", teacher_id)
       .maybeSingle()
 
@@ -34,10 +34,8 @@ serve(async (req) => {
       throw new Error("Teacher profile not found.")
     }
 
-    const teacherEmail = (teacherProfile.User as any)?.email
-    if (teacherEmail !== "arnaldoallende@hotmail.com") {
-      throw new Error("La pasarela de pagos no está disponible para este profesor por el momento.")
-    }
+    const teacherName = (teacherProfile.User as any)?.name || "Khora"
+    const instrumento = teacherProfile.instrumento || "Música"
 
     // 2. Obtener credenciales de pago
     const { data: billingConfig, error: configErr } = await supabaseAdmin
@@ -68,7 +66,7 @@ serve(async (req) => {
 
     if (item_type === "TRIAL") {
       // Clase de Prueba
-      itemName = "Clase de Prueba de Batería (Musicweekchops)"
+      itemName = `Clase de Prueba de ${instrumento} - ${teacherName}`
       itemPrice = billingConfig.trial_class_price || 25000
     } else if (item_type === "MONTHLY") {
       // Mensualidad de Alumno Activo
@@ -87,7 +85,7 @@ serve(async (req) => {
       payerEmail = sUser?.email || payerEmail
       payerPhone = sUser?.phone || payerPhone
       itemPrice = Number(student.monthly_fee) || 90000 // Default 90.000 si está en 0
-      itemName = `Mensualidad Clases de Batería - ${payerName}`
+      itemName = `Mensualidad Clases de ${instrumento} - ${payerName}`
     } else if (item_type === "COURSE" || item_type === "PRODUCT") {
       // Compra de Material Digital / Cursos Extras
       if (!item_id) throw new Error("item_id is required for COURSE/PRODUCT purchases.")
@@ -153,7 +151,7 @@ serve(async (req) => {
         }
       },
       back_urls: {
-        success: `${origin}/dashboard/clases?payment=success`,
+        success: item_type === "TRIAL" ? `${origin}/unirse/success` : `${origin}/dashboard/clases?payment=success`,
         failure: `${origin}/dashboard/clases?payment=failure`,
         pending: `${origin}/dashboard/clases?payment=pending`
       },
@@ -170,8 +168,8 @@ serve(async (req) => {
         selected_slot: selected_slot || null,
         modalidad: modalidad || null
       },
-      // URL del Webhook seguro
-      notification_url: `${supabaseUrl}/functions/v1/mercadopago-webhook`
+      // URL del Webhook seguro con api key de Supabase
+      notification_url: `${supabaseUrl}/functions/v1/mercadopago-webhook?apikey=${Deno.env.get("SUPABASE_ANON_KEY") ?? ""}`
     }
 
     // Inicializar el SDK oficial de Mercado Pago

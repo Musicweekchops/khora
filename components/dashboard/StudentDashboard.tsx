@@ -36,7 +36,6 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
   const [loading, setLoading] = useState(true)
 
   // MERCADO PAGO STATE HOOKS
-  const [isArnaldosStudent, setIsArnaldosStudent] = useState(false)
   const [gatewayEnabled, setGatewayEnabled] = useState(false)
   const [monthlyFee, setMonthlyFee] = useState(0)
   const [studentStatus, setStudentStatus] = useState("PROSPECT")
@@ -177,27 +176,19 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
       totalMaterials: allowedItems.size
     })
 
-    // 4. Mercado Pago Paid Student Experience (Arnaldo)
+    // 4. Mercado Pago Paid Student Experience (Any Teacher)
     try {
-      const { data: teacherProfile } = await supabase
-        .from("TeacherProfile")
-        .select("id, User ( email )")
-        .eq("id", profile.teacherProfileId!)
+      // Cargar Billing Config
+      const { data: config } = await supabase
+        .from("TeacherBillingConfig")
+        .select("gateway_enabled")
+        .eq("teacher_id", profile.teacherProfileId!)
         .maybeSingle()
 
-      const arnaldoCheck = (teacherProfile?.User as any)?.email === "arnaldoallende@hotmail.com"
-      setIsArnaldosStudent(arnaldoCheck)
+      const isEnabled = config?.gateway_enabled || false
+      setGatewayEnabled(isEnabled)
 
-      if (arnaldoCheck) {
-        // Cargar Billing Config
-        const { data: config } = await supabase
-          .from("TeacherBillingConfig")
-          .select("gateway_enabled")
-          .eq("teacher_id", profile.teacherProfileId!)
-          .maybeSingle()
-
-        setGatewayEnabled(config?.gateway_enabled || false)
-
+      if (isEnabled) {
         // Cargar detalles de mensualidad y membresía
         const { data: student } = await supabase
           .from("StudentProfile")
@@ -349,8 +340,8 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
         </div>
       )}
 
-      {/* SECCIÓN DE PAGOS & CURSOS DE MERCADO PAGO (Exclusivo Alumnos de Arnaldo) */}
-      {isArnaldosStudent && gatewayEnabled && (
+      {/* SECCIÓN DE PAGOS & CURSOS DE MERCADO PAGO (Pasarela Activa) */}
+      {gatewayEnabled && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
           {/* Tarjeta de Cobro Mensual o Membresía Activa */}
           {(() => {
@@ -627,7 +618,7 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
                 <span className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-sm font-black text-white">🥁</span>
                 <div>
                   <h3 className="text-sm font-black tracking-tight truncate max-w-[280px] sm:max-w-[400px]">
-                    {products.find(p => p.id === activeCourseId)?.title || "Curso Digital"}
+                    {purchases.find((pur: any) => pur.Product?.id === activeCourseId)?.Product?.title || "Curso Digital"}
                   </h3>
                   <p className="text-[9px] text-neutral-400 font-bold uppercase tracking-widest mt-0.5">Aula Virtual Khora</p>
                 </div>

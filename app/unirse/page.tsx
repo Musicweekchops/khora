@@ -29,12 +29,16 @@ function RegistrationForm() {
 
   const [teacherName, setTeacherName] = useState("")
   const [teacherEmail, setTeacherEmail] = useState("")
+  const [teacherPhone, setTeacherPhone] = useState("")
+  const [teacherInstrumento, setTeacherInstrumento] = useState("")
+  const [gatewayEnabled, setGatewayEnabled] = useState(false)
+  const [metaPixelId, setMetaPixelId] = useState("")
   const [loadingTeacher, setLoadingTeacher] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState(false)
 
-  // ESTADO EXCLUSIVO LANDING PREMIUM (Arnaldo Allende)
+  // ESTADO LANDING PREMIUM (Cualquier Profesor)
   const [whatsapp, setWhatsapp] = useState("")
   const [step, setStep] = useState(1) // 1 = Captura WhatsApp, 2 = Calendario de Horarios
   const [selectedDate, setSelectedDate] = useState("")
@@ -57,9 +61,7 @@ function RegistrationForm() {
     time: "18:00"
   })
 
-  const isArnaldo = teacherEmail === "arnaldoallende@hotmail.com"
-
-  // 1. Cargar Datos del Profesor y Meta Pixel si aplica
+  // 1. Cargar Datos del Profesor y Meta Pixel
   useEffect(() => {
     async function loadTeacher() {
       if (!teacherId) {
@@ -70,21 +72,32 @@ function RegistrationForm() {
 
       const { data, error: fetchError } = await supabase
         .from("TeacherProfile")
-        .select("id, User ( name, email )")
+        .select("id, instrumento, User ( name, email, phone )")
         .eq("id", teacherId)
         .maybeSingle()
 
-      if (data?.User) {
+      if (data) {
         const userObj: any = data.User
         const name = Array.isArray(userObj) ? userObj[0]?.name : userObj.name
         const email = Array.isArray(userObj) ? userObj[0]?.email : userObj.email
+        const phone = Array.isArray(userObj) ? userObj[0]?.phone : userObj.phone
         setTeacherName(name)
         setTeacherEmail(email)
+        setTeacherPhone(phone || "")
+        setTeacherInstrumento(data.instrumento || "")
 
-        // Inyectar Meta Pixel si corresponde a Arnaldo y está configurado
-        if (email === "arnaldoallende@hotmail.com" && typeof window !== "undefined") {
-          const pixelId = localStorage.getItem("khora-meta-pixel")
-          if (pixelId) {
+        // Cargar configuración de cobro y Pixel de Meta desde Supabase
+        const { data: billingData } = await supabase
+          .from("TeacherBillingConfig")
+          .select("gateway_enabled, meta_pixel_id")
+          .eq("teacher_id", teacherId)
+          .maybeSingle()
+
+        if (billingData) {
+          setGatewayEnabled(billingData.gateway_enabled)
+          setMetaPixelId(billingData.meta_pixel_id || "")
+
+          if (billingData.meta_pixel_id && typeof window !== "undefined") {
             const script = document.createElement("script")
             script.innerHTML = `
               !function(f,b,e,v,n,t,s)
@@ -95,7 +108,7 @@ function RegistrationForm() {
               t.src=v;s=b.getElementsByTagName(e)[0];
               s.parentNode.insertBefore(t,s)}(window, document,'script',
               'https://connect.facebook.net/en_US/fbevents.js');
-              fbq('init', '${pixelId}');
+              fbq('init', '${billingData.meta_pixel_id}');
               fbq('track', 'PageView');
             `
             document.head.appendChild(script)
@@ -109,12 +122,12 @@ function RegistrationForm() {
     loadTeacher()
   }, [teacherId])
 
-  // Cargar disponibilidad de horarios para Arnaldo
+  // Cargar disponibilidad de horarios
   useEffect(() => {
-    if (selectedDate && teacherId && isArnaldo) {
+    if (selectedDate && teacherId) {
       loadSlots()
     }
-  }, [selectedDate, teacherId, isArnaldo])
+  }, [selectedDate, teacherId])
 
   async function loadSlots() {
     setLoadingSlots(true)
@@ -159,7 +172,10 @@ function RegistrationForm() {
   // ── ACCIÓN LANDING PREMIUM: AGENDAR SLOT DISPONIBLE ──
   const handleBookSlot = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.name || !form.email || !selectedSlot || !teacherId) return
+    if (!form.name || !form.email || !form.password || !selectedSlot || !teacherId) {
+      toast("Completa todos los campos, incluyendo tu contraseña", "error")
+      return
+    }
 
     setSubmitting(true)
     setError("")
@@ -184,50 +200,7 @@ function RegistrationForm() {
         throw new Error("Ya registraste una solicitud de clase de prueba o tienes una cuenta activa con este correo o teléfono. Por favor contáctanos directamente para coordinar tu clase.")
       }
 
-      // 2. Si es Arnaldo y la pasarela de pagos está configurada, generar link de cobro e ir a Mercado Pago directamente
-      // NOTA: Para evitar "reservas basura" que bloqueen horarios a otros, NO insertamos el Booking ni creamos el alumno
-      // en la base de datos hasta que el Webhook confirme que el pago fue APROBADO.
-      if (isArnaldo) {
-        try {
-          const checkoutRes = await fetch(`${supabaseUrl}/functions/v1/mercadopago-checkout`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "apikey": anonKey || "",
-              "Authorization": `Bearer ${anonKey}`
-            },
-            body: JSON.stringify({
-              teacher_id: teacherId,
-              student_id: null,
-              item_type: "TRIAL",
-              prospect_name: form.name.trim(),
-              prospect_email: cleanEmail,
-              prospect_phone: cleanPhone,
-              selected_date: selectedDate,
-              selected_slot: selectedSlot,
-              modalidad: form.modalidad
-            })
-          })
-
-          const checkoutData = await checkoutRes.json()
-          if (checkoutRes.ok && checkoutData.checkoutUrl) {
-            // Medir conversión en Meta Ads antes de irse
-            trackMetaLead()
-
-            toast("¡Reserva iniciada! Redireccionando a Mercado Pago para confirmar...", "success")
-            setTimeout(() => {
-              window.location.href = checkoutData.checkoutUrl
-            }, 1500)
-            return // Detiene el flujo para evitar el fallback manual de WhatsApp
-          }
-        } catch (checkoutErr) {
-          console.error("Error al generar checkout de pago:", checkoutErr)
-          // Si falla la pasarela, continuamos con el flujo tradicional de WhatsApp
-        }
-      }
-
-      // 3. FLUJO DE WHATSAPP (FALLBACK si falla o está desactivada la pasarela automática)
-      // A. Crear al alumno mediante nuestra Edge Function create-student
+      // 2. Crear al alumno inmediatamente (Edge Function)
       const res = await fetch(`${supabaseUrl}/functions/v1/create-student`, {
         method: "POST",
         headers: {
@@ -237,7 +210,7 @@ function RegistrationForm() {
         },
         body: JSON.stringify({
           email: cleanEmail,
-          password: "student123", // Contraseña temporal
+          password: form.password.trim(),
           name: form.name.trim(),
           phone: cleanPhone,
           teacher_id: teacherId
@@ -252,19 +225,74 @@ function RegistrationForm() {
 
       const newUserId = edgeData.userId
 
-      // B. Actualizar el perfil del prospecto en Khora
+      // 3. Autenticar en segundo plano para evitar login loop
+      await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password: form.password.trim()
+      })
+
+      // 4. Guardar detalles del agendamiento en sessionStorage
+      const sessionBookingInfo = {
+        teacherName: teacherName,
+        teacherPhone: teacherPhone || "56944291538",
+        instrument: teacherInstrumento || "música",
+        date: selectedDate,
+        time: selectedSlot
+      }
+      sessionStorage.setItem("khora-booking-success", JSON.stringify(sessionBookingInfo))
+
+      // 5. Si la pasarela de pagos está activada, procesar con Mercado Pago
+      if (gatewayEnabled) {
+        try {
+          const checkoutRes = await fetch(`${supabaseUrl}/functions/v1/mercadopago-checkout`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "apikey": anonKey || "",
+              "Authorization": `Bearer ${anonKey}`
+            },
+            body: JSON.stringify({
+              teacher_id: teacherId,
+              student_id: newUserId,
+              item_type: "TRIAL",
+              prospect_name: form.name.trim(),
+              prospect_email: cleanEmail,
+              prospect_phone: cleanPhone,
+              selected_date: selectedDate,
+              selected_slot: selectedSlot,
+              modalidad: form.modalidad
+            })
+          })
+
+          const checkoutData = await checkoutRes.json()
+          if (checkoutRes.ok && checkoutData.checkoutUrl) {
+            trackMetaLead()
+            toast("¡Cuenta creada con éxito! Redireccionando a Mercado Pago para confirmar tu pago...", "success")
+            setTimeout(() => {
+              window.location.href = checkoutData.checkoutUrl
+            }, 1500)
+            return
+          } else {
+            throw new Error(checkoutData?.error || "Error al generar enlace de pago.")
+          }
+        } catch (checkoutErr) {
+          console.error("Error al generar checkout de pago:", checkoutErr)
+          toast("No se pudo iniciar el cobro automático. Procediendo al agendamiento por WhatsApp...", "info")
+        }
+      }
+
+      // 6. FLUJO FALLBACK DE WHATSAPP (si no hay pasarela de pago configurada o falló)
       await supabase
         .from("StudentProfile")
         .update({
           modalidad: form.modalidad,
           preferred_day: DAY_NAMES[new Date(selectedDate + "T12:00").getDay()],
           preferred_time: selectedSlot,
-          status: "TRIAL", // Pasa a clase de prueba directamente
+          status: "TRIAL",
           lead_source: "WEBSITE"
         })
         .eq("user_id", newUserId)
 
-      // C. Crear el agendamiento (Booking) físico en Khora con estado PENDING para WhatsApp manual
       const [h, m] = selectedSlot.split(":").map(Number)
       const endD = new Date()
       endD.setHours(h, m + 60, 0, 0)
@@ -282,20 +310,18 @@ function RegistrationForm() {
         status: "PENDING"
       })
 
-      // D. Medir conversión en Meta Ads
       trackMetaLead()
-
-      // E. Redireccionar directamente a WhatsApp con el mensaje pre-armado
       setSuccess(true)
       const formattedDate = new Date(selectedDate + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
+      const instrumentName = teacherInstrumento ? `clases de ${teacherInstrumento}` : "clases de prueba"
       const textMsg = encodeURIComponent(
-        `¡Hola Arnaldo! Mi nombre es ${form.name.trim()}. Acabo de registrarme para una clase de prueba de batería este ${formattedDate} a las ${formatTime(selectedSlot)} hs. ¿Me podrías confirmar si queda reservada?`
+        `¡Hola ${teacherName}! Mi nombre es ${form.name.trim()}. Acabo de registrarme para una clase de prueba de ${instrumentName} este ${formattedDate} a las ${formatTime(selectedSlot)} hs. ¿Me podrías confirmar si queda reservada?`
       )
 
-      toast("¡Inscripción exitosa! Abriendo tu WhatsApp...", "success")
-
+      toast("¡Inscripción exitosa! Abriendo WhatsApp para coordinar...", "success")
       setTimeout(() => {
-        window.location.href = `https://wa.me/56944291538?text=${textMsg}` // Número celular de Arnaldo Allende
+        const destPhone = teacherPhone.replace(/\+/g, "") || "56944291538"
+        window.location.href = `https://wa.me/${destPhone}?text=${textMsg}`
       }, 1500)
 
     } catch (err: any) {
@@ -338,12 +364,14 @@ function RegistrationForm() {
 
       // WhatsApp Hook de Lista de espera
       const dayName = DAY_NAMES[Number(waitlistPref.day)]
+      const instrumentName = teacherInstrumento ? `clases de ${teacherInstrumento}` : "clases"
       const textMsg = encodeURIComponent(
-        `¡Hola Arnaldo! Mi nombre es ${form.name.trim()}. No encontré horarios disponibles en tu agenda, por lo que me acabo de inscribir en tu Lista de Espera prioritaria para los ${dayName} a las ${formatTime(timeFormatted)} hs. ¡Quedo atento si se libera un cupo!`
+        `¡Hola ${teacherName}! Mi nombre es ${form.name.trim()}. No encontré horarios disponibles en tu agenda, por lo que me acabo de inscribir en tu Lista de Espera prioritaria para ${instrumentName} los ${dayName} a las ${formatTime(timeFormatted)} hs. ¡Quedo atento si se libera un cupo!`
       )
 
       setTimeout(() => {
-        window.location.href = `https://wa.me/56984288031?text=${textMsg}`
+        const destPhone = teacherPhone.replace(/\+/g, "") || "56944291538"
+        window.location.href = `https://wa.me/${destPhone}?text=${textMsg}`
       }, 1500)
 
     } catch (err: any) {
@@ -453,10 +481,9 @@ function RegistrationForm() {
   }
 
   // ===================================================================
-  // 🎭 RENDER: LANDING DE ALTA CONVERSIÓN PREMIUM (ARNALDO ALLENDE)
+  // 🎭 RENDER: LANDING DE ALTA CONVERSIÓN PREMIUM (Cualquier Profesor)
   // ===================================================================
-  if (isArnaldo) {
-    return (
+  return (
       <div
         className="min-h-screen flex flex-col justify-between items-center p-4 md:p-8 bg-cover bg-center bg-no-repeat relative font-sans text-white"
         style={{
@@ -478,13 +505,13 @@ function RegistrationForm() {
             <div className="space-y-8 animate-in fade-in duration-300">
               <div className="space-y-4">
                 <h1 className="text-4xl md:text-6xl font-black tracking-tight leading-none text-white uppercase select-none">
-                  DOMINA LA BATERÍA CON <br />
+                  APRENDE {teacherInstrumento ? teacherInstrumento.toUpperCase() : "MÚSICA"} CON <br />
                   <span className="bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text text-transparent">
-                    MI SISTEMA DE CLASES 1 A 1
+                    CLASES 1 A 1
                   </span>
                 </h1>
                 <p className="text-neutral-300 font-medium text-sm md:text-lg max-w-lg mx-auto leading-relaxed">
-                  Clases 100% personalizadas y adaptadas a tu nivel con Arnaldo Allende. Reserva tu clase de prueba hoy mismo.
+                  Clases 100% personalizadas y adaptadas a tu nivel con {teacherName}. Reserva tu clase de prueba hoy mismo.
                 </p>
               </div>
 
@@ -569,7 +596,7 @@ function RegistrationForm() {
                     <Sparkles className="w-3 h-3" />
                     Paso 2: Selecciona tu Clase de Prueba
                   </p>
-                  <h2 className="text-lg md:text-xl font-black text-white">Agenda con Arnaldo Allende</h2>
+                  <h2 className="text-lg md:text-xl font-black text-white">Agenda con {teacherName}</h2>
                 </div>
                 <button
                   onClick={() => setStep(1)}
@@ -611,7 +638,7 @@ function RegistrationForm() {
                         // LÓGICA DE ESCASÉZ: No hay cupos, invitar a unirse a la lista de espera
                         <div className="p-6 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-center space-y-4">
                           <p className="text-xs font-bold text-amber-300 italic leading-relaxed">
-                            ⚠️ Vaya, parece que Arnaldo no tiene bloques libres para esta fecha debido a la alta demanda.
+                            ⚠️ Vaya, parece que {teacherName} no tiene bloques libres para esta fecha debido a la alta demanda.
                           </p>
                           <button
                             type="button"
@@ -664,7 +691,7 @@ function RegistrationForm() {
                   {/* FORMULARIO FINAL DE REGISTRO SI SELECCIONÓ SLOT */}
                   {selectedSlot && (
                     <form onSubmit={handleBookSlot} className="space-y-4 pt-4 border-t border-neutral-800 animate-in slide-in-from-bottom-2 duration-300">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div>
                           <label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest pl-1 block mb-1">Nombre Completo</label>
                           <div className="relative">
@@ -694,6 +721,18 @@ function RegistrationForm() {
                             />
                           </div>
                         </div>
+
+                        <div>
+                          <label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest pl-1 block mb-1">Crea tu Contraseña</label>
+                          <input
+                            type="password"
+                            required
+                            value={form.password}
+                            onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
+                            placeholder="Mínimo 6 caracteres"
+                            className="w-full px-4 py-2.5 bg-neutral-950 border border-neutral-850 rounded-xl outline-none focus:border-violet-500 text-xs font-bold text-white placeholder:text-neutral-700"
+                          />
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-2 p-1 bg-neutral-950 border border-neutral-800 rounded-xl">
@@ -717,7 +756,7 @@ function RegistrationForm() {
                         disabled={submitting}
                         className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-blue-900/10 transition-all active:scale-95 disabled:opacity-50"
                       >
-                        {submitting ? "Procesando..." : "🎵 Solicitar Reserva y Abrir WhatsApp"}
+                        {submitting ? "Procesando..." : (gatewayEnabled ? "💳 Pagar y Confirmar Reserva" : "🎵 Solicitar Reserva y Abrir WhatsApp")}
                         <ArrowRight className="w-4 h-4" />
                       </button>
                     </form>
@@ -731,7 +770,7 @@ function RegistrationForm() {
                     <div className="space-y-1">
                       <h4 className="text-xs font-black text-amber-300 uppercase tracking-wider">Lista de Espera Prioritaria</h4>
                       <p className="text-[10px] text-neutral-400 leading-relaxed font-medium">
-                        Arnaldo tiene clases ficas y su agenda suele llenarse rápidamente. Regístrate en la lista de espera prioritara: si algún alumno actual libera o pausa su horario, te notificaremos de inmediato para que lo reserves tú primero.
+                        {teacherName} tiene clases fijas y su agenda suele llenarse rápidamente. Regístrate en la lista de espera prioritaria: si algún alumno actual libera o pausa su horario, te notificaremos de inmediato para que lo reserves tú primero.
                       </p>
                     </div>
                   </div>
@@ -825,87 +864,10 @@ function RegistrationForm() {
             <span className="w-1 h-1 rounded-full bg-neutral-800" />
             <span className="flex items-center gap-1"><Award className="w-3.5 h-3.5 text-neutral-600" /> Clases de Élite</span>
           </div>
-          <p>© 2026 Musicweekchops. Todos los derechos reservados.</p>
+          <p>© 2026 {teacherName}. Todos los derechos reservados.</p>
         </div>
       </div>
     )
-  }
-
-  // ===================================================================
-  // 🎭 RENDER: RUTA DE INGRESO TRADICIONAL DE KHORA
-  // ===================================================================
-  return (
-    <div className="min-h-screen bg-neutral-50 flex flex-col p-4 md:p-8 font-sans">
-      <div className="max-w-md w-full mx-auto flex justify-center mb-8 pt-4">
-        <div className="w-12 h-12 bg-neutral-900 rounded-2xl flex items-center justify-center shadow-lg">
-          <span className="text-white font-black text-xl">K</span>
-        </div>
-      </div>
-
-      <div className="max-w-md w-full mx-auto bg-white rounded-[40px] shadow-xl overflow-hidden mb-10">
-        <div className="bg-gradient-to-br from-violet-600 to-indigo-600 p-8 text-center text-white relative overflow-hidden">
-          <div className="absolute inset-0 bg-black/10"></div>
-          <h1 className="text-2xl font-black mb-2 relative z-10 tracking-tight">Inscripción a Clases</h1>
-          <p className="text-violet-100 font-medium relative z-10">con {teacherName}</p>
-        </div>
-
-        <form onSubmit={handleStandardSubmit} className="p-8 space-y-6">
-          {error && (
-            <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-sm font-bold border border-red-100">
-              {error}
-            </div>
-          )}
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-[11px] font-bold text-neutral-400 uppercase tracking-widest mb-1.5 ml-1">Nombre Completo</label>
-              <input type="text" required value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
-                className="w-full px-4 py-3.5 bg-neutral-50 border border-neutral-100 rounded-2xl outline-none focus:border-violet-400 focus:bg-white focus:ring-4 focus:ring-violet-50 transition-all text-sm font-bold"
-                placeholder="Ej: María José Salas" />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-bold text-neutral-400 uppercase tracking-widest mb-1.5 ml-1">Correo Electrónico</label>
-              <input type="email" required value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
-                className="w-full px-4 py-3.5 bg-neutral-50 border border-neutral-100 rounded-2xl outline-none focus:border-violet-400 focus:bg-white focus:ring-4 focus:ring-violet-50 transition-all text-sm font-bold"
-                placeholder="maria@ejemplo.com" />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-bold text-neutral-400 uppercase tracking-widest mb-1.5 ml-1">WhatsApp / Teléfono</label>
-              <input type="tel" required value={whatsapp} onChange={e => setWhatsapp(e.target.value)}
-                className="w-full px-4 py-3.5 bg-neutral-50 border border-neutral-100 rounded-2xl outline-none focus:border-violet-400 focus:bg-white focus:ring-4 focus:ring-violet-50 transition-all text-sm font-bold"
-                placeholder="+56 9 1234 5678" />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-bold text-neutral-400 uppercase tracking-widest mb-1.5 ml-1">Crea tu contraseña</label>
-              <input type="password" required value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
-                className="w-full px-4 py-3.5 bg-neutral-50 border border-neutral-100 rounded-2xl outline-none focus:border-violet-400 focus:bg-white focus:ring-4 focus:ring-violet-50 transition-all text-sm font-bold"
-                placeholder="Mínimo 6 caracteres" />
-            </div>
-          </div>
-
-          <div className="pt-2">
-            <h3 className="text-sm font-bold text-neutral-900 mb-4 border-t border-neutral-100 pt-6">Preferencias de Clase</h3>
-            <div className="grid grid-cols-2 gap-2 p-1 bg-neutral-50 rounded-2xl border border-neutral-100 mb-4">
-              {(["presencial", "online"] as const).map(m => (
-                <button key={m} type="button" onClick={() => setForm(p => ({ ...p, modalidad: m }))}
-                  className={`py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${form.modalidad === m ? "bg-white text-violet-600 shadow-sm" : "text-neutral-400"}`}>
-                  {m === "online" ? "📹 Virtual" : "🏠 Presencial"}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <button type="submit" disabled={submitting}
-            className="w-full py-4 mt-4 bg-neutral-900 text-white rounded-2xl font-black text-sm tracking-wide shadow-lg shadow-neutral-900/20 hover:bg-violet-600 transition-colors disabled:opacity-50">
-            {submitting ? "Creando perfil..." : "Completar Inscripción"}
-          </button>
-        </form>
-      </div>
-    </div>
-  )
 }
 
 export default function StudentRegistrationPage() {

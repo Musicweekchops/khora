@@ -367,6 +367,36 @@ serve(async (req) => {
           console.error("[Webhook] Error registrando pago en tabla:", insertPayErr)
         }
 
+        // Enviar correo de confirmación de pago (recibo de pago) al alumno
+        if (payerEmail) {
+          try {
+            console.log(`[Webhook] Enviando recibo de pago por correo a: ${payerEmail}`)
+            const emailReceiptRes = await fetch(`${supabaseUrl}/functions/v1/send-email`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "apikey": supabaseKey,
+                "Authorization": `Bearer ${supabaseKey}`
+              },
+              body: JSON.stringify({
+                to: payerEmail.trim().toLowerCase(),
+                type: "PAYMENT_CONFIRMATION",
+                params: {
+                  studentName: payerName || "Estudiante",
+                  itemName: paymentDetails.description || (itemType === "TRIAL" ? "Clase de Prueba" : itemType === "MONTHLY" ? "Mensualidad de Clases" : "Servicio Khora"),
+                  amount: transaction_amount,
+                  paymentId: paymentId
+                }
+              })
+            })
+            if (!emailReceiptRes.ok) {
+              console.error("[Webhook] Error response from payment confirmation email:", await emailReceiptRes.text())
+            }
+          } catch (err) {
+            console.error("[Webhook] Error al enviar correo de recibo de pago al alumno:", err)
+          }
+        }
+
         // Actualizar el LTV (Lifetime Value) del estudiante sumando sus aportes históricos
         const { data: allPayments } = await supabaseAdmin
           .from("Payment")

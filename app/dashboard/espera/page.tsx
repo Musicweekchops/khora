@@ -42,19 +42,32 @@ export default function WaitingListPage() {
   const [pixelId, setPixelId] = useState("")
   const [savingPixel, setSavingPixel] = useState(false)
 
-  const isArnaldo = profile?.email === "arnaldoallende@hotmail.com"
+  const isTeacher = profile?.role === "TEACHER"
 
   useEffect(() => {
-    // 1. Cargar Pixel ID de localStorage
-    if (typeof window !== "undefined") {
-      const savedPixel = localStorage.getItem("khora-meta-pixel") || ""
-      setPixelId(savedPixel)
-    }
-
     if (profile?.teacherProfileId) {
       loadWaitingList()
+      loadPixelConfig()
     }
   }, [profile?.teacherProfileId])
+
+  async function loadPixelConfig() {
+    try {
+      const { data, error } = await supabase
+        .from("TeacherBillingConfig")
+        .select("meta_pixel_id")
+        .eq("teacher_id", profile?.teacherProfileId)
+        .maybeSingle()
+
+      if (error) {
+        console.error("Error loading pixel config:", error)
+      } else if (data) {
+        setPixelId(data.meta_pixel_id || "")
+      }
+    } catch (err) {
+      console.error(err)
+    }
+  }
 
   async function loadWaitingList() {
     setLoading(true)
@@ -82,13 +95,28 @@ export default function WaitingListPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const handleSavePixel = () => {
+  const handleSavePixel = async () => {
+    if (!profile?.teacherProfileId) return
     setSavingPixel(true)
-    if (typeof window !== "undefined") {
-      localStorage.setItem("khora-meta-pixel", pixelId.trim())
-      toast("¡Píxel de Meta Ads guardado exitosamente!", "success")
+    try {
+      const { error } = await supabase
+        .from("TeacherBillingConfig")
+        .upsert({
+          teacher_id: profile.teacherProfileId,
+          meta_pixel_id: pixelId.trim() || null
+        }, { onConflict: "teacher_id" })
+
+      if (error) {
+        toast("Error al guardar el Píxel de Meta Ads", "error")
+      } else {
+        toast("¡Píxel de Meta Ads guardado exitosamente!", "success")
+      }
+    } catch (err) {
+      console.error(err)
+      toast("Error al guardar", "error")
+    } finally {
+      setSavingPixel(false)
     }
-    setSavingPixel(false)
   }
 
   const handleDelete = async (id: string) => {
@@ -146,19 +174,21 @@ export default function WaitingListPage() {
   const getWhatsAppMessage = (lead: WaitingLead) => {
     const timeFormatted = formatTime(lead.start_time)
     const dayName = DAY_NAMES[lead.day_of_week]
+    const instrumentEmoji = profile?.instrumento === "Batería" ? "🥁" : "🎵"
+    const instrumentName = profile?.instrumento ? `clases de ${profile.instrumento}` : "clases"
     return encodeURIComponent(
-      `¡Hola ${lead.prospect_name}! Te saluda Arnaldo Allende de Musicweekchops. 🥁 Te escribo porque te habías registrado en mi lista de espera prioritara para el horario de los ${dayName} a las ${timeFormatted} hs. ¡Acaba de liberarse esa vacante fija! ¿Te gustaría tomarla tú primero? Avísame para coordinar.`
+      `¡Hola ${lead.prospect_name}! Te saluda ${profile?.name}. ${instrumentEmoji} Te escribo porque te habías registrado en mi lista de espera prioritaria para ${instrumentName} en el horario de los ${dayName} a las ${timeFormatted} hs. ¡Acaba de liberarse esa vacante fija! ¿Te gustaría tomarla tú primero? Avísame para coordinar.`
     )
   }
 
-  if (!isArnaldo) {
+  if (!isTeacher) {
     return (
       <div className="flex h-screen w-full items-center justify-center p-8 bg-neutral-50">
         <div className="kh-card p-8 max-w-sm w-full text-center">
           <div className="w-12 h-12 bg-red-50 text-red-500 rounded-xl flex items-center justify-center text-xl mx-auto mb-5">🔒</div>
           <h2 className="kh-title text-lg mb-2">Acceso Privado</h2>
           <p className="text-sm text-neutral-500 mb-6 leading-relaxed">
-            Este módulo y su respectiva automatización de lista de espera están restringidos al profesor administrador principal.
+            Este módulo y su respectiva automatización de lista de espera están restringidos a profesores.
           </p>
         </div>
       </div>
