@@ -66,7 +66,7 @@ serve(async (req) => {
 
     if (item_type === "TRIAL") {
       // Clase de Prueba
-      itemName = `Clase de Prueba de ${instrumento} - ${teacherName}`
+      itemName = `Clase de prueba de ${instrumento.toLowerCase()} - ${teacherName}`
       itemPrice = billingConfig.trial_class_price || 25000
     } else if (item_type === "MONTHLY") {
       // Mensualidad de Alumno Activo
@@ -157,16 +157,16 @@ serve(async (req) => {
       },
       auto_return: "approved",
       metadata: {
-        teacher_id: teacher_id,
-        student_id: student_id || null,
-        item_type: item_type,
-        item_id: item_id || null,
-        prospect_name: payerName,
-        prospect_email: payerEmail,
-        prospect_phone: payerPhone,
-        selected_date: selected_date || null,
-        selected_slot: selected_slot || null,
-        modalidad: modalidad || null
+        teacher_id: String(teacher_id),
+        student_id: student_id ? String(student_id) : "",
+        item_type: String(item_type),
+        item_id: item_id ? String(item_id) : "",
+        prospect_name: payerName ? String(payerName) : "",
+        prospect_email: payerEmail ? String(payerEmail) : "",
+        prospect_phone: payerPhone ? String(payerPhone) : "",
+        selected_date: selected_date ? String(selected_date) : "",
+        selected_slot: selected_slot ? String(selected_slot) : "",
+        modalidad: modalidad ? String(modalidad) : ""
       },
       // URL del Webhook seguro con api key de Supabase
       notification_url: `${supabaseUrl}/functions/v1/mercadopago-webhook?apikey=${Deno.env.get("SUPABASE_ANON_KEY") ?? ""}`

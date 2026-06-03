@@ -84,13 +84,20 @@ serve(async (req) => {
 
     // 3. Si el pago es Aprobado, procedemos a automatizar en base de datos
     if (status === "approved") {
-      const teacherId = metadata.teacher_id
-      const studentId = metadata.student_id
-      const itemType = metadata.item_type
-      const itemId = metadata.item_id
-      const payerName = metadata.prospect_name
-      const payerEmail = metadata.prospect_email
-      const payerPhone = metadata.prospect_phone
+      const parseVal = (v: any) => {
+        if (v === undefined || v === null) return null;
+        const s = String(v).trim();
+        if (s === "" || s.toLowerCase() === "null" || s.toLowerCase() === "undefined") return null;
+        return s;
+      };
+
+      const teacherId = parseVal(metadata.teacher_id)
+      const studentId = parseVal(metadata.student_id)
+      const itemType = parseVal(metadata.item_type)
+      const itemId = parseVal(metadata.item_id)
+      const payerName = parseVal(metadata.prospect_name) || "Alumno"
+      const payerEmail = parseVal(metadata.prospect_email)
+      const payerPhone = parseVal(metadata.prospect_phone) || ""
 
       // 4. Idempotencia: Verificar si el pago ya fue registrado anteriormente en Khora
       const { data: existingPayment } = await supabaseAdmin
@@ -112,11 +119,15 @@ serve(async (req) => {
         
         // 1. Intentar buscar si el usuario/alumno ya existe por correo electrónico
         // Buscamos primero en la tabla User para resolver la relación
-        const { data: publicUser } = await supabaseAdmin
-          .from("User")
-          .select("id")
-          .eq("email", payerEmail.trim().toLowerCase())
-          .maybeSingle()
+        let publicUser = null
+        if (payerEmail) {
+          const { data: foundUser } = await supabaseAdmin
+            .from("User")
+            .select("id")
+            .eq("email", payerEmail.trim().toLowerCase())
+            .maybeSingle()
+          publicUser = foundUser
+        }
 
         let targetStudent = null
 
@@ -129,7 +140,7 @@ serve(async (req) => {
           targetStudent = student
         }
 
-        if (!targetStudent) {
+        if (!targetStudent && payerEmail) {
           // Si el alumno no existe, creamos su cuenta invocando nuestra Edge Function create-student
           try {
             console.log(`[Webhook] Estudiante no encontrado. Creando automáticamente mediante create-student para: ${payerEmail}`)
@@ -143,7 +154,7 @@ serve(async (req) => {
               body: JSON.stringify({
                 email: payerEmail.trim().toLowerCase(),
                 password: "student123", // Contraseña temporal
-                name: payerName.trim(),
+                name: (payerName || "Alumno").trim(),
                 phone: payerPhone,
                 teacher_id: teacherId
               })
@@ -181,9 +192,9 @@ serve(async (req) => {
         }
 
         // 2. Insertar la reserva (Booking) directamente como CONFIRMED
-        const selectedDate = metadata.selected_date
-        const selectedSlot = metadata.selected_slot
-        const modalidad = metadata.modalidad || "presencial"
+        const selectedDate = parseVal(metadata.selected_date)
+        const selectedSlot = parseVal(metadata.selected_slot)
+        const modalidad = parseVal(metadata.modalidad) || "presencial"
 
         if (selectedDate && selectedSlot) {
           const [h, m] = selectedSlot.split(":").map(Number)
@@ -383,7 +394,7 @@ serve(async (req) => {
                 type: "PAYMENT_CONFIRMATION",
                 params: {
                   studentName: payerName || "Estudiante",
-                  itemName: paymentDetails.description || (itemType === "TRIAL" ? "Clase de Prueba" : itemType === "MONTHLY" ? "Mensualidad de Clases" : "Servicio Khora"),
+                  itemName: paymentDetails.description || (itemType === "TRIAL" ? "Clase de prueba" : itemType === "MONTHLY" ? "Mensualidad de clases" : "Servicio Khora"),
                   amount: transaction_amount,
                   paymentId: paymentId
                 }
@@ -434,8 +445,18 @@ serve(async (req) => {
             let pushMsg = `${payerName} acaba de realizar un pago de $${transaction_amount.toLocaleString("es-CL")} CLP.`
             
             if (itemType === "TRIAL") {
-              pushTitle = "👤 ¡Nuevo Alumno e Ingreso! 🎉"
-              pushMsg = `🥁 ${payerName} pagó su clase de prueba ($${transaction_amount.toLocaleString("es-CL")} CLP) y está confirmada.`
+              let formattedDateStr = selectedDate || ""
+              try {
+                if (selectedDate) {
+                  formattedDateStr = new Date(selectedDate + "T12:00").toLocaleDateString("es-CL", {
+                    day: "numeric",
+                    month: "numeric",
+                    year: "numeric"
+                  })
+                }
+              } catch (_) {}
+              pushTitle = "👤 ¡Clase de Prueba Agendada! 🎉"
+              pushMsg = `${payerName} pagó y agendó una clase de prueba para el ${formattedDateStr} a las ${selectedSlot ? selectedSlot.slice(0, 5) : ""} hs.`
             } else if (itemType === "COURSE" || itemType === "PRODUCT") {
               pushTitle = "📚 ¡Nueva Venta de Curso! 💰"
               pushMsg = `${payerName} compró un producto/curso por $${transaction_amount.toLocaleString("es-CL")} CLP.`

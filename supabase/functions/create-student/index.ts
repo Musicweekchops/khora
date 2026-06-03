@@ -138,56 +138,7 @@ serve(async (req) => {
     }
     */
 
-    // 6. Enviar Notificación Push Instantánea al Profesor (si tiene PWA instalada y suscripción activa)
-    if (teacherUserId) {
-      try {
-        const { data: subs, error: subsErr } = await supabaseAdmin
-          .from("PushSubscription")
-          .select("*")
-          .eq("user_id", teacherUserId)
 
-        if (!subsErr && subs && subs.length > 0) {
-          // Importar dinámicamente web-push para evitar consumo de memoria en Edge Functions si no se utiliza
-          const webpush = await import("https://esm.sh/web-push@3.6.7")
-          
-          // Configurar credenciales VAPID
-          webpush.setVapidDetails(
-            "mailto:hola@khora.cl",
-            "BC3N_V7TcV1Wo-u4IdieY9eJYuHfO-zC3ghLAho4Lj2BsLtQf2lgrQURxmq_I0vNigamO5lRB1C_AG-2jLm1Cm4",
-            "HTsnrmAK-XWgfOHMO2u2I_t9rbL-4qmaisaF00mcEdI"
-          )
-
-          const payload = JSON.stringify({
-            title: "⚡ ¡Nuevo Alumno Inscrito!",
-            body: `${name.trim()} se acaba de registrar en tu panel de Khora.`,
-            url: "/dashboard/alumnos"
-          })
-
-          for (const sub of subs) {
-            try {
-              await webpush.sendNotification({
-                endpoint: sub.endpoint,
-                keys: {
-                  p256dh: sub.p256dh,
-                  auth: sub.auth
-                }
-              }, payload)
-            } catch (pushErr: any) {
-              console.error("Error enviando notificación push al profesor:", pushErr)
-              // Auto-limpieza de tokens expirados o desinstalados del navegador
-              if (pushErr.statusCode === 410 || pushErr.statusCode === 404) {
-                await supabaseAdmin
-                  .from("PushSubscription")
-                  .delete()
-                  .eq("id", sub.id)
-              }
-            }
-          }
-        }
-      } catch (err) {
-        console.error("Error al despachar notificación push al profesor:", err)
-      }
-    }
 
     return new Response(JSON.stringify({ userId: userData.user.id }), {
       headers: { 
