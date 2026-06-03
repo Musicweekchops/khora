@@ -245,7 +245,20 @@ function PublicBookingPage() {
 
                 <div className="space-y-6 pt-4 border-t border-neutral-100">
                   <h3 className="font-black text-neutral-900 flex items-center gap-2 text-sm md:text-base uppercase tracking-wider"><span className="w-1.5 h-4 bg-emerald-500 rounded-full" /> Fecha y Hora</h3>
-                  <input type="date" required value={formData.date} onChange={e => setFormData(p => ({...p, date: e.target.value}))} className="kh-input" min={new Date().toISOString().split("T")[0]} />
+                  <input
+                    type="date"
+                    required
+                    value={formData.date}
+                    onChange={e => {
+                      setFormData(p => ({...p, date: e.target.value}))
+                      const target = e.target
+                      setTimeout(() => {
+                        target.blur()
+                      }, 50)
+                    }}
+                    className="kh-input"
+                    min={new Date().toISOString().split("T")[0]}
+                  />
 
                   {formData.date && (
                     <div className="animate-in fade-in slide-in-from-top-2 duration-300">

@@ -616,7 +616,13 @@ function RegistrationForm() {
                       type="date"
                       required
                       value={selectedDate}
-                      onChange={e => setSelectedDate(e.target.value)}
+                      onChange={e => {
+                        setSelectedDate(e.target.value)
+                        const target = e.target
+                        setTimeout(() => {
+                          target.blur()
+                        }, 50)
+                      }}
                       min={new Date(Date.now() + 86400000).toISOString().split("T")[0]} // A partir de mañana
                       className="w-full px-4 py-3.5 bg-neutral-950 border border-neutral-800 rounded-2xl outline-none focus:border-violet-500 font-bold text-sm text-white"
                     />
