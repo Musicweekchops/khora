@@ -75,8 +75,8 @@ const treeHash = treeLine.split(' ')[1];
 
 console.log("Tree Hash:", treeHash);
 
-// Find the file: supabase/functions/mercadopago-checkout/index.ts
-const filePathParts = ["supabase", "functions", "mercadopago-checkout", "index.ts"];
+// Find the file: supabase/functions/create-student/index.ts
+const filePathParts = ["supabase", "functions", "create-student", "index.ts"];
 const blobHash = findInTree(treeHash, filePathParts);
 
 if (blobHash) {

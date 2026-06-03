@@ -10,7 +10,7 @@ import AvailabilitySettings from "@/components/agenda/AvailabilitySettings"
 interface CalendarClass {
   id: string; date: string; start_time: string; end_time: string
   status: string; modalidad: string; student_name: string
-  is_booking?: boolean; is_recurring?: boolean;
+  is_booking?: boolean; is_recurring?: boolean; is_trial?: boolean;
 }
 
 const HOURS = Array.from({ length: 14 }, (_, i) => i + 7) // 7am to 20pm
@@ -118,7 +118,7 @@ export default function AgendaPage() {
       // Load actual classes
       const { data: classData, error: classErr } = await supabase
         .from("Class")
-        .select("id, date, start_time, end_time, status, modalidad, is_recurring, StudentProfile ( User ( name ) )")
+        .select("id, date, start_time, end_time, status, modalidad, is_recurring, booking_id, StudentProfile ( status, User ( name ) )")
         .eq("teacher_id", profile!.teacherProfileId!)
         .gte("date", start)
         .lte("date", end)
@@ -142,7 +142,8 @@ export default function AgendaPage() {
         id: c.id, date: c.date, start_time: c.start_time, end_time: c.end_time,
         status: c.status, modalidad: c.modalidad, is_recurring: !!c.is_recurring,
         student_name: c.StudentProfile?.User?.name ?? "Sin asignar",
-        is_booking: false
+        is_booking: false,
+        is_trial: !!c.booking_id || c.StudentProfile?.status === "TRIAL"
       }))
 
       const formattedBookings = (bookingData || []).map((b: any) => ({
@@ -375,7 +376,9 @@ export default function AgendaPage() {
                                   ? "bg-emerald-50/95 border-emerald-200 border-l-4 border-l-emerald-400 text-emerald-700"
                                   : cls.is_booking 
                                     ? "bg-amber-50/95 border-amber-200 border-l-4 border-l-amber-400 text-amber-700 border-dashed"
-                                    : "bg-violet-50/95 border-violet-200 border-l-4 border-l-violet-400 text-violet-700"
+                                    : cls.is_trial
+                                      ? "bg-orange-50/95 border-orange-200 border-l-4 border-l-orange-400 text-orange-700"
+                                      : "bg-violet-50/95 border-violet-200 border-l-4 border-l-violet-400 text-violet-700"
                               }`}
                             >
                               <div className="flex items-start justify-between gap-1 leading-tight">
@@ -566,6 +569,9 @@ export default function AgendaPage() {
               } else if (cls.is_booking) {
                 cardBg = "bg-amber-50/90 border-amber-100 hover:border-amber-200 text-amber-900 border-dashed animate-in fade-in zoom-in duration-200"
                 bulletColor = "bg-amber-500"
+              } else if (cls.is_trial) {
+                cardBg = "bg-orange-50/90 border-orange-100 hover:border-orange-200 text-orange-900 animate-in fade-in zoom-in duration-200"
+                bulletColor = "bg-orange-500"
               }
 
               return (

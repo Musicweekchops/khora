@@ -80,7 +80,18 @@ serve(async (req) => {
     }
 
     const { status, transaction_amount, metadata } = paymentDetails
+    const amountVal = Number(transaction_amount || 0)
     console.log(`[Webhook] Estado del pago ${paymentId}: ${status}`)
+
+    // Safe extraction of TeacherProfile and User (handling potential array wrapping by PostgREST)
+    const rawTp = matchedConfig.TeacherProfile
+    const teacherProfileObj = Array.isArray(rawTp) ? rawTp[0] : rawTp
+    const rawUser = teacherProfileObj?.User
+    const teacherUserObj = Array.isArray(rawUser) ? rawUser[0] : rawUser
+
+    const teacherName = teacherUserObj?.name || "Profesor"
+    const teacherEmail = teacherUserObj?.email || ""
+    const teacherUserId = teacherProfileObj?.user_id || ""
 
     // 3. Si el pago es Aprobado, procedemos a automatizar en base de datos
     if (status === "approved") {
@@ -98,6 +109,9 @@ serve(async (req) => {
       const payerName = parseVal(metadata.prospect_name) || "Alumno"
       const payerEmail = parseVal(metadata.prospect_email)
       const payerPhone = parseVal(metadata.prospect_phone) || ""
+      const selectedDate = parseVal(metadata.selected_date)
+      const selectedSlot = parseVal(metadata.selected_slot)
+      const modalidad = parseVal(metadata.modalidad) || "presencial"
 
       // 4. Idempotencia: Verificar si el pago ya fue registrado anteriormente en Khora
       const { data: existingPayment } = await supabaseAdmin
@@ -192,10 +206,6 @@ serve(async (req) => {
         }
 
         // 2. Insertar la reserva (Booking) directamente como CONFIRMED
-        const selectedDate = parseVal(metadata.selected_date)
-        const selectedSlot = parseVal(metadata.selected_slot)
-        const modalidad = parseVal(metadata.modalidad) || "presencial"
-
         if (selectedDate && selectedSlot) {
           const [h, m] = selectedSlot.split(":").map(Number)
           const endD = new Date()
@@ -212,7 +222,7 @@ serve(async (req) => {
               date: selectedDate,
               start_time: selectedSlot,
               end_time: endTimeStr,
-              total_price: transaction_amount || 25000,
+              total_price: amountVal || 25000,
               status: "CONFIRMED"
             })
             .select("id")
@@ -274,8 +284,6 @@ serve(async (req) => {
             }
 
             // B. Enviar correo de notificación de nuevo alumno al profesor
-            const teacherEmail = matchedConfig.TeacherProfile?.User?.email
-            const teacherName = matchedConfig.TeacherProfile?.User?.name || "Profesor"
             if (teacherEmail) {
               try {
                 console.log(`[Webhook] Enviando correo de notificación de nuevo alumno al profesor: ${teacherEmail}`)
@@ -322,7 +330,7 @@ serve(async (req) => {
               student_id: studentId,
               product_id: itemId,
               teacher_id: teacherId,
-              amount_paid: transaction_amount,
+              amount_paid: amountVal,
               payment_method: 'MERCADOPAGO',
               mp_payment_id: paymentId,
               status: 'COMPLETED'
@@ -366,7 +374,7 @@ serve(async (req) => {
           .insert({
             student_id: targetStudentId,
             teacher_id: teacherId,
-            amount: transaction_amount,
+            amount: amountVal,
             method: "MERCADOPAGO",
             date: new Date().toISOString().split("T")[0],
             notes: `Pago automático aprobado vía Mercado Pago. (${paymentDetails.description || itemType})`,
@@ -395,7 +403,7 @@ serve(async (req) => {
                 params: {
                   studentName: payerName || "Estudiante",
                   itemName: paymentDetails.description || (itemType === "TRIAL" ? "Clase de prueba" : itemType === "MONTHLY" ? "Mensualidad de clases" : "Servicio Khora"),
-                  amount: transaction_amount,
+                  amount: amountVal,
                   paymentId: paymentId
                 }
               })
@@ -423,9 +431,6 @@ serve(async (req) => {
       }
 
       // 7. Notificación Web Push instantánea al dispositivo del profesor
-      const teacherUserId = matchedConfig.TeacherProfile?.user_id
-      const teacherName = matchedConfig.TeacherProfile?.User?.name || "Profesor"
-      
       if (teacherUserId) {
         try {
           const { data: subs } = await supabaseAdmin
@@ -442,7 +447,7 @@ serve(async (req) => {
             )
 
             let pushTitle = "💰 ¡Pago Recibido Exitosamente!"
-            let pushMsg = `${payerName} acaba de realizar un pago de $${transaction_amount.toLocaleString("es-CL")} CLP.`
+            let pushMsg = `${payerName} acaba de realizar un pago de $${amountVal.toLocaleString("es-CL")} CLP.`
             
             if (itemType === "TRIAL") {
               let formattedDateStr = selectedDate || ""
@@ -459,10 +464,10 @@ serve(async (req) => {
               pushMsg = `${payerName} pagó y agendó una clase de prueba para el ${formattedDateStr} a las ${selectedSlot ? selectedSlot.slice(0, 5) : ""} hs.`
             } else if (itemType === "COURSE" || itemType === "PRODUCT") {
               pushTitle = "📚 ¡Nueva Venta de Curso! 💰"
-              pushMsg = `${payerName} compró un producto/curso por $${transaction_amount.toLocaleString("es-CL")} CLP.`
+              pushMsg = `${payerName} compró un producto/curso por $${amountVal.toLocaleString("es-CL")} CLP.`
             } else if (itemType === "MONTHLY") {
               pushTitle = "💵 ¡Mensualidad Recibida! 💳"
-              pushMsg = `Alumno ${payerName} registró pago mensual de $${transaction_amount.toLocaleString("es-CL")} CLP.`
+              pushMsg = `Alumno ${payerName} registró pago mensual de $${amountVal.toLocaleString("es-CL")} CLP.`
             }
 
             const payload = JSON.stringify({
