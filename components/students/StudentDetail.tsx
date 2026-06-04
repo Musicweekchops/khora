@@ -34,6 +34,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
   const [newNote, setNewNote] = useState("")
   const [addingNote, setAddingNote] = useState(false)
   const [showPreviewModal, setShowPreviewModal] = useState(false)
+  const [generatingLink, setGeneratingLink] = useState(false)
 
   // Deletar / Migración de alumnos
   const [showDeleteModal, setShowDeleteModal] = useState(false)
@@ -244,6 +245,39 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
       toast.error("Error al restablecer contraseña: " + error.message)
     } else {
       toast.success("Contraseña restablecida con éxito")
+    }
+  }
+
+  async function handleCopyPaymentLink() {
+    if (!student) return
+    setGeneratingLink(true)
+    try {
+      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
+      const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/mercadopago-checkout`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": anonKey,
+          "Authorization": `Bearer ${anonKey}`
+        },
+        body: JSON.stringify({
+          teacher_id: student.teacher_id,
+          student_id: student.id,
+          item_type: "MONTHLY"
+        })
+      })
+
+      const data = await res.json()
+      if (res.ok && data.checkoutUrl) {
+        await navigator.clipboard.writeText(data.checkoutUrl)
+        toast.success("¡Link de pago copiado al portapapeles! Envíalo a los padres por WhatsApp.")
+      } else {
+        toast.error(data.error || "No se pudo generar el link de pago.")
+      }
+    } catch (err) {
+      toast.error("Error al conectar con la pasarela de pagos.")
+    } finally {
+      setGeneratingLink(false)
     }
   }
 
@@ -460,6 +494,18 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
               <div className="flex flex-col items-end">
                 <p className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Automatización</p>
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleCopyPaymentLink}
+                    disabled={generatingLink}
+                    className="px-3 py-2 rounded-xl text-xs font-black transition-all border bg-white text-violet-600 border-violet-200 hover:bg-violet-50 flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {generatingLink ? (
+                      <span className="w-3 h-3 border-2 border-violet-600/30 border-t-violet-600 rounded-full animate-spin" />
+                    ) : (
+                      "🔗"
+                    )}
+                    <span>{generatingLink ? "Generando..." : "Copiar Link de Pago"}</span>
+                  </button>
                   <button
                     onClick={() => setShowPreviewModal(true)}
                     className="px-3 py-2 rounded-xl text-xs font-black transition-all border bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50 flex items-center gap-2"

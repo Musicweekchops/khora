@@ -84,6 +84,63 @@ export default function ClassDetailView({ classId }: { classId: string }) {
   const [showRescheduleModal, setShowRescheduleModal] = useState(false)
   const [studentSchedules, setStudentSchedules] = useState<any[]>([])
 
+  const [confirmingAttendance, setConfirmingAttendance] = useState(false)
+  const [confirmedBy, setConfirmedBy] = useState<'student' | 'teacher'>('student')
+
+  async function handleStudentConfirmAttendance() {
+    setConfirmingAttendance(true)
+    setConfirmedBy('student')
+    try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+      const res = await fetch(`${supabaseUrl}/functions/v1/notify-teacher-push`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": anonKey || "",
+          "Authorization": `Bearer ${anonKey}`
+        },
+        body: JSON.stringify({ classId })
+      })
+
+      const data = await res.json()
+      if (res.ok) {
+        setCls(prev => prev ? { ...prev, status: "CONFIRMED" } : null)
+        setShowConfirmedModal(true)
+      } else {
+        toast(data.error || "No se pudo confirmar la clase.", "error")
+      }
+    } catch (err) {
+      toast("Error al conectar con la pasarela de notificaciones.", "error")
+    } finally {
+      setConfirmingAttendance(false)
+    }
+  }
+
+  async function handleTeacherConfirmClass() {
+    setConfirmingAttendance(true)
+    setConfirmedBy('teacher')
+    try {
+      const { error } = await supabase
+        .from("Class")
+        .update({ status: "CONFIRMED" })
+        .eq("id", classId)
+
+      if (error) {
+        toast("Error al confirmar la clase: " + error.message, "error")
+      } else {
+        setCls(prev => prev ? { ...prev, status: "CONFIRMED" } : null)
+        setShowConfirmedModal(true)
+        toast("Clase confirmada con éxito", "success")
+      }
+    } catch (err) {
+      toast("Error al confirmar la clase", "error")
+    } finally {
+      setConfirmingAttendance(false)
+    }
+  }
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search)
@@ -689,9 +746,15 @@ export default function ClassDetailView({ classId }: { classId: string }) {
 
               {/* Título y Mensaje */}
               <div className="space-y-2">
-                <h3 className="text-2xl font-black tracking-tight text-white">🎸 ¡Asistencia Confirmada!</h3>
+                <h3 className="text-2xl font-black tracking-tight text-white">
+                  {confirmedBy === 'student' ? "🎸 ¡Asistencia Confirmada!" : "🎸 ¡Clase Confirmada!"}
+                </h3>
                 <p className="text-neutral-400 text-sm leading-relaxed font-medium">
-                  El alumno <strong className="text-emerald-400 font-black">{cls.student_name}</strong> ha confirmado personalmente su asistencia para esta sesión.
+                  {confirmedBy === 'student' ? (
+                    <>El alumno <strong className="text-emerald-400 font-black">{cls.student_name}</strong> ha confirmado personalmente su asistencia para esta sesión.</>
+                  ) : (
+                    <>Has registrado exitosamente la confirmación de asistencia para esta clase.</>
+                  )}
                 </p>
               </div>
 
@@ -719,7 +782,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                   onClick={() => setShowConfirmedModal(false)}
                   className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-lg shadow-emerald-950/20 transition-all"
                 >
-                  Entendido, Ver Ficha
+                  Entendido
                 </button>
               </div>
             </div>
@@ -847,11 +910,31 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                   <div className="text-xs md:text-sm text-neutral-500 font-bold">{cls.duration} min</div>
                 </div>
               </div>
-              <div className="flex items-center gap-2 md:gap-3">
+              <div className="flex flex-wrap items-center gap-2 md:gap-3">
                 <div className={`flex items-center gap-1.5 px-3 py-2 md:px-5 md:py-2.5 rounded-xl md:rounded-2xl text-[9px] md:text-xs font-black uppercase tracking-widest border ${sc.color}`}>
                   <sc.icon className="w-3.5 h-3.5 md:w-4 md:h-4" />
                   {sc.label}
                 </div>
+
+                {cls.status === "SCHEDULED" && (
+                  <>
+                    {profile?.role === "STUDENT" && (
+                      <button onClick={handleStudentConfirmAttendance} disabled={confirmingAttendance}
+                        className="flex-1 sm:flex-none px-4 py-2 md:px-6 md:py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl md:rounded-2xl text-xs md:text-sm font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-violet-950/20 disabled:opacity-50">
+                        <CheckCircle2 className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                        {confirmingAttendance ? "Confirmando..." : "Confirmar Asistencia"}
+                      </button>
+                    )}
+                    {profile?.role === "TEACHER" && (
+                      <button onClick={handleTeacherConfirmClass} disabled={confirmingAttendance}
+                        className="flex-1 sm:flex-none px-4 py-2 md:px-6 md:py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl md:rounded-2xl text-xs md:text-sm font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-950/20 disabled:opacity-50">
+                        <CheckCircle2 className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                        {confirmingAttendance ? "Confirmando..." : "Confirmar Clase"}
+                      </button>
+                    )}
+                  </>
+                )}
+
                 {profile?.role === "TEACHER" && (
                   <button onClick={() => setEditing(true)}
                     className="flex-1 sm:flex-none px-4 py-2 md:px-6 md:py-2.5 bg-neutral-900 text-white rounded-xl md:rounded-2xl text-xs md:text-sm font-bold hover:bg-violet-600 transition-all flex items-center justify-center gap-2 shadow-lg shadow-neutral-900/10">

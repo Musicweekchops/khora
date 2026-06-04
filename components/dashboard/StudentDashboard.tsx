@@ -19,7 +19,8 @@ import {
   X,
   FileText,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  CheckCircle2
 } from "lucide-react"
 import Link from "next/link"
 import VideoPlayer from "@/components/ui/VideoPlayer"
@@ -50,6 +51,49 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
   // Classroom Active states
   const [activeCourseId, setActiveCourseId] = useState<string | null>(null)
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null)
+
+  // CONFIRMATION STATE HOOKS
+  const [confirmingId, setConfirmingId] = useState<string | null>(null)
+  const [showConfirmSuccessModal, setShowConfirmSuccessModal] = useState(false)
+  const [confirmedClassDetails, setConfirmedClassDetails] = useState<any>(null)
+
+  const handleConfirmAttendance = async (classId: string) => {
+    setConfirmingId(classId)
+    try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+      const res = await fetch(`${supabaseUrl}/functions/v1/notify-teacher-push`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": anonKey || "",
+          "Authorization": `Bearer ${anonKey}`
+        },
+        body: JSON.stringify({ classId })
+      })
+
+      const data = await res.json()
+      if (res.ok) {
+        if (nextClass && nextClass.id === classId) {
+          setNextClass({ ...nextClass, status: "CONFIRMED" })
+          setConfirmedClassDetails({
+            date: nextClass.date,
+            time: nextClass.start_time.slice(0, 5),
+            modalidad: nextClass.modalidad,
+            teacherName: nextClass.TeacherProfile?.User?.name || "tu profesor"
+          })
+        }
+        setShowConfirmSuccessModal(true)
+      } else {
+        alert(data.error || "No se pudo confirmar la clase.")
+      }
+    } catch (err) {
+      alert("Error al conectar con la pasarela de notificaciones.")
+    } finally {
+      setConfirmingId(null)
+    }
+  }
 
   useEffect(() => {
     if (profile?.studentProfileId) loadData()
@@ -330,12 +374,23 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
                 </div>
               </div>
             </div>
-            <Link 
-              href={`/dashboard/clases/detalles?id=${nextClass.id}`}
-              className="px-6 py-3.5 md:px-8 md:py-4 bg-neutral-100 text-neutral-900 rounded-2xl md:rounded-3xl text-xs md:text-sm font-black hover:bg-neutral-900 hover:text-white transition-all flex items-center justify-center gap-2"
-            >
-              Ver Detalles
-            </Link>
+            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+              {nextClass.status === "SCHEDULED" && (
+                <button
+                  onClick={() => handleConfirmAttendance(nextClass.id)}
+                  disabled={confirmingId === nextClass.id}
+                  className="px-6 py-3.5 md:px-8 md:py-4 bg-violet-600 hover:bg-violet-700 text-white rounded-2xl md:rounded-3xl text-xs md:text-sm font-black transition-all flex items-center justify-center gap-2 shadow-lg shadow-violet-950/20 disabled:opacity-50 flex-1 md:flex-none"
+                >
+                  {confirmingId === nextClass.id ? "Confirmando..." : "Confirmar Asistencia"}
+                </button>
+              )}
+              <Link 
+                href={`/dashboard/clases/detalles?id=${nextClass.id}`}
+                className="px-6 py-3.5 md:px-8 md:py-4 bg-neutral-100 text-neutral-900 rounded-2xl md:rounded-3xl text-xs md:text-sm font-black hover:bg-neutral-900 hover:text-white transition-all flex items-center justify-center gap-2 flex-1 md:flex-none"
+              >
+                Ver Detalles
+              </Link>
+            </div>
           </div>
         </div>
       )}
@@ -754,6 +809,61 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
 
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE ÉXITO DE CONFIRMACIÓN ALUMNO */}
+      {showConfirmSuccessModal && confirmedClassDetails && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-neutral-950/70 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-[#1a1a24] text-white border border-[#2d2d3d] rounded-[32px] max-w-md w-full overflow-hidden shadow-2xl p-8 relative animate-in zoom-in duration-300 font-sans">
+            
+            {/* Destellos ambientales */}
+            <div className="absolute top-[-20%] right-[-10%] w-52 h-52 bg-emerald-500/10 blur-[60px] rounded-full" />
+            <div className="absolute bottom-[-15%] left-[5%] w-40 h-40 bg-violet-500/5 blur-[60px] rounded-full" />
+
+            <div className="relative z-10 text-center space-y-6">
+              {/* Icono de éxito */}
+              <div className="w-16 h-16 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-full flex items-center justify-center mx-auto shadow-lg">
+                <CheckCircle2 className="w-8 h-8 animate-bounce" />
+              </div>
+
+              {/* Título y Mensaje */}
+              <div className="space-y-2">
+                <h3 className="text-2xl font-black tracking-tight text-white">🎸 ¡Asistencia Confirmada!</h3>
+                <p className="text-neutral-400 text-sm leading-relaxed font-medium">
+                  Has confirmado exitosamente tu asistencia. Le hemos notificado a tu profesor <strong className="text-emerald-400 font-black">{confirmedClassDetails.teacherName}</strong>.
+                </p>
+              </div>
+
+              {/* Caja de Detalles */}
+              <div className="bg-[#13131a] border border-[#2d2d3d] rounded-2xl p-5 text-left space-y-3">
+                <div className="flex justify-between text-xs font-semibold">
+                  <span className="text-neutral-400">Fecha de Clase:</span>
+                  <span className="text-white font-black">
+                    {new Date(confirmedClassDetails.date + "T12:00").toLocaleDateString("es-CL", { weekday: "short", day: "numeric", month: "short" })}
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs font-semibold">
+                  <span className="text-neutral-400">Horario:</span>
+                  <span className="text-white font-black">{confirmedClassDetails.time} hs</span>
+                </div>
+                <div className="flex justify-between text-xs font-semibold">
+                  <span className="text-neutral-400">Modalidad:</span>
+                  <span className="text-white font-black capitalize">{confirmedClassDetails.modalidad === "online" ? "📹 Virtual" : "🏠 Presencial"}</span>
+                </div>
+              </div>
+
+              {/* Botón de Acción */}
+              <div className="pt-2">
+                <button
+                  onClick={() => setShowConfirmSuccessModal(false)}
+                  className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-lg shadow-emerald-950/20 transition-all"
+                >
+                  Entendido
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

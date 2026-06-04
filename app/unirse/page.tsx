@@ -356,6 +356,20 @@ function RegistrationForm() {
 
       if (waitlistErr) throw waitlistErr
 
+      // 1.5. Enviar mensaje push de notificación al profesor
+      try {
+        await supabase.functions.invoke("notify-waitlist-push", {
+          body: {
+            teacherId: teacherId,
+            prospectName: form.name.trim(),
+            dayOfWeek: Number(waitlistPref.day),
+            startTime: timeFormatted
+          }
+        })
+      } catch (pushErr) {
+        console.error("Error al gatillar notificación push:", pushErr)
+      }
+
       // 2. Medir conversión en Meta Ads
       trackMetaLead()
 
