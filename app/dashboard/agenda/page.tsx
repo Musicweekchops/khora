@@ -6,6 +6,8 @@ import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/context/AuthContext"
 import { formatTime } from "@/lib/utils"
 import AvailabilitySettings from "@/components/agenda/AvailabilitySettings"
+import { checkTeacherConflict } from "@/lib/availability"
+import { toast } from "sonner"
 
 interface CalendarClass {
   id: string; date: string; start_time: string; end_time: string
@@ -207,7 +209,21 @@ export default function AgendaPage() {
     if (!selectedSlot || !profile?.teacherProfileId) return
     setSaving(true)
 
-    await supabase.from("Class").insert({
+    // Validar traslape
+    const hasConflict = await checkTeacherConflict(
+      profile.teacherProfileId,
+      selectedSlot.date,
+      quickForm.start_time,
+      quickForm.end_time
+    )
+
+    if (hasConflict) {
+      toast.error("El profesor ya tiene una clase o reserva programada en ese horario.")
+      setSaving(false)
+      return
+    }
+
+    const { error: insertErr } = await supabase.from("Class").insert({
       teacher_id: profile.teacherProfileId,
       student_id: quickForm.student_id || null,
       date: selectedSlot.date,
@@ -216,6 +232,12 @@ export default function AgendaPage() {
       modalidad: quickForm.modalidad,
       status: "SCHEDULED",
     })
+
+    if (insertErr) {
+      toast.error("Error al crear la clase: " + insertErr.message)
+    } else {
+      toast.success("Clase agendada con éxito")
+    }
 
     setSaving(false)
     setShowModal(false)

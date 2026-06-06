@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/context/AuthContext"
 import { toDateStr } from "@/lib/utils"
+import { checkTeacherConflict } from "@/lib/availability"
 
 export default function NuevaClasePage() {
   const router = useRouter()
@@ -35,6 +36,18 @@ export default function NuevaClasePage() {
     setLoading(true)
     try {
       if (!profile?.teacherProfileId) throw new Error("Sin perfil de profesor")
+
+      // Validar traslape
+      const hasConflict = await checkTeacherConflict(
+        profile.teacherProfileId,
+        form.date,
+        form.start_time,
+        form.end_time
+      )
+
+      if (hasConflict) {
+        throw new Error("El profesor ya tiene una clase o reserva programada en ese horario.")
+      }
 
       const { error: insertErr } = await supabase.from("Class").insert({
         teacher_id: profile.teacherProfileId,

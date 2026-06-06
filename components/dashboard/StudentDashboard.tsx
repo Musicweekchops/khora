@@ -249,7 +249,7 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
         // Cargar compras realizadas
         const { data: purchasesData } = await supabase
           .from("Purchase")
-          .select("id, product_id, amount_paid, payment_method, purchase_date, Product(*)")
+          .select("id, product_id, amount_paid, payment_method, purchase_date, created_at, Product(*)")
           .eq("student_id", profile.studentProfileId!)
 
         const loadedPurchases = purchasesData || []
@@ -559,7 +559,7 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
                               <div className="flex items-center gap-2 mt-1.5 text-[9px] font-bold text-neutral-400 uppercase">
                                 <span>{purchase.payment_method === 'MERCADOPAGO' ? 'Mercado Pago' : 'Manual'}</span>
                                 <span>•</span>
-                                <span>{new Date(purchase.purchase_date).toLocaleDateString('es-CL')}</span>
+                                <span>{new Date(purchase.created_at).toLocaleString("es-CL", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })} hs</span>
                               </div>
                             </div>
 

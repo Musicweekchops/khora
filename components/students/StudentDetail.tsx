@@ -20,7 +20,7 @@ interface StudentData {
 
 interface ClassRow { id: string; date: string; start_time: string; end_time: string; status: string; modalidad: string }
 interface TaskRow { id: string; title: string; completed: boolean; created_at: string; class_date: string }
-interface PaymentRow { id: string; amount: number; method: string; date: string; notes?: string }
+interface PaymentRow { id: string; amount: number; method: string; date: string; created_at: string; notes?: string }
 interface NoteRow { id: string; content: string; created_at: string; class_date: string }
 
 export default function StudentDetail({ studentId }: { studentId: string }) {
@@ -100,9 +100,9 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
     // Payments
     const { data: py } = await supabase
       .from("Payment")
-      .select("id, amount, method, date, notes")
+      .select("id, amount, method, date, created_at, notes")
       .eq("student_id", studentId)
-      .order("date", { ascending: false })
+      .order("created_at", { ascending: false })
 
     if (py) setPayments(py)
 
@@ -577,7 +577,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
                     {payments.map(p => (
                       <tr key={p.id} className="border-b border-neutral-50 hover:bg-neutral-50/50 transition-colors">
                         <td className="px-6 py-4 font-bold text-neutral-900 whitespace-nowrap">
-                          {new Date(p.date + "T12:00").toLocaleDateString("es-CL")}
+                          {new Date(p.created_at).toLocaleString("es-CL", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })} hs
                         </td>
                         <td className="px-6 py-4 font-black text-emerald-600 whitespace-nowrap">
                           {formatCurrency(p.amount)}

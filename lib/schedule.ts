@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase"
+import { filterConflictFreeDates } from "@/lib/availability"
 
 const DAY_NAMES = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"]
 
@@ -79,11 +80,22 @@ export async function generateClassesForSchedule(
 
   if (toCreate.length === 0) return { created: 0, skipped: dates.length }
 
-  const rows = toCreate.map(d => ({
+  // Filtrar traslapes/conflictos para el profesor (excluyendo este mismo schedule)
+  const conflictFreeDates = await filterConflictFreeDates(
+    teacherId,
+    toCreate,
+    startTime,
+    endTime,
+    scheduleId
+  )
+
+  if (conflictFreeDates.length === 0) return { created: 0, skipped: dates.length }
+
+  const rows = conflictFreeDates.map(dStr => ({
     teacher_id: teacherId,
     student_id: studentId,
     schedule_id: scheduleId,
-    date: toDateStr(d),
+    date: dStr,
     start_time: startTime,
     end_time: endTime,
     modalidad,
@@ -98,7 +110,7 @@ export async function generateClassesForSchedule(
     throw new Error(error.message)
   }
 
-  return { created: toCreate.length, skipped: dates.length - toCreate.length }
+  return { created: conflictFreeDates.length, skipped: dates.length - conflictFreeDates.length }
 }
 
 /**
@@ -166,24 +178,35 @@ export async function rescheduleFutureClasses(
   const datesCurrent = getDatesForDayInRange(dayOfWeek, effectiveStart, endOfMonth)
 
   if (datesCurrent.length > 0) {
-    const rows = datesCurrent.map(d => ({
-      teacher_id: teacherId,
-      student_id: studentId,
-      schedule_id: scheduleId,
-      date: toDateStr(d),
-      start_time: startTime,
-      end_time: endTime,
-      modalidad,
-      status: "SCHEDULED",
-      is_recurring: true,
-    }))
+    const conflictFreeCurrent = await filterConflictFreeDates(
+      teacherId,
+      datesCurrent,
+      startTime,
+      endTime,
+      scheduleId
+    )
 
-    const { error: insertErr } = await supabase.from("Class").insert(rows)
-    if (insertErr) {
-      console.error("[Schedule] Error inserting current month rescheduled classes:", insertErr)
-      throw new Error(insertErr.message)
+    if (conflictFreeCurrent.length > 0) {
+      const rows = conflictFreeCurrent.map(dStr => ({
+        teacher_id: teacherId,
+        student_id: studentId,
+        schedule_id: scheduleId,
+        date: dStr,
+        start_time: startTime,
+        end_time: endTime,
+        modalidad,
+        status: "SCHEDULED",
+        is_recurring: true,
+      }))
+
+      const { error: insertErr } = await supabase.from("Class").insert(rows)
+      if (insertErr) {
+        console.error("[Schedule] Error inserting current month rescheduled classes:", insertErr)
+        throw new Error(insertErr.message)
+      }
+      createdCount += conflictFreeCurrent.length
     }
-    createdCount += datesCurrent.length
+    skippedCount += (datesCurrent.length - conflictFreeCurrent.length)
   }
 
   // 3. Generar nuevas clases para el próximo mes completo

@@ -1089,7 +1089,7 @@ export default function ProductosPage() {
                             <span className="font-semibold text-neutral-900 block truncate">{productTitle}</span>
                             <span className="text-[8px] font-black uppercase text-neutral-400 block mt-0.5">{productTypeStr}</span>
                           </td>
-                          <td className="p-4 text-neutral-500 whitespace-nowrap">{new Date(purchase.purchase_date).toLocaleDateString('es-CL')}</td>
+                          <td className="p-4 text-neutral-500 whitespace-nowrap">{new Date(purchase.created_at).toLocaleString("es-CL", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })} hs</td>
                           <td className="p-4 text-right font-black text-neutral-900 whitespace-nowrap">${Number(purchase.amount_paid).toLocaleString("es-CL")}</td>
                           <td className="p-4 text-center">
                             <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider whitespace-nowrap ${

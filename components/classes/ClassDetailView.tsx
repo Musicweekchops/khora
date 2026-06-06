@@ -31,6 +31,7 @@ import {
 import VideoPlayer from "@/components/ui/VideoPlayer"
 import { useToast } from "@/components/ui/Toast"
 import LibraryPickerModal from "@/components/ui/LibraryPickerModal"
+import { checkTeacherConflict } from "@/lib/availability"
 
 interface ClassData {
   id: string; date: string; start_time: string; end_time: string
@@ -133,6 +134,27 @@ export default function ClassDetailView({ classId }: { classId: string }) {
         setCls(prev => prev ? { ...prev, status: "CONFIRMED" } : null)
         setShowConfirmedModal(true)
         toast("Clase confirmada con éxito", "success")
+
+        // Trigger student email notification
+        if (cls?.student_email) {
+          supabase.functions.invoke("send-email", {
+            body: {
+              to: cls.student_email,
+              type: "STUDENT_CLASS_CONFIRMED",
+              params: {
+                studentName: cls.student_name,
+                teacherName: profile?.name || "Tu profesor",
+                date: cls.date,
+                time: cls.start_time.slice(0, 5)
+              }
+            }
+          }).catch(err => console.error("Error sending class confirmation email to student:", err))
+        }
+
+        // Trigger student push notification
+        supabase.functions.invoke("notify-student-push", {
+          body: { classId }
+        }).catch(err => console.error("Error sending push to student:", err))
       }
     } catch (err) {
       toast("Error al confirmar la clase", "error")
@@ -412,8 +434,24 @@ export default function ClassDetailView({ classId }: { classId: string }) {
   }
 
   async function executeSave(applyToAll: boolean) {
+    if (!cls) return
     setSavingEdit(true)
     
+    // Validar traslape
+    const hasConflict = await checkTeacherConflict(
+      cls.teacher_id,
+      editForm.date,
+      editForm.start_time,
+      editForm.end_time,
+      classId
+    )
+
+    if (hasConflict) {
+      toast("El profesor ya tiene una clase o reserva programada en ese horario.", "error")
+      setSavingEdit(false)
+      return
+    }
+
     if (applyToAll && cls?.student_id) {
       // 1. Update current class
       const { error: errCurr } = await supabase.from("Class").update({

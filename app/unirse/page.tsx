@@ -4,7 +4,7 @@ import React, { useEffect, useState, Suspense } from "react"
 import { supabase } from "@/lib/supabase"
 import { useRouter, useSearchParams } from "next/navigation"
 import { formatTime } from "@/lib/utils"
-import { getAvailableSlots } from "@/lib/availability"
+import { getAvailableSlots, checkTeacherConflict } from "@/lib/availability"
 import { DAY_NAMES } from "@/lib/schedule"
 import { useToast } from "@/components/ui/Toast"
 import {
@@ -181,6 +181,23 @@ function RegistrationForm() {
     setError("")
 
     try {
+      // Validar traslape del slot elegido
+      const [h, m] = selectedSlot.split(":").map(Number)
+      const endD = new Date()
+      endD.setHours(h, m + 60, 0, 0)
+      const endTimeStr = `${String(endD.getHours()).padStart(2, "0")}:${String(endD.getMinutes()).padStart(2, "0")}:00`
+
+      const hasConflict = await checkTeacherConflict(
+        teacherId,
+        selectedDate,
+        selectedSlot,
+        endTimeStr
+      )
+
+      if (hasConflict) {
+        throw new Error("Este horario acaba de ser reservado por otra persona. Por favor regresa y elige otro horario.")
+      }
+
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
       const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
@@ -293,10 +310,6 @@ function RegistrationForm() {
         })
         .eq("user_id", newUserId)
 
-      const [h, m] = selectedSlot.split(":").map(Number)
-      const endD = new Date()
-      endD.setHours(h, m + 60, 0, 0)
-      const endTimeStr = `${String(endD.getHours()).padStart(2, "0")}:${String(endD.getMinutes()).padStart(2, "0")}:00`
 
       await supabase.from("Booking").insert({
         teacher_id: teacherId,

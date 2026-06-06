@@ -41,6 +41,7 @@ serve(async (req) => {
       TEACHER_CLASS_CONFIRMED: "Clase confirmada por tu alumno",
       TEACHER_NEW_STUDENT: "¡Tienes un nuevo alumno inscrito en Khora! 🎉",
       PAYMENT_CONFIRMATION: "Confirmación de Pago - Recibo de Clases Khora ✓",
+      STUDENT_CLASS_CONFIRMED: "¡Tu clase de música ha sido confirmada!",
     }
 
     const finalSubject = subject || defaultSubjects[type as EmailType] || "Notificación de Khora"
