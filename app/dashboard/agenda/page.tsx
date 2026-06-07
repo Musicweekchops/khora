@@ -97,6 +97,15 @@ export default function AgendaPage() {
   }, [currentMonthDate])
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get("setup") === "true") {
+        setShowAvailModal(true)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
     console.log("[Agenda] Profile state:", { 
       hasProfile: !!profile, 
       teacherId: profile?.teacherProfileId 

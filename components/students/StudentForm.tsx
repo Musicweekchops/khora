@@ -141,7 +141,7 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
           .maybeSingle()
 
         if (sp) {
-          router.push(`/dashboard/alumnos/detalles?id=${sp.id}`)
+          router.push(`/dashboard/alumnos/detalles?id=${sp.id}&newStudent=true&email=${encodeURIComponent(email)}&password=${encodeURIComponent(initialPassword)}`)
           return
         }
 
@@ -150,11 +150,22 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
         // EDIT mode
         const { data: sp } = await supabase
           .from("StudentProfile")
-          .select("user_id")
+          .select("user_id, User ( email )")
           .eq("id", studentId)
           .maybeSingle()
 
         if (!sp) throw new Error("Perfil no encontrado")
+
+        const oldEmail = (sp.User as any)?.email
+        const newEmail = form.email.trim().toLowerCase()
+
+        if (newEmail !== oldEmail) {
+          const { error: emailErr } = await supabase.rpc("update_student_email", {
+            p_user_id: sp.user_id,
+            p_new_email: newEmail
+          })
+          if (emailErr) throw new Error(emailErr.message)
+        }
 
         await supabase.from("User").update({
           name: form.name,
@@ -205,7 +216,7 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
               <input type="text" required value={form.name} onChange={e => set("name", e.target.value)} className="input-field" placeholder="Ej: Rodrigo Tapia" />
             </Field>
             <Field label="Correo Electrónico *" icon="✉️">
-              <input type="email" required value={form.email} onChange={e => set("email", e.target.value)} className="input-field" placeholder="nombre@ejemplo.com" disabled={mode === "edit"} />
+              <input type="email" required value={form.email} onChange={e => set("email", e.target.value)} className="input-field" placeholder="nombre@ejemplo.com" />
             </Field>
             <Field label="Teléfono / WhatsApp" icon="📞">
               <input type="tel" value={form.phone} onChange={e => set("phone", e.target.value)} className="input-field" placeholder="+56 9 ..." />

@@ -52,6 +52,20 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
   const [assigning, setAssigning] = useState(false)
   const [showModal, setShowModal] = useState(false)
 
+  const [successParams, setSuccessParams] = useState<{ email: string; pass: string } | null>(null)
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get("newStudent") === "true") {
+        setSuccessParams({
+          email: params.get("email") || "",
+          pass: params.get("password") || ""
+        })
+      }
+    }
+  }, [])
+
   useEffect(() => { loadAll() }, [studentId])
 
   async function loadAll() {
@@ -319,6 +333,44 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
 
   return (
     <div className="space-y-6">
+      {successParams && (
+        <div className="bg-emerald-600 text-white rounded-3xl p-6 md:p-8 shadow-xl shadow-emerald-900/10 space-y-4 animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="flex items-start gap-4">
+            <span className="text-3xl">🎉</span>
+            <div className="flex-1 space-y-1">
+              <h2 className="text-lg font-black leading-tight uppercase tracking-wider">¡Alumno Registrado con Éxito!</h2>
+              <p className="text-xs text-emerald-100 font-medium leading-relaxed">
+                El perfil de {student.user.name} ha sido creado y su cuenta de acceso de estudiante ya está lista.
+              </p>
+            </div>
+            <button 
+              onClick={() => setSuccessParams(null)}
+              className="text-white/60 hover:text-white p-1"
+            >
+              ✕
+            </button>
+          </div>
+          
+          <div className="bg-black/10 border border-white/10 rounded-2xl p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div className="text-xs space-y-1 font-bold">
+              <p><span className="opacity-60">Usuario/Email:</span> <span className="underline">{successParams.email}</span></p>
+              <p><span className="opacity-60">Contraseña temporal:</span> <span className="font-mono bg-black/20 px-1.5 py-0.5 rounded">{successParams.pass}</span></p>
+            </div>
+            
+            <button
+              onClick={() => {
+                const welcomeMsg = `¡Hola ${student.user.name.split(" ")[0]}! Te saluda tu profesor. Te he creado tu cuenta de acceso en Khora 🎵\n\nEntra en: ${window.location.origin}/login\nUsuario: ${successParams.email}\nContraseña temporal: ${successParams.pass}\n\nAllí podrás revisar tus clases, tareas asignadas y más.`
+                navigator.clipboard.writeText(welcomeMsg)
+                toast.success("¡Datos copiados para WhatsApp!")
+              }}
+              className="w-full md:w-auto bg-white text-emerald-700 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-emerald-50 active:scale-98 transition-all flex items-center justify-center gap-2"
+            >
+              📱 Copiar para WhatsApp
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* HEADER */}
       <div className="bg-white rounded-2xl md:rounded-3xl border border-neutral-100 p-4 md:p-8">
         <div className="flex flex-col md:flex-row items-start justify-between gap-6">
