@@ -11,15 +11,26 @@ export const PromoVideo = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  // Animación base para transiciones entre slides (cada 150 frames = 5 segundos)
-  const slideIndex = Math.floor(frame / 150);
-  const slideProgress = frame % 150;
+  // Dividimos 900 frames en 7 slides (130 frames para los primeros 6 slides, 120 para el final)
+  const getSlideIndex = (f: number) => {
+    if (f < 130) return 0;
+    if (f < 260) return 1;
+    if (f < 390) return 2;
+    if (f < 520) return 3;
+    if (f < 650) return 4;
+    if (f < 780) return 5;
+    return 6;
+  };
 
-  // Spring base para movimientos suaves
-  const transitionSpring = spring({
+  const slideIndex = getSlideIndex(frame);
+  const slideStarts = [0, 130, 260, 390, 520, 650, 780];
+  const slideProgress = frame - slideStarts[slideIndex];
+
+  // Animaciones spring para entradas
+  const entrySpring = spring({
     frame: slideProgress,
     fps,
-    config: { damping: 14, stiffness: 100 },
+    config: { damping: 15, stiffness: 90 },
   });
 
   const fontStyle = {
@@ -29,19 +40,19 @@ export const PromoVideo = () => {
   return (
     <AbsoluteFill
       style={{
-        backgroundColor: "#08070b",
-        color: "#ffffff",
+        backgroundColor: "#f9fafb", // Fondo neutral claro real de Khora
+        color: "#111827",
         overflow: "hidden",
         ...fontStyle,
       }}
     >
       {/* =======================================================================
-          SLIDE 1: EL DOLOR (0s - 5s / Frames 0 - 150)
+          SLIDE 1: EL DOLOR (0s - 4.3s / Frames 0 - 130)
           ======================================================================= */}
-      {frame < 150 && (
+      {slideIndex === 0 && (
         <AbsoluteFill
           style={{
-            background: "radial-gradient(circle at center, #3c1515 0%, #08070b 100%)",
+            background: "radial-gradient(circle at center, #fef2f2 0%, #f9fafb 100%)",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
@@ -50,67 +61,66 @@ export const PromoVideo = () => {
             textAlign: "center",
           }}
         >
-          {/* Alerta inicial */}
           <span
             style={{
               backgroundColor: "rgba(239, 68, 68, 0.1)",
-              color: "#f87171",
-              border: "1px solid rgba(239, 68, 68, 0.3)",
+              color: "#ef4444",
+              border: "1px solid rgba(239, 68, 68, 0.2)",
               fontSize: 22,
               fontWeight: 800,
               textTransform: "uppercase",
               letterSpacing: 3,
               padding: "10px 24px",
               borderRadius: 99,
-              opacity: interpolate(frame, [0, 15], [0, 1]),
-              transform: `translateY(${interpolate(frame, [0, 15], [-20, 0], { extrapolateRight: "clamp" })}px)`,
+              opacity: interpolate(slideProgress, [0, 15], [0, 1]),
+              transform: `translateY(${interpolate(slideProgress, [0, 15], [-20, 0], { extrapolateRight: "clamp" })}px)`,
             }}
           >
-            ¿Haces clases de música?
+            ¿Haces clases particulares?
           </span>
 
           <h1
             style={{
-              fontSize: 70,
+              fontSize: 68,
               fontWeight: 950,
-              lineHeight: 1.1,
+              lineHeight: 1.15,
               marginTop: 40,
+              color: "#111827",
               letterSpacing: "-0.03em",
-              color: "#ffffff",
-              transform: `scale(${interpolate(frame, [10, 30], [0.85, 1], {
+              transform: `scale(${interpolate(slideProgress, [10, 35], [0.85, 1], {
                 extrapolateRight: "clamp",
               })})`,
-              opacity: interpolate(frame, [10, 30], [0, 1]),
+              opacity: interpolate(slideProgress, [10, 35], [0, 1]),
             }}
           >
             ¿Sigues coordinando por chats y cuadernos?
           </h1>
 
-          {/* Elementos caóticos flotantes */}
+          {/* Iconos de desorden */}
           <div
             style={{
               display: "flex",
               gap: 30,
               marginTop: 60,
               fontSize: 90,
-              opacity: interpolate(frame, [30, 60], [0, 1]),
+              opacity: interpolate(slideProgress, [30, 60], [0, 1]),
             }}
           >
-            <span style={{ transform: `rotate(-15deg) translateY(${Math.sin(frame * 0.08) * 10}px)` }}>📝</span>
-            <span style={{ transform: `rotate(10deg) translateY(${Math.cos(frame * 0.08) * 10}px)` }}>💬</span>
-            <span style={{ transform: `rotate(-5deg) translateY(${Math.sin(frame * 0.06) * 12}px)` }}>🤯</span>
-            <span style={{ transform: `rotate(20deg) translateY(${Math.cos(frame * 0.06) * 12}px)` }}>❌</span>
+            <span style={{ transform: `rotate(-15deg) translateY(${Math.sin(slideProgress * 0.08) * 10}px)` }}>📝</span>
+            <span style={{ transform: `rotate(10deg) translateY(${Math.cos(slideProgress * 0.08) * 10}px)` }}>💬</span>
+            <span style={{ transform: `rotate(-5deg) translateY(${Math.sin(slideProgress * 0.06) * 12}px)` }}>🤯</span>
+            <span style={{ transform: `rotate(20deg) translateY(${Math.cos(slideProgress * 0.06) * 12}px)` }}>❌</span>
           </div>
         </AbsoluteFill>
       )}
 
       {/* =======================================================================
-          SLIDE 2: EL PROBLEMA (5s - 10s / Frames 150 - 300)
+          SLIDE 2: EL PROBLEMA (4.3s - 8.6s / Frames 130 - 260)
           ======================================================================= */}
-      {frame >= 150 && frame < 300 && (
+      {slideIndex === 1 && (
         <AbsoluteFill
           style={{
-            background: "radial-gradient(circle at center, #2e1010 0%, #08070b 100%)",
+            background: "radial-gradient(circle at center, #fff5f5 0%, #f9fafb 100%)",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
@@ -120,77 +130,80 @@ export const PromoVideo = () => {
         >
           <h2
             style={{
-              fontSize: 55,
+              fontSize: 52,
               fontWeight: 900,
-              color: "#fca5a5",
+              color: "#dc2626",
               textAlign: "center",
-              lineHeight: 1.2,
+              lineHeight: 1.25,
               marginBottom: 60,
+              letterSpacing: "-0.02em",
               opacity: interpolate(slideProgress, [0, 20], [0, 1]),
             }}
           >
             El desorden te cuesta tiempo y dinero:
           </h2>
 
-          {/* Lista de dolores que aparecen secuencialmente */}
-          <div style={{ width: "100%", spaceY: 30, display: "flex", flexDirection: "column", gap: 30 }}>
-            {/* Dolor 1 */}
+          <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 30 }}>
+            {/* Problema 1 */}
             <div
               style={{
-                backgroundColor: "#181313",
-                border: "1px solid #3c1a1a",
+                backgroundColor: "#ffffff",
+                border: "1px solid #fee2e2",
                 borderRadius: 24,
                 padding: 30,
                 display: "flex",
                 alignItems: "center",
                 gap: 25,
-                transform: `translateX(${interpolate(slideProgress, [20, 40], [-100, 0], { extrapolateRight: "clamp" })}px)`,
+                boxShadow: "0 4px 6px -1px rgba(0,0,0,0.02)",
+                transform: `translateX(${interpolate(slideProgress, [20, 40], [-80, 0], { extrapolateRight: "clamp" })}px)`,
                 opacity: interpolate(slideProgress, [20, 40], [0, 1]),
               }}
             >
               <span style={{ fontSize: 45 }}>💸</span>
-              <p style={{ fontSize: 28, fontWeight: 700, color: "#fca5a5" }}>
-                Alumnos que olvidan pagar a fin de mes.
+              <p style={{ fontSize: 26, fontWeight: 700, color: "#991b1b" }}>
+                Alumnos que olvidan pagar sus mensualidades.
               </p>
             </div>
 
-            {/* Dolor 2 */}
+            {/* Problema 2 */}
             <div
               style={{
-                backgroundColor: "#181313",
-                border: "1px solid #3c1a1a",
+                backgroundColor: "#ffffff",
+                border: "1px solid #fee2e2",
                 borderRadius: 24,
                 padding: 30,
                 display: "flex",
                 alignItems: "center",
                 gap: 25,
-                transform: `translateX(${interpolate(slideProgress, [40, 60], [100, 0], { extrapolateRight: "clamp" })}px)`,
+                boxShadow: "0 4px 6px -1px rgba(0,0,0,0.02)",
+                transform: `translateX(${interpolate(slideProgress, [40, 60], [80, 0], { extrapolateRight: "clamp" })}px)`,
                 opacity: interpolate(slideProgress, [40, 60], [0, 1]),
               }}
             >
               <span style={{ fontSize: 45 }}>📄</span>
-              <p style={{ fontSize: 28, fontWeight: 700, color: "#fca5a5" }}>
-                Partituras y videos perdidos en el chat.
+              <p style={{ fontSize: 26, fontWeight: 700, color: "#991b1b" }}>
+                Partituras y videos perdidos en WhatsApp.
               </p>
             </div>
 
-            {/* Dolor 3 */}
+            {/* Problema 3 */}
             <div
               style={{
-                backgroundColor: "#181313",
-                border: "1px solid #3c1a1a",
+                backgroundColor: "#ffffff",
+                border: "1px solid #fee2e2",
                 borderRadius: 24,
                 padding: 30,
                 display: "flex",
                 alignItems: "center",
                 gap: 25,
-                transform: `translateX(${interpolate(slideProgress, [60, 80], [-100, 0], { extrapolateRight: "clamp" })}px)`,
+                boxShadow: "0 4px 6px -1px rgba(0,0,0,0.02)",
+                transform: `translateX(${interpolate(slideProgress, [60, 80], [-80, 0], { extrapolateRight: "clamp" })}px)`,
                 opacity: interpolate(slideProgress, [60, 80], [0, 1]),
               }}
             >
-              <span style={{ fontSize: 45 }}>📅</span>
-              <p style={{ fontSize: 28, fontWeight: 700, color: "#fca5a5" }}>
-                Coordinación caótica de reprogramaciones.
+              <span style={{ fontSize: 45 }}>⏰</span>
+              <p style={{ fontSize: 26, fontWeight: 700, color: "#991b1b" }}>
+                Horas perdidas coordinando reprogramaciones.
               </p>
             </div>
           </div>
@@ -198,12 +211,12 @@ export const PromoVideo = () => {
       )}
 
       {/* =======================================================================
-          SLIDE 3: LA SOLUCIÓN - KHORA (10s - 15s / Frames 300 - 450)
+          SLIDE 3: LA SOLUCIÓN - KHORA (8.6s - 13s / Frames 260 - 390)
           ======================================================================= */}
-      {frame >= 300 && frame < 450 && (
+      {slideIndex === 2 && (
         <AbsoluteFill
           style={{
-            background: "radial-gradient(circle at center, #2e1c4e 0%, #08070b 100%)",
+            background: "radial-gradient(circle at center, #f5f3ff 0%, #f9fafb 100%)",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
@@ -215,18 +228,18 @@ export const PromoVideo = () => {
           {/* Logo animado K */}
           <div
             style={{
-              width: 160,
-              height: 160,
-              backgroundColor: "#ffffff",
-              color: "#08070b",
+              width: 170,
+              height: 170,
+              backgroundColor: "#7c3aed",
+              color: "#ffffff",
               borderRadius: 45,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 90,
+              fontSize: 95,
               fontWeight: 950,
-              boxShadow: "0 25px 50px rgba(139, 92, 246, 0.4)",
-              transform: `scale(${transitionSpring}) rotate(${interpolate(
+              boxShadow: "0 25px 50px -12px rgba(124, 58, 237, 0.3)",
+              transform: `scale(${entrySpring}) rotate(${interpolate(
                 slideProgress,
                 [0, 50],
                 [-45, 0]
@@ -240,9 +253,9 @@ export const PromoVideo = () => {
             style={{
               fontSize: 75,
               fontWeight: 950,
-              marginTop: 60,
-              lineHeight: 1.1,
-              background: "linear-gradient(to right, #c084fc, #818cf8)",
+              marginTop: 50,
+              lineHeight: 1.15,
+              background: "linear-gradient(to right, #7c3aed, #4f46e5)",
               WebkitBackgroundClip: "text",
               WebkitTextFillColor: "transparent",
               letterSpacing: "-0.03em",
@@ -255,25 +268,25 @@ export const PromoVideo = () => {
           <p
             style={{
               fontSize: 34,
-              color: "#e4e4e7",
+              color: "#4b5563",
               fontWeight: 600,
               marginTop: 25,
-              lineHeight: 1.3,
-              opacity: interpolate(slideProgress, [40, 70], [0, 1]),
+              lineHeight: 1.35,
+              opacity: interpolate(slideProgress, [45, 75], [0, 1]),
             }}
           >
-            Todo tu control de clases, pagos y biblioteca en un solo lugar.
+            El panel definitivo para controlar tus clases, pagos y material de estudio.
           </p>
         </AbsoluteFill>
       )}
 
       {/* =======================================================================
-          SLIDE 4: HIGHLIGHT 1 - BIBLIOTECA (15s - 20s / Frames 450 - 600)
+          SLIDE 4: HIGHLIGHT 1 - AGENDA PÚBLICA (13s - 17.3s / Frames 390 - 520)
           ======================================================================= */}
-      {frame >= 450 && frame < 600 && (
+      {slideIndex === 3 && (
         <AbsoluteFill
           style={{
-            background: "radial-gradient(circle at center, #182236 0%, #08070b 100%)",
+            background: "radial-gradient(circle at center, #fafafa 0%, #f9fafb 100%)",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
@@ -284,9 +297,85 @@ export const PromoVideo = () => {
           <div style={{ textAlign: "center", marginBottom: 50 }}>
             <span
               style={{
-                backgroundColor: "rgba(129, 140, 248, 0.15)",
-                color: "#93c5fd",
-                border: "1px solid rgba(129, 140, 248, 0.3)",
+                backgroundColor: "rgba(124, 58, 237, 0.08)",
+                color: "#7c3aed",
+                border: "1px solid rgba(124, 58, 237, 0.2)",
+                fontSize: 18,
+                fontWeight: 800,
+                textTransform: "uppercase",
+                letterSpacing: 2,
+                padding: "8px 20px",
+                borderRadius: 99,
+              }}
+            >
+              Agenda Inteligente
+            </span>
+            <h3 style={{ fontSize: 62, fontWeight: 950, marginTop: 25, letterSpacing: "-0.02em" }}>
+              Tu Link de Reserva
+            </h3>
+            <p style={{ fontSize: 26, color: "#4b5563", marginTop: 15, lineHeight: 1.4 }}>
+              Tus alumnos agendan solos según tus horarios disponibles.
+            </p>
+          </div>
+
+          {/* MOCKUP REAL DE AGENDA DE KHORA */}
+          <div
+            style={{
+              width: "100%",
+              backgroundColor: "#ffffff",
+              borderRadius: 36,
+              border: "1px solid #e5e7eb",
+              padding: 35,
+              boxShadow: "0 20px 25px -5px rgba(0,0,0,0.05), 0 10px 10px -5px rgba(0,0,0,0.01)",
+              transform: `translateY(${interpolate(slideProgress, [0, 40], [150, 0], { extrapolateRight: "clamp" })}px)`,
+              opacity: interpolate(slideProgress, [0, 40], [0, 1]),
+            }}
+          >
+            {/* Header del profesor */}
+            <div style={{ display: "flex", alignItems: "center", gap: 15, borderBottom: "1px solid #f3f4f6", paddingBottom: 20 }}>
+              <div style={{ width: 45, height: 45, borderRadius: 14, backgroundColor: "#7c3aed", color: "#ffffff", display: "flex", alignItems: "center", justifyCenter: "center", fontSize: 20, fontWeight: 900 }}>P</div>
+              <div>
+                <p style={{ fontSize: 16, fontWeight: 900, color: "#111827" }}>Agenda con Pedro</p>
+                <p style={{ fontSize: 11, color: "#6b7280", fontWeight: 700 }}>Clase de Batería 60m</p>
+              </div>
+            </div>
+
+            {/* Slots de Horario */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 20 }}>
+              <div style={{ backgroundColor: "#f3f4f6", padding: "14px 0", borderRadius: 14, textAlign: "center", fontSize: 14, fontWeight: 700, color: "#4b5563" }}>10:00 AM</div>
+              <div style={{ backgroundColor: "#7c3aed", padding: "14px 0", borderRadius: 14, textAlign: "center", fontSize: 14, fontWeight: 800, color: "#ffffff", transform: "scale(1.03)", boxShadow: "0 4px 12px rgba(124, 58, 237, 0.25)" }}>11:30 AM ✓</div>
+              <div style={{ backgroundColor: "#f3f4f6", padding: "14px 0", borderRadius: 14, textAlign: "center", fontSize: 14, fontWeight: 700, color: "#4b5563" }}>03:00 PM</div>
+              <div style={{ backgroundColor: "#f3f4f6", padding: "14px 0", borderRadius: 14, textAlign: "center", fontSize: 14, fontWeight: 700, color: "#4b5563" }}>04:30 PM</div>
+            </div>
+            
+            {/* Botón de envío */}
+            <div style={{ marginTop: 25, backgroundColor: "#111827", color: "#ffffff", padding: "14px 0", borderRadius: 14, textAlign: "center", fontSize: 14, fontWeight: 900 }}>
+              🎵 Solicitar Reserva
+            </div>
+          </div>
+        </AbsoluteFill>
+      )}
+
+      {/* =======================================================================
+          SLIDE 5: HIGHLIGHT 2 - BIBLIOTECA (17.3s - 21.6s / Frames 520 - 650)
+          ======================================================================= */}
+      {slideIndex === 4 && (
+        <AbsoluteFill
+          style={{
+            background: "radial-gradient(circle at center, #fafafa 0%, #f9fafb 100%)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "0 80px",
+          }}
+        >
+          <div style={{ textAlign: "center", marginBottom: 50 }}>
+            <span
+              style={{
+                backgroundColor: "rgba(16, 185, 129, 0.08)",
+                color: "#10b981",
+                border: "1px solid rgba(16, 185, 129, 0.2)",
                 fontSize: 18,
                 fontWeight: 800,
                 textTransform: "uppercase",
@@ -298,42 +387,54 @@ export const PromoVideo = () => {
               Biblioteca Digital
             </span>
             <h3 style={{ fontSize: 62, fontWeight: 950, marginTop: 25, letterSpacing: "-0.02em" }}>
-              Materiales Compartidos
+              Materiales y Tareas
             </h3>
-            <p style={{ fontSize: 26, color: "#9ca3af", marginTop: 15, lineHeight: 1.4 }}>
-              Asigna partituras, audios y videos directamente al perfil de cada alumno.
+            <p style={{ fontSize: 26, color: "#4b5563", marginTop: 15, lineHeight: 1.4 }}>
+              Asigna partituras, PDFs y videos directo a sus perfiles de alumno.
             </p>
           </div>
 
-          {/* Tarjeta de simulación de biblioteca */}
+          {/* MOCKUP REAL DE BIBLIOTECA DE KHORA */}
           <div
             style={{
               width: "100%",
-              backgroundColor: "#111827",
-              borderRadius: 32,
-              border: "1px solid #1f2937",
+              backgroundColor: "#ffffff",
+              borderRadius: 36,
+              border: "1px solid #e5e7eb",
               padding: 35,
-              boxShadow: "0 25px 50px rgba(0,0,0,0.4)",
+              boxShadow: "0 20px 25px -5px rgba(0,0,0,0.05)",
               transform: `translateY(${interpolate(slideProgress, [0, 40], [150, 0], { extrapolateRight: "clamp" })}px)`,
               opacity: interpolate(slideProgress, [0, 40], [0, 1]),
             }}
           >
-            <div style={{ display: "flex", flexDirection: "column", gap: 15 }}>
-              {/* Item 1 */}
-              <div style={{ display: "flex", alignItems: "center", gap: 20, backgroundColor: "#1f2937", padding: 18, borderRadius: 16 }}>
-                <span style={{ fontSize: 35 }}>📄</span>
+            {/* Lista de materiales */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 15, backgroundColor: "#f9fafb", border: "1px solid #e5e7eb", padding: 15, borderRadius: 16 }}>
+                <span style={{ fontSize: 28 }}>📄</span>
                 <div>
-                  <p style={{ fontSize: 18, fontWeight: 800, color: "#ffffff" }}>Rutina_Semicorcheas.pdf</p>
-                  <p style={{ fontSize: 13, color: "#9ca3af" }}>PDF · 1.5 MB</p>
+                  <p style={{ fontSize: 15, fontWeight: 900, color: "#111827" }}>Rutina_Independencia.pdf</p>
+                  <p style={{ fontSize: 11, color: "#6b7280", fontWeight: 600 }}>PDF asignado hoy</p>
                 </div>
               </div>
-              {/* Item 2 */}
-              <div style={{ display: "flex", alignItems: "center", gap: 20, backgroundColor: "#1f2937", padding: 18, borderRadius: 16 }}>
-                <span style={{ fontSize: 35 }}>📹</span>
+
+              <div style={{ display: "flex", alignItems: "center", gap: 15, backgroundColor: "#f9fafb", border: "1px solid #e5e7eb", padding: 15, borderRadius: 16 }}>
+                <span style={{ fontSize: 28 }}>📹</span>
                 <div>
-                  <p style={{ fontSize: 18, fontWeight: 800, color: "#ffffff" }}>Video_AcentoHiHat.mp4</p>
-                  <p style={{ fontSize: 13, color: "#9ca3af" }}>Video · 12.4 MB</p>
+                  <p style={{ fontSize: 15, fontWeight: 900, color: "#111827" }}>HiHat_Funk_Beat.mp4</p>
+                  <p style={{ fontSize: 11, color: "#6b7280", fontWeight: 600 }}>Video de apoyo</p>
                 </div>
+              </div>
+            </div>
+
+            {/* Lista de tareas */}
+            <div style={{ marginTop: 25, borderTop: "1px solid #f3f4f6", paddingTop: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+                <div style={{ width: 20, height: 20, borderRadius: 6, backgroundColor: "#10b981", color: "#ffffff", display: "flex", alignItems: "center", justifyCenter: "center", fontSize: 11, fontWeight: 900 }}>✓</div>
+                <p style={{ fontSize: 14, color: "#6b7280", textDecoration: "line-through", fontWeight: 600 }}>Estudiar compás 1 al 8</p>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ width: 20, height: 20, borderRadius: 6, border: "2px solid #d1d5db" }} />
+                <p style={{ fontSize: 14, color: "#111827", fontWeight: 700 }}>Grabar video de práctica</p>
               </div>
             </div>
           </div>
@@ -341,12 +442,12 @@ export const PromoVideo = () => {
       )}
 
       {/* =======================================================================
-          SLIDE 5: HIGHLIGHT 2 - PAGOS (20s - 25s / Frames 600 - 750)
+          SLIDE 6: HIGHLIGHT 3 - CONTROL DE PAGOS (21.6s - 26s / Frames 650 - 780)
           ======================================================================= */}
-      {frame >= 600 && frame < 750 && (
+      {slideIndex === 5 && (
         <AbsoluteFill
           style={{
-            background: "radial-gradient(circle at center, #102a22 0%, #08070b 100%)",
+            background: "radial-gradient(circle at center, #fafafa 0%, #f9fafb 100%)",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
@@ -357,9 +458,9 @@ export const PromoVideo = () => {
           <div style={{ textAlign: "center", marginBottom: 50 }}>
             <span
               style={{
-                backgroundColor: "rgba(16, 185, 129, 0.15)",
-                color: "#34d399",
-                border: "1px solid rgba(16, 185, 129, 0.3)",
+                backgroundColor: "rgba(16, 185, 129, 0.08)",
+                color: "#10b981",
+                border: "1px solid rgba(16, 185, 129, 0.2)",
                 fontSize: 18,
                 fontWeight: 800,
                 textTransform: "uppercase",
@@ -368,45 +469,47 @@ export const PromoVideo = () => {
                 borderRadius: 99,
               }}
             >
-              Finanzas Claras
+              Control de Ingresos
             </span>
             <h3 style={{ fontSize: 62, fontWeight: 950, marginTop: 25, letterSpacing: "-0.02em" }}>
               Control de Pagos
             </h3>
-            <p style={{ fontSize: 26, color: "#9ca3af", marginTop: 15, lineHeight: 1.4 }}>
-              Ingresos mensuales, deudas y cobros automáticos en un vistazo.
+            <p style={{ fontSize: 26, color: "#4b5563", marginTop: 15, lineHeight: 1.4 }}>
+              Visualiza deudas, registra pagos manuales y de Mercado Pago.
             </p>
           </div>
 
-          {/* Tarjeta de simulación de pagos */}
+          {/* MOCKUP REAL DE CONTROLES FINANCIEROS DE KHORA */}
           <div
             style={{
               width: "100%",
-              backgroundColor: "#060f0e",
-              borderRadius: 32,
-              border: "1px solid #112c24",
+              backgroundColor: "#ffffff",
+              borderRadius: 36,
+              border: "1px solid #e5e7eb",
               padding: 35,
-              boxShadow: "0 25px 50px rgba(0,0,0,0.4)",
+              boxShadow: "0 20px 25px -5px rgba(0,0,0,0.05)",
               transform: `translateY(${interpolate(slideProgress, [0, 40], [150, 0], { extrapolateRight: "clamp" })}px)`,
               opacity: interpolate(slideProgress, [0, 40], [0, 1]),
             }}
           >
-            <p style={{ fontSize: 13, fontWeight: 900, color: "#10b981", letterSpacing: 1, textTransform: "uppercase" }}>
-              Resumen Financiero
-            </p>
-            <p style={{ fontSize: 45, fontWeight: 950, color: "#ffffff", marginTop: 15 }}>
-              $450.000 <span style={{ fontSize: 20, fontWeight: 500, color: "#10b981" }}>+12%</span>
-            </p>
-            <p style={{ fontSize: 14, color: "#9ca3af", marginTop: 5 }}>Recaudado este mes</p>
-            
-            <div style={{ display: "flex", gap: 15, marginTop: 30 }}>
-              <div style={{ flex: 1, backgroundColor: "rgba(16, 185, 129, 0.05)", border: "1px solid rgba(16, 185, 129, 0.2)", padding: 15, borderRadius: 16 }}>
-                <p style={{ fontSize: 11, color: "#9ca3af", fontWeight: 700 }}>PAGADOS</p>
-                <p style={{ fontSize: 22, fontWeight: 900, color: "#34d399", marginTop: 5 }}>12 alumnos</p>
+            {/* Tarjeta Ingresos */}
+            <div style={{ backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0", padding: 25, borderRadius: 24 }}>
+              <p style={{ fontSize: 12, fontWeight: 800, color: "#166534", letterSpacing: 1, textTransform: "uppercase" }}>Ingresos del Mes</p>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginTop: 10 }}>
+                <span style={{ fontSize: 38, fontWeight: 950, color: "#166534" }}>$450.000</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: "#16a34a" }}>100% cobrado</span>
               </div>
-              <div style={{ flex: 1, backgroundColor: "rgba(239, 68, 68, 0.05)", border: "1px solid rgba(239, 68, 68, 0.2)", padding: 15, borderRadius: 16 }}>
-                <p style={{ fontSize: 11, color: "#9ca3af", fontWeight: 700 }}>PENDIENTES</p>
-                <p style={{ fontSize: 22, fontWeight: 900, color: "#f87171", marginTop: 5 }}>1 por pagar</p>
+            </div>
+
+            {/* Listado de alumnos */}
+            <div style={{ marginTop: 20, display: "flex", gap: 12 }}>
+              <div style={{ flex: 1, backgroundColor: "#f9fafb", border: "1px solid #e5e7eb", padding: 15, borderRadius: 16, textAlign: "center" }}>
+                <p style={{ fontSize: 10, color: "#6b7280", fontWeight: 800 }}>PAGADOS</p>
+                <p style={{ fontSize: 20, fontWeight: 900, color: "#16a34a", marginTop: 5 }}>12 alumnos</p>
+              </div>
+              <div style={{ flex: 1, backgroundColor: "#f9fafb", border: "1px solid #e5e7eb", padding: 15, borderRadius: 16, textAlign: "center" }}>
+                <p style={{ fontSize: 10, color: "#6b7280", fontWeight: 800 }}>PENDIENTES</p>
+                <p style={{ fontSize: 20, fontWeight: 900, color: "#dc2626", marginTop: 5 }}>0 deudas</p>
               </div>
             </div>
           </div>
@@ -414,12 +517,12 @@ export const PromoVideo = () => {
       )}
 
       {/* =======================================================================
-          SLIDE 6: CIERRE / CTA (25s - 30s / Frames 750 - 900)
+          SLIDE 7: CIERRE / CTA (26s - 30s / Frames 780 - 900)
           ======================================================================= */}
-      {frame >= 750 && (
+      {slideIndex === 6 && (
         <AbsoluteFill
           style={{
-            background: "radial-gradient(circle at center, #231b40 0%, #08070b 100%)",
+            background: "radial-gradient(circle at center, #f5f3ff 0%, #f9fafb 100%)",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
@@ -431,18 +534,18 @@ export const PromoVideo = () => {
           {/* Logo animado K */}
           <div
             style={{
-              width: 130,
-              height: 130,
-              backgroundColor: "#ffffff",
-              color: "#08070b",
-              borderRadius: 36,
+              width: 140,
+              height: 140,
+              backgroundColor: "#7c3aed",
+              color: "#ffffff",
+              borderRadius: 38,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 75,
+              fontSize: 80,
               fontWeight: 950,
-              boxShadow: "0 20px 40px rgba(124, 58, 237, 0.3)",
-              transform: `scale(${transitionSpring})`,
+              boxShadow: "0 20px 40px rgba(124, 58, 237, 0.25)",
+              transform: `scale(${entrySpring})`,
             }}
           >
             K
@@ -450,22 +553,22 @@ export const PromoVideo = () => {
 
           <h2
             style={{
-              fontSize: 65,
+              fontSize: 66,
               fontWeight: 950,
               marginTop: 50,
-              lineHeight: 1.1,
-              color: "#ffffff",
+              lineHeight: 1.15,
+              color: "#111827",
               letterSpacing: "-0.03em",
               opacity: interpolate(slideProgress, [15, 45], [0, 1]),
             }}
           >
-            Profesionaliza tu escuela hoy
+            Profesionaliza tus clases particulares hoy
           </h2>
 
           <p
             style={{
               fontSize: 32,
-              color: "#a1a1aa",
+              color: "#4b5563",
               marginTop: 20,
               fontWeight: 600,
               opacity: interpolate(slideProgress, [35, 65], [0, 1]),
@@ -477,14 +580,14 @@ export const PromoVideo = () => {
           <div
             style={{
               marginTop: 60,
-              backgroundColor: "#ffffff",
-              color: "#08070b",
+              backgroundColor: "#111827",
+              color: "#ffffff",
               fontSize: 36,
               fontWeight: 950,
               padding: "22px 60px",
               borderRadius: 24,
-              boxShadow: "0 30px 60px rgba(255, 255, 255, 0.15)",
-              transform: `scale(${interpolate(slideProgress, [55, 80], [0.8, 1], {
+              boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1)",
+              transform: `scale(${interpolate(slideProgress, [55, 80], [0.85, 1], {
                 extrapolateRight: "clamp",
               })})`,
               opacity: interpolate(slideProgress, [55, 80], [0, 1]),
