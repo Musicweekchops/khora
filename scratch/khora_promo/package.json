@@ -1,0 +1,19 @@
+{
+  "name": "khora-promo-video",
+  "version": "1.0.0",
+  "description": "Video promocional de Khora generado con Remotion",
+  "main": "index.js",
+  "scripts": {
+    "start": "remotion preview src/index.ts",
+    "build": "remotion render src/index.ts PromoVideo out/video.mp4"
+  },
+  "dependencies": {
+    "remotion": "^4.0.190",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.0",
+    "typescript": "^5.0.0"
+  }
+}
