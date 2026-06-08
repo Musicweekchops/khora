@@ -5,7 +5,13 @@
   "main": "index.js",
   "scripts": {
     "start": "remotion preview src/index.ts",
-    "build": "remotion render src/index.ts PromoVideo out/video.mp4"
+    "build": "remotion render src/index.ts PromoVideo out/video.mp4",
+    "build-unirse": "remotion render src/index.ts UnirseExplainer out/unirse.mp4",
+    "build-tour": "remotion render src/index.ts TeacherTour out/tour.mp4",
+    "build-sync": "remotion render src/index.ts DeviceSync out/sync.mp4",
+    "build-setup": "remotion render src/index.ts TeacherSetup out/setup.mp4",
+    "build-share": "remotion render src/index.ts ShareLink out/share.mp4",
+    "build-study": "remotion render src/index.ts StudentStudy out/study.mp4"
   },
   "dependencies": {
     "remotion": "^4.0.190",
