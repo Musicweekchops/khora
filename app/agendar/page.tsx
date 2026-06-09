@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { getAvailableSlots, addMinutes, timesOverlap } from "@/lib/availability"
 import { formatTime } from "@/lib/utils"
+import { useAuth } from "@/lib/context/AuthContext"
 
 interface ClassType {
   id: string
@@ -52,14 +53,27 @@ function PublicBookingPage() {
 
   const [classTypes, setClassTypes] = useState<ClassType[]>([])
   const [selectedClass, setSelectedClass] = useState<ClassType | null>(null)
+  const { profile } = useAuth()
   const [loading, setLoading] = useState(true)
   const [formData, setFormData] = useState({ name: "", email: "", phone: "", message: "", date: "" })
   const [availableSlots, setAvailableSlots] = useState<string[]>([])
+  const [ownSlots, setOwnSlots] = useState<string[]>([])
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null)
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState("")
+
+  useEffect(() => {
+    if (profile && profile.role === "STUDENT") {
+      setFormData(prev => ({
+        ...prev,
+        name: profile.name || "",
+        email: profile.email || "",
+        phone: profile.phone || "",
+      }))
+    }
+  }, [profile])
 
   useEffect(() => {
     if (academySlug) {
@@ -183,9 +197,50 @@ function PublicBookingPage() {
     setLoadingSlots(true)
     setSelectedSlot(null)
 
-    const slots = await getAvailableSlots(formData.date, selectedTeacher.id, selectedClass.duration)
-    setAvailableSlots(slots)
-    setLoadingSlots(false)
+    try {
+      const slots = await getAvailableSlots(formData.date, selectedTeacher.id, selectedClass.duration)
+      setAvailableSlots(slots)
+
+      if (profile?.role === "STUDENT" && profile.studentProfileId) {
+        // Fetch own classes
+        const { data: myClasses } = await supabase
+          .from("Class")
+          .select("start_time")
+          .eq("teacher_id", selectedTeacher.id)
+          .eq("student_id", profile.studentProfileId)
+          .eq("date", formData.date)
+          .neq("status", "CANCELLED")
+
+        // Fetch own bookings
+        const { data: myBookings } = await supabase
+          .from("Booking")
+          .select("start_time")
+          .eq("teacher_id", selectedTeacher.id)
+          .eq("email", profile.email)
+          .eq("date", formData.date)
+          .eq("status", "PENDING")
+
+        const classTimes = (myClasses || []).map((c: any) => c.start_time)
+        const bookingTimes = (myBookings || []).map((b: any) => b.start_time)
+
+        const allOwn = Array.from(new Set([...classTimes, ...bookingTimes])).map((time: string) => {
+          const parts = time.split(":")
+          const h = parts[0].padStart(2, "0")
+          const m = parts[1].padStart(2, "0")
+          const s = (parts[2] || "00").padStart(2, "0")
+          return `${h}:${m}:${s}`
+        })
+        setOwnSlots(allOwn)
+      } else {
+        setOwnSlots([])
+      }
+    } catch (err) {
+      console.error("Error loading slots:", err)
+      setAvailableSlots([])
+      setOwnSlots([])
+    } finally {
+      setLoadingSlots(false)
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -343,9 +398,7 @@ function PublicBookingPage() {
                       <h3 className="text-lg md:text-xl font-black text-neutral-900 font-sans">{ct.name}</h3>
                       <p className="text-neutral-400 font-bold mt-0.5 uppercase text-[10px] tracking-widest font-sans">{ct.duration} MINUTOS</p>
                     </div>
-                    <div className="text-right">
-                      <p className="text-xl md:text-2xl font-black text-neutral-900 font-sans">${ct.price.toLocaleString()}</p>
-                    </div>
+                    {/* Price hidden for student-oriented agenda */}
                   </div>
                 </button>
               ))
@@ -370,9 +423,7 @@ function PublicBookingPage() {
                   <p className="text-[9px] font-black text-neutral-500 uppercase tracking-widest mb-1 font-sans">Servicio seleccionado</p>
                   <h2 className="text-xl md:text-2xl font-black font-sans">{selectedClass.icon} {selectedClass.name}</h2>
                 </div>
-                <div className="text-right">
-                  <p className="text-xl md:text-2xl font-black font-sans">${selectedClass.price.toLocaleString()}</p>
-                </div>
+                {/* Price hidden for student-oriented agenda */}
               </div>
 
               <form onSubmit={handleSubmit} className="p-6 md:p-10 space-y-8">
@@ -460,22 +511,45 @@ function PublicBookingPage() {
                             <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
                                <div className="kh-skeleton h-12"/><div className="kh-skeleton h-12"/><div className="kh-skeleton h-12"/>
                             </div>
-                          ) : availableSlots.length === 0 ? (
-                            <p className="p-8 bg-neutral-50 rounded-2xl text-center text-xs font-bold text-neutral-400 italic font-sans">No hay horarios para este día.</p>
                           ) : (
                             <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
-                              {availableSlots.map(slot => (
-                                <button
-                                  key={slot}
-                                  type="button"
-                                  onClick={() => setSelectedSlot(slot)}
-                                  className={`py-3.5 px-2 rounded-xl text-xs font-black transition-all tap-highlight-none font-sans ${
-                                    selectedSlot === slot ? "bg-emerald-600 text-white shadow-lg scale-95" : "bg-neutral-100 text-neutral-600 active:bg-neutral-200"
-                                  }`}
-                                >
-                                  {formatTime(slot)}
-                                </button>
-                              ))}
+                              {(() => {
+                                const combined = [
+                                  ...availableSlots.map(slot => ({ slot, isOwn: false })),
+                                  ...ownSlots.map(slot => ({ slot, isOwn: true }))
+                                ].sort((a, b) => a.slot.localeCompare(b.slot))
+
+                                if (combined.length === 0) {
+                                  return <p className="col-span-full p-8 bg-neutral-50 rounded-2xl text-center text-xs font-bold text-neutral-400 italic font-sans">No hay horarios para este día.</p>
+                                }
+
+                                return combined.map(({ slot, isOwn }) => {
+                                  if (isOwn) {
+                                    return (
+                                      <div
+                                        key={slot}
+                                        className="py-2.5 px-2 rounded-xl text-xs font-black text-center bg-violet-100 text-violet-700 border border-violet-200 font-sans flex flex-col items-center justify-center gap-1 select-none shadow-sm"
+                                      >
+                                        <span>{formatTime(slot)}</span>
+                                        <span className="text-[8px] bg-violet-600 text-white px-1.5 py-0.5 rounded-md uppercase tracking-wider font-black leading-none">Tu clase</span>
+                                      </div>
+                                    )
+                                  }
+
+                                  return (
+                                    <button
+                                      key={slot}
+                                      type="button"
+                                      onClick={() => setSelectedSlot(slot)}
+                                      className={`py-3.5 px-2 rounded-xl text-xs font-black transition-all tap-highlight-none font-sans ${
+                                        selectedSlot === slot ? "bg-emerald-600 text-white shadow-lg scale-95" : "bg-neutral-100 text-neutral-600 active:bg-neutral-200"
+                                      }`}
+                                    >
+                                      {formatTime(slot)}
+                                    </button>
+                                  )
+                                })
+                              })()}
                             </div>
                           )}
                         </div>

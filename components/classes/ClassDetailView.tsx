@@ -885,16 +885,25 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                 <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Fin</label>
                 <input type="time" value={editForm.end_time} onChange={e => setEditForm(p => ({ ...p, end_time: e.target.value }))} className="field" />
               </div>
-              <div>
-                <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Alumno</label>
-                <select value={editForm.student_id} onChange={e => setEditForm(p => ({ ...p, student_id: e.target.value }))} className="field">
-                  <option value="">Sin asignar</option>
-                  {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
+              {profile?.role !== "STUDENT" ? (
+                <div>
+                  <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Alumno</label>
+                  <select value={editForm.student_id} onChange={e => setEditForm(p => ({ ...p, student_id: e.target.value }))} className="field">
+                    <option value="">Sin asignar</option>
+                    {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Alumno</label>
+                  <div className="field bg-neutral-50 text-neutral-400 border-none cursor-not-allowed select-none">
+                    {cls.student_name}
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className={`grid grid-cols-1 ${profile?.role !== "STUDENT" ? "md:grid-cols-2" : ""} gap-4`}>
               <div>
                 <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Modalidad</label>
                 <div className="grid grid-cols-2 gap-2 p-1 bg-neutral-100 rounded-xl">
@@ -907,29 +916,33 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                   ))}
                 </div>
               </div>
-              <div>
-                <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Estado</label>
-                <div className="grid grid-cols-4 gap-1.5 p-1 bg-neutral-100 rounded-xl">
-                  {(["SCHEDULED", "CONFIRMED", "COMPLETED", "CANCELLED"] as const).map(s => (
-                    <button key={s} type="button" onClick={() => setEditForm(p => ({ ...p, status: s }))}
-                      className={`py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${
-                        editForm.status === s ? statusConfig[s].color + " shadow-sm font-black" : "text-neutral-400 hover:text-neutral-600"
-                      }`}>
-                      {statusConfig[s].label.slice(0, 4)}
-                    </button>
-                  ))}
+              {profile?.role !== "STUDENT" && (
+                <div>
+                  <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Estado</label>
+                  <div className="grid grid-cols-4 gap-1.5 p-1 bg-neutral-100 rounded-xl">
+                    {(["SCHEDULED", "CONFIRMED", "COMPLETED", "CANCELLED"] as const).map(s => (
+                      <button key={s} type="button" onClick={() => setEditForm(p => ({ ...p, status: s }))}
+                        className={`py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${
+                          editForm.status === s ? statusConfig[s].color + " shadow-sm font-black" : "text-neutral-400 hover:text-neutral-600"
+                        }`}>
+                        {statusConfig[s].label.slice(0, 4)}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Danger zone */}
-            <div className="pt-4 border-t border-neutral-100 flex justify-between items-center">
-              <p className="text-[9px] text-neutral-400 font-bold uppercase tracking-tight">Riesgo</p>
-              <button onClick={deleteClass} className="px-3 py-1.5 text-[10px] text-red-400 font-bold hover:bg-red-50 rounded-lg transition-all flex items-center gap-1.5">
-                <Trash2 className="w-3.5 h-3.5" />
-                Eliminar
-              </button>
-            </div>
+            {profile?.role !== "STUDENT" && (
+              <div className="pt-4 border-t border-neutral-100 flex justify-between items-center">
+                <p className="text-[9px] text-neutral-400 font-bold uppercase tracking-tight">Riesgo</p>
+                <button onClick={deleteClass} className="px-3 py-1.5 text-[10px] text-red-400 font-bold hover:bg-red-50 rounded-lg transition-all flex items-center gap-1.5">
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Eliminar
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           /* ── VIEW MODE ── */
@@ -973,11 +986,11 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                   </>
                 )}
 
-                {profile?.role === "TEACHER" && (
+                {(profile?.role === "TEACHER" || profile?.role === "STUDENT") && (
                   <button onClick={() => setEditing(true)}
                     className="flex-1 sm:flex-none px-4 py-2 md:px-6 md:py-2.5 bg-neutral-900 text-white rounded-xl md:rounded-2xl text-xs md:text-sm font-bold hover:bg-violet-600 transition-all flex items-center justify-center gap-2 shadow-lg shadow-neutral-900/10">
                     <Edit3 className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                    Editar
+                    {profile?.role === "STUDENT" ? "Reagendar / Mover" : "Editar"}
                   </button>
                 )}
               </div>
