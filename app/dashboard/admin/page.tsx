@@ -61,6 +61,16 @@ export default function AdminDashboardPage() {
   const [dayMap, setDayMap] = useState<Record<string, number>>({})
   const [monthMap, setMonthMap] = useState<Record<string, number>>({})
 
+  // Academy Admin States
+  const [academyKPIs, setAcademyKPIs] = useState({
+    totalAcademies: 0,
+    avgRevenuePerAcademy: 0,
+    avgStudentsPerAcademy: 0,
+    totalTeachersInAcademies: 0
+  })
+  const [academyRows, setAcademyRows] = useState<any[]>([])
+  const [showAcademiesTable, setShowAcademiesTable] = useState(true)
+
   useEffect(() => { if (profile?.is_admin) load() }, [profile])
 
   async function load() {
@@ -69,7 +79,7 @@ export default function AdminDashboardPage() {
       const thisMonth = now.toISOString().slice(0, 7)
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
 
-      // Base query — only stable columns
+      // 1. Fetch teachers
       const { data: raw, error } = await supabase
         .from("TeacherProfile")
         .select(`id, region, created_at, user_id, instrumento,
@@ -104,7 +114,6 @@ export default function AdminDashboardPage() {
         if (!classMap[c.teacher_id]) classMap[c.teacher_id] = []
         classMap[c.teacher_id].push(c)
       }
-
 
       let totalStudents = 0, activeStudents = 0, totalRevenue = 0, revenueThisMonth = 0
       let totalFees = 0, feeCount = 0
@@ -177,6 +186,66 @@ export default function AdminDashboardPage() {
       setGeoMap(_geoMap)
       setDayMap(_dayMap)
       setMonthMap(_monthMap)
+
+      // 2. Fetch Academy Data
+      const { data: academyRaw, error: acErr } = await supabase
+        .from("AcademyProfile")
+        .select(`
+          id, name, slug, region, is_active, plan, created_at,
+          AcademyTeacher ( id, status ),
+          StudentProfile:StudentProfile!academy_id ( id ),
+          Payment:Payment!academy_id ( amount )
+        `)
+
+      if (acErr) {
+        console.error("[Admin] Academy query error:", acErr.message)
+      }
+
+      let totalAcademies = 0
+      let avgRevenuePerAcademy = 0
+      let avgStudentsPerAcademy = 0
+      let totalTeachersInAcademies = 0
+      let academyRowsList: any[] = []
+
+      if (academyRaw) {
+        totalAcademies = academyRaw.length
+        let totalAcRevenue = 0
+        let totalAcStudents = 0
+
+        academyRowsList = academyRaw.map((ac: any) => {
+          const activeTeachers = (ac.AcademyTeacher ?? []).filter((at: any) => at.status === 'ACTIVE').length
+          const studentsCount = ac.StudentProfile?.length ?? 0
+          const revenueSum = (ac.Payment ?? []).reduce((sum: number, p: any) => sum + Number(p.amount ?? 0), 0)
+          
+          totalAcRevenue += revenueSum
+          totalAcStudents += studentsCount
+          totalTeachersInAcademies += activeTeachers
+
+          return {
+            id: ac.id,
+            name: ac.name,
+            slug: ac.slug,
+            region: ac.region ?? "No especificada",
+            activeTeachers,
+            studentsCount,
+            revenueSum,
+            plan: ac.plan,
+            is_active: ac.is_active
+          }
+        })
+
+        avgRevenuePerAcademy = totalAcademies ? Math.round(totalAcRevenue / totalAcademies) : 0
+        avgStudentsPerAcademy = totalAcademies ? Math.round(totalAcStudents / totalAcademies) : 0
+      }
+
+      setAcademyKPIs({
+        totalAcademies,
+        avgRevenuePerAcademy,
+        avgStudentsPerAcademy,
+        totalTeachersInAcademies
+      })
+      setAcademyRows(academyRowsList)
+
     } finally { setBusy(false) }
   }
 
@@ -284,6 +353,17 @@ export default function AdminDashboardPage() {
               </div>
             </section>
 
+            {/* KPIs row 3 — Academias */}
+            <section>
+              <p className="text-[10px] font-semibold text-neutral-400 uppercase tracking-widest mb-3">Academias</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <InsightCard label="Academias registradas" value={String(academyKPIs.totalAcademies)} sub="activas en Khora" />
+                <InsightCard label="Promedio ingresos / ac." value={formatCurrency(academyKPIs.avgRevenuePerAcademy)} sub="facturación media" />
+                <InsightCard label="Promedio alumnos / ac." value={`${academyKPIs.avgStudentsPerAcademy} alumnos`} sub="promedio de alumnos" />
+                <InsightCard label="Total profesores en ac." value={String(academyKPIs.totalTeachersInAcademies)} sub="profesores vinculados" />
+              </div>
+            </section>
+
             {/* Meses con más alumnos — mini bar chart */}
             {Object.keys(monthMap).length > 0 && (
               <section className="bg-white border border-neutral-100 rounded-2xl shadow-sm p-5">
@@ -386,6 +466,49 @@ export default function AdminDashboardPage() {
                       <div className="px-6 py-12 text-center text-neutral-400 text-sm">Sin cuentas registradas.</div>
                     )}
                   </div>
+                </div>
+
+                {/* Academies Table */}
+                <div className="bg-white border border-neutral-100 rounded-2xl shadow-sm overflow-hidden">
+                  <div className="px-6 py-4 border-b border-neutral-50 flex items-center justify-between">
+                    <h2 className="text-sm font-semibold text-neutral-900">Academias registradas</h2>
+                    <button
+                      onClick={() => setShowAcademiesTable(!showAcademiesTable)}
+                      className="text-xs text-neutral-400 font-medium hover:text-neutral-600 transition-colors"
+                    >
+                      {showAcademiesTable ? "Contraer" : "Expandir"}
+                    </button>
+                  </div>
+                  {showAcademiesTable && (
+                    <div className="divide-y divide-neutral-50 max-h-[400px] overflow-y-auto">
+                      {academyRows.map(ac => (
+                        <div key={ac.id} className="px-6 py-4 flex items-center justify-between gap-4">
+                          <div>
+                            <p className="text-sm font-semibold text-neutral-900">{ac.name}</p>
+                            <p className="text-xs text-neutral-400">Slug: {ac.slug} · Región: {ac.region}</p>
+                          </div>
+                          <div className="text-right text-xs space-y-0.5">
+                            <p className="font-semibold text-neutral-800">{ac.activeTeachers} profesores activos</p>
+                            <p className="text-neutral-400">{ac.studentsCount} alumnos</p>
+                          </div>
+                          <div className="text-right text-sm">
+                            <p className="font-bold text-emerald-600">{formatCurrency(ac.revenueSum)}</p>
+                            <p className="text-[10px] text-neutral-400 uppercase font-black">{ac.plan}</p>
+                          </div>
+                          <div>
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              ac.is_active ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
+                            }`}>
+                              {ac.is_active ? "Activo" : "Inactivo"}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                      {academyRows.length === 0 && (
+                        <div className="px-6 py-12 text-center text-neutral-400 text-sm">Sin academias registradas.</div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Geo */}

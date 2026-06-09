@@ -3,6 +3,8 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/lib/context/AuthContext"
+import { useEffect, useState } from "react"
+import { supabase } from "@/lib/supabase"
 
 /* ── SVG Icon system (lightweight, no dependencies) ── */
 const Icons = {
@@ -82,6 +84,31 @@ const TEACHER_NAV = [
   { name: "Ajustes", href: "/dashboard/ajustes", icon: Icons.settings },
 ]
 
+// Profesores de academia: sin Financiero (lo gestiona la academia)
+const ACADEMY_TEACHER_NAV = [
+  { name: "Dashboard", href: "/dashboard", icon: Icons.dashboard },
+  { name: "Mis Alumnos", href: "/dashboard/alumnos", icon: Icons.students },
+  { name: "Agenda", href: "/dashboard/agenda", icon: Icons.calendar },
+  { name: "Clases", href: "/dashboard/clases", icon: Icons.classes },
+  { name: "Biblioteca", href: "/dashboard/biblioteca", icon: Icons.library },
+  { name: "Ajustes", href: "/dashboard/ajustes", icon: Icons.settings },
+]
+
+const ACADEMY_NAV = [
+  { name: "Dashboard", href: "/dashboard", icon: Icons.dashboard },
+  { name: "Profesores", href: "/dashboard/academy/profesores", icon: Icons.students },
+  { name: "Alumnos", href: "/dashboard/academy/alumnos", icon: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
+    </svg>
+  )},
+  { name: "Agenda", href: "/dashboard/academy/agenda", icon: Icons.calendar },
+  { name: "Financiero", href: "/dashboard/academy/financiero", icon: Icons.financial },
+  { name: "Biblioteca", href: "/dashboard/academy/biblioteca", icon: Icons.library },
+  { name: "Ajustes", href: "/dashboard/academy/ajustes", icon: Icons.settings },
+]
+
 const STUDENT_NAV = [
   { name: "Dashboard", href: "/dashboard", icon: Icons.dashboard },
   { name: "Mi Roadmap", href: "/dashboard/roadmap", icon: Icons.roadmap },
@@ -97,11 +124,34 @@ interface SidebarProps {
 export default function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname()
   const { profile, signOut } = useAuth()
-  
-  let navItems = user.role === 'TEACHER' ? [...TEACHER_NAV] : [...STUDENT_NAV]
-  
+  const [academyBrand, setAcademyBrand] = useState<{ name: string; logo_url: string | null } | null>(null)
+
+  useEffect(() => {
+    const targetAcademyId = profile?.academyId || profile?.academyProfileId
+    if (targetAcademyId) {
+      supabase
+        .from("AcademyProfile")
+        .select("name, logo_url")
+        .eq("id", targetAcademyId)
+        .single()
+        .then(({ data }) => {
+          if (data) setAcademyBrand(data)
+        })
+    }
+  }, [profile])
+
+  // Determinar navegación según rol y si el profesor pertenece a una academia
+  let navItems =
+    user.role === 'ACADEMY'
+      ? [...ACADEMY_NAV]
+      : user.role === 'TEACHER' && profile?.academyId
+        ? [...ACADEMY_TEACHER_NAV]
+        : user.role === 'TEACHER'
+          ? [...TEACHER_NAV]
+          : [...STUDENT_NAV]
+
   const isArnaldo = profile?.email === 'arnaldoallende@hotmail.com'
-  if (isArnaldo && user.role === 'TEACHER') {
+  if (isArnaldo && user.role === 'TEACHER' && !profile?.academyId) {
     const crmIndex = navItems.findIndex(item => item.href === "/dashboard/crm")
     if (crmIndex !== -1) {
       navItems.splice(crmIndex + 1, 0, {
@@ -129,19 +179,39 @@ export default function Sidebar({ user }: SidebarProps) {
     }
   }
 
+  const themeColor = user.role === 'ACADEMY' ? 'emerald' : user.role === 'TEACHER' ? 'violet' : 'neutral'
+
   return (
     <>
       {/* Desktop Sidebar */}
       <aside className="hidden lg:flex flex-col h-screen w-[240px] fixed left-0 top-0 z-50 bg-white border-r border-neutral-200/80">
         {/* Logo */}
         <div className="h-16 flex items-center gap-3 px-5 border-b border-neutral-100">
-          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${user.role === 'TEACHER' ? 'bg-violet-600 shadow-sm shadow-violet-200' : 'bg-neutral-900'}`}>
-            <span className="text-white text-sm font-bold">K</span>
-          </div>
-          <div>
-            <h1 className="text-sm font-semibold text-neutral-900 tracking-tight leading-none">Khora</h1>
-            <p className="text-[10px] text-neutral-400 font-medium mt-0.5">Gestión de clases</p>
-          </div>
+          {academyBrand ? (
+            <>
+              {academyBrand.logo_url ? (
+                <img src={academyBrand.logo_url} alt={academyBrand.name} className="w-8 h-8 rounded-lg object-cover" />
+              ) : (
+                <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center shadow-sm shadow-emerald-200">
+                  <span className="text-white text-sm font-bold">{academyBrand.name.charAt(0).toUpperCase()}</span>
+                </div>
+              )}
+              <div className="min-w-0">
+                <h1 className="text-sm font-semibold text-neutral-900 tracking-tight leading-none truncate">{academyBrand.name}</h1>
+                <p className="text-[9px] text-emerald-600 font-black uppercase tracking-widest mt-0.5 leading-none">Academia</p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${user.role === 'TEACHER' ? 'bg-violet-600 shadow-sm shadow-violet-200' : 'bg-neutral-900'}`}>
+                <span className="text-white text-sm font-bold">K</span>
+              </div>
+              <div>
+                <h1 className="text-sm font-semibold text-neutral-900 tracking-tight leading-none">Khora</h1>
+                <p className="text-[10px] text-neutral-400 font-medium mt-0.5">Gestión de clases</p>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Navigation */}

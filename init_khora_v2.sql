@@ -170,12 +170,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
 
--- Asegurar función slugify
 CREATE OR REPLACE FUNCTION public.slugify(value TEXT)
 RETURNS TEXT AS $$
   SELECT regexp_replace(
     regexp_replace(
-      lower(unaccent(value)),
+      lower(public.unaccent(value)),
       '[^a-z0-9\-_]+', '-', 'gi'
     ),
     '^-+|-+$', '', 'g'

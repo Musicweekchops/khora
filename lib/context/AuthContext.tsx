@@ -13,11 +13,13 @@ export interface UserProfile {
   email: string
   name: string
   phone: string | null
-  role: 'TEACHER' | 'STUDENT'
+  role: 'TEACHER' | 'STUDENT' | 'ACADEMY'
   is_admin: boolean
   teacherProfileId: string | null
   studentProfileId: string | null
+  academyProfileId: string | null
   instrumento?: string | null
+  academyId?: string | null          // para profesores dentro de una academia
   completed_onboarding?: boolean
 }
 
@@ -79,8 +81,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .from('User')
           .select(`
             id, email, name, phone, role, is_admin, completed_onboarding,
-            TeacherProfile ( id, instrumento ),
-            StudentProfile ( id )
+            TeacherProfile ( id, instrumento, academy_id ),
+            StudentProfile ( id ),
+            AcademyProfile ( id )
           `)
           .eq('id', authUser.id)
           .maybeSingle()
@@ -90,17 +93,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (data) {
           const tp = Array.isArray(data.TeacherProfile) ? data.TeacherProfile[0] : data.TeacherProfile
           const sp = Array.isArray(data.StudentProfile) ? data.StudentProfile[0] : data.StudentProfile
+          const ap = Array.isArray(data.AcademyProfile) ? data.AcademyProfile[0] : data.AcademyProfile
 
           return {
             id: data.id,
             email: data.email,
             name: data.name,
             phone: data.phone,
-            role: data.role as 'TEACHER' | 'STUDENT',
+            role: data.role as 'TEACHER' | 'STUDENT' | 'ACADEMY',
             is_admin: data.is_admin ?? false,
             teacherProfileId: tp?.id ?? null,
             studentProfileId: sp?.id ?? null,
+            academyProfileId: ap?.id ?? null,
             instrumento: tp?.instrumento ?? null,
+            academyId: tp?.academy_id ?? null,
             completed_onboarding: data.completed_onboarding ?? false,
           }
         }

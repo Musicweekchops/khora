@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { email, password, name, phone, teacher_id } = await req.json()
+    const { email, password, name, phone, teacher_id, academy_id } = await req.json()
 
     if (!email || !password || !name || !teacher_id) {
       throw new Error("Missing required fields")
@@ -36,6 +36,7 @@ serve(async (req) => {
         name: name.trim(),
         role: "STUDENT",
         teacher_id: teacher_id,
+        academy_id: academy_id || null,
       }
     })
 
