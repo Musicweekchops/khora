@@ -17,7 +17,7 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseKey)
 
   try {
-    const { classId } = await req.json()
+    const { classId, type, originalDate, originalStartTime, newDate, newStartTime } = await req.json()
 
     if (!classId) {
       return new Response(
@@ -53,8 +53,8 @@ serve(async (req) => {
       )
     }
 
-    // 1.5. Si el estado es SCHEDULED, actualizarlo a CONFIRMED
-    if (cls.status === "SCHEDULED") {
+    // 1.5. Si el estado es SCHEDULED, actualizarlo a CONFIRMED (solo si no es de tipo RESCHEDULED)
+    if (cls.status === "SCHEDULED" && type !== "RESCHEDULED") {
       const { error: updateErr } = await supabase
         .from("Class")
         .update({ status: "CONFIRMED" })
@@ -111,11 +111,19 @@ serve(async (req) => {
       "HTsnrmAK-XWgfOHMO2u2I_t9rbL-4qmaisaF00mcEdI"
     )
 
-    const payload = JSON.stringify({
-      title: "🎸 ¡Clase Confirmada!",
-      body: `${studentName} confirmó su asistencia para la clase del ${cls.date} a las ${formattedTime} hs.`,
-      url: `/dashboard/clases/detalles?id=${cls.id}&confirmed=true` // Redirige al detalle de la clase con modal de confirmación
-    })
+    const payload = JSON.stringify(
+      type === "RESCHEDULED"
+        ? {
+            title: "🔄 Clase Reagendada",
+            body: `${studentName} reagendó su clase del ${originalDate} ${originalStartTime} hs para el ${newDate} a las ${newStartTime} hs.`,
+            url: `/dashboard/clases/detalles?id=${cls.id}`
+          }
+        : {
+            title: "🎸 ¡Clase Confirmada!",
+            body: `${studentName} confirmó su asistencia para la clase del ${cls.date} a las ${formattedTime} hs.`,
+            url: `/dashboard/clases/detalles?id=${cls.id}&confirmed=true`
+          }
+    )
 
     let successCount = 0
     let failedCount = 0

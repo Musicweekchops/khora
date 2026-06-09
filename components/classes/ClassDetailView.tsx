@@ -31,12 +31,13 @@ import {
 import VideoPlayer from "@/components/ui/VideoPlayer"
 import { useToast } from "@/components/ui/Toast"
 import LibraryPickerModal from "@/components/ui/LibraryPickerModal"
-import { checkTeacherConflict } from "@/lib/availability"
+import { checkTeacherConflict, getAvailableSlots, addMinutes } from "@/lib/availability"
 
 interface ClassData {
   id: string; date: string; start_time: string; end_time: string
   status: string; modalidad: string; duration: number
   student_name: string; student_email?: string; student_id: string | null; teacher_id: string
+  teacher_name?: string; teacher_email?: string;
   schedule_id: string | null; is_recurring: boolean
 }
 interface Note { 
@@ -70,6 +71,41 @@ export default function ClassDetailView({ classId }: { classId: string }) {
   const [editing, setEditing] = useState(false)
   const [editForm, setEditForm] = useState({ date: "", start_time: "", end_time: "", student_id: "", modalidad: "", status: "" })
   const [savingEdit, setSavingEdit] = useState(false)
+
+  // Student availability picker state
+  const [availableSlots, setAvailableSlots] = useState<string[]>([])
+  const [loadingSlots, setLoadingSlots] = useState(false)
+
+  async function loadSlotsForDate(selectedDate: string) {
+    if (!cls || !selectedDate) return
+    setLoadingSlots(true)
+    try {
+      const slots = await getAvailableSlots(selectedDate, cls.teacher_id, cls.duration)
+      
+      // If the selected date is the class's original date, make sure the class's original start time is included
+      if (selectedDate === cls.date) {
+        const originalStart = cls.start_time.slice(0, 5)
+        if (!slots.includes(originalStart)) {
+          slots.push(originalStart)
+          slots.sort()
+        }
+      }
+      
+      setAvailableSlots(slots)
+    } catch (err) {
+      console.error("Error loading available slots:", err)
+      setAvailableSlots([])
+    } finally {
+      setLoadingSlots(false)
+    }
+  }
+
+  useEffect(() => {
+    if (editing && profile?.role === "STUDENT" && editForm.date) {
+      loadSlotsForDate(editForm.date)
+    }
+  }, [editing, editForm.date, profile])
+
 
   // Notes & tasks
   const [newNote, setNewNote] = useState({ content: "", attached_id: "", attached_title: "", attached_type: "" })
@@ -218,7 +254,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
     try {
       const { data: c } = await supabase
         .from("Class")
-        .select("id, date, start_time, end_time, status, modalidad, duration, student_id, teacher_id, schedule_id, is_recurring, StudentProfile ( User ( name, email ) )")
+        .select("id, date, start_time, end_time, status, modalidad, duration, student_id, teacher_id, schedule_id, is_recurring, StudentProfile ( User ( name, email ) ), TeacherProfile ( User ( name, email ) )")
         .eq("id", classId).maybeSingle()
 
       if (c) {
@@ -228,6 +264,8 @@ export default function ClassDetailView({ classId }: { classId: string }) {
           student_name: (c as any).StudentProfile?.User?.name ?? "Sin asignar",
           student_email: (c as any).StudentProfile?.User?.email,
           student_id: c.student_id, teacher_id: c.teacher_id,
+          teacher_name: (c as any).TeacherProfile?.User?.name ?? "Profesor",
+          teacher_email: (c as any).TeacherProfile?.User?.email,
           schedule_id: c.schedule_id, is_recurring: !!c.is_recurring,
         }
         setCls(classData)
@@ -437,6 +475,9 @@ export default function ClassDetailView({ classId }: { classId: string }) {
     if (!cls) return
     setSavingEdit(true)
     
+    const originalDate = cls.date
+    const originalStartTime = cls.start_time.slice(0, 5)
+
     // Validar traslape
     const hasConflict = await checkTeacherConflict(
       cls.teacher_id,
@@ -535,6 +576,38 @@ export default function ClassDetailView({ classId }: { classId: string }) {
           editForm.modalidad
         )
         toast(`¡Reprogramación exitosa! Se actualizaron ${res.created} clases futuras.`, "success")
+
+        // Notify teacher if student rescheduled
+        if (profile?.role === "STUDENT") {
+          supabase.functions.invoke("notify-teacher-push", {
+            body: {
+              classId,
+              type: "RESCHEDULED",
+              originalDate,
+              originalStartTime,
+              newDate: editForm.date,
+              newStartTime: editForm.start_time
+            }
+          }).catch(err => console.error("Error sending push notification:", err))
+
+          if (cls.teacher_email) {
+            supabase.functions.invoke("send-email", {
+              body: {
+                to: cls.teacher_email,
+                type: "TEACHER_CLASS_RESCHEDULED",
+                params: {
+                  studentName: cls.student_name,
+                  teacherName: cls.teacher_name || "Profesor",
+                  originalDate: new Date(originalDate + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" }),
+                  originalTime: originalStartTime,
+                  newDate: new Date(editForm.date + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" }),
+                  newTime: editForm.start_time,
+                  modalidad: editForm.modalidad === "online" ? "Virtual (📹)" : "Presencial (🏠) (Esta y todas las futuras clases)",
+                }
+              }
+            }).catch(err => console.error("Error sending reschedule email to teacher:", err))
+          }
+        }
       } catch (err: any) {
         toast("Error al reprogramar clases futuras: " + err.message, "error")
       }
@@ -553,6 +626,38 @@ export default function ClassDetailView({ classId }: { classId: string }) {
         toast("Error al guardar cambios de la clase", "error")
       } else {
         toast("Clase guardada exitosamente", "success")
+
+        // Notify teacher if student rescheduled
+        if (profile?.role === "STUDENT") {
+          supabase.functions.invoke("notify-teacher-push", {
+            body: {
+              classId,
+              type: "RESCHEDULED",
+              originalDate,
+              originalStartTime,
+              newDate: editForm.date,
+              newStartTime: editForm.start_time
+            }
+          }).catch(err => console.error("Error sending push notification:", err))
+
+          if (cls.teacher_email) {
+            supabase.functions.invoke("send-email", {
+              body: {
+                to: cls.teacher_email,
+                type: "TEACHER_CLASS_RESCHEDULED",
+                params: {
+                  studentName: cls.student_name,
+                  teacherName: cls.teacher_name || "Profesor",
+                  originalDate: new Date(originalDate + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" }),
+                  originalTime: originalStartTime,
+                  newDate: new Date(editForm.date + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" }),
+                  newTime: editForm.start_time,
+                  modalidad: editForm.modalidad === "online" ? "Virtual (📹)" : "Presencial (🏠)",
+                }
+              }
+            }).catch(err => console.error("Error sending reschedule email to teacher:", err))
+          }
+        }
       }
     }
 
@@ -865,83 +970,185 @@ export default function ClassDetailView({ classId }: { classId: string }) {
               </div>
               <div className="flex gap-2">
                 <button onClick={() => setEditing(false)} className="flex-1 sm:flex-none px-4 py-2 bg-neutral-100 text-neutral-600 rounded-xl text-[10px] font-bold hover:bg-neutral-200 transition-colors">Cancelar</button>
-                <button onClick={handleSaveClick} disabled={savingEdit} className="flex-1 sm:flex-none px-5 py-2.5 bg-neutral-900 text-white rounded-xl text-[10px] font-bold hover:bg-violet-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                <button
+                  onClick={handleSaveClick}
+                  disabled={savingEdit || (profile?.role === "STUDENT" && !editForm.start_time)}
+                  className="flex-1 sm:flex-none px-5 py-2.5 bg-neutral-900 text-white rounded-xl text-[10px] font-bold hover:bg-violet-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
                   <Save className="w-3 h-3" />
                   {savingEdit ? "..." : "Guardar"}
                 </button>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Fecha</label>
-                <input type="date" value={editForm.date} onChange={e => setEditForm(p => ({ ...p, date: e.target.value }))} className="field" />
-              </div>
-              <div>
-                <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Inicio</label>
-                <input type="time" value={editForm.start_time} onChange={e => setEditForm(p => ({ ...p, start_time: e.target.value }))} className="field" />
-              </div>
-              <div>
-                <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Fin</label>
-                <input type="time" value={editForm.end_time} onChange={e => setEditForm(p => ({ ...p, end_time: e.target.value }))} className="field" />
-              </div>
-              {profile?.role !== "STUDENT" ? (
-                <div>
-                  <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Alumno</label>
-                  <select value={editForm.student_id} onChange={e => setEditForm(p => ({ ...p, student_id: e.target.value }))} className="field">
-                    <option value="">Sin asignar</option>
-                    {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Alumno</label>
-                  <div className="field bg-neutral-50 text-neutral-400 border-none cursor-not-allowed select-none">
-                    {cls.student_name}
+            {profile?.role === "STUDENT" ? (
+              /* STUDENT RESCHEDULE UI (WITH VISUAL SLOTS PICKER) */
+              <div className="space-y-6 animate-in fade-in duration-300">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Col 1: Date & Modality */}
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Selecciona una Fecha</label>
+                      <input
+                        type="date"
+                        required
+                        value={editForm.date}
+                        min={new Date().toISOString().split("T")[0]}
+                        onChange={e => setEditForm(p => ({ ...p, date: e.target.value, start_time: "", end_time: "" }))}
+                        className="field"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Modalidad de la Clase</label>
+                      <div className="grid grid-cols-2 gap-2 p-1 bg-neutral-100 rounded-2xl">
+                        {(["online", "presencial"] as const).map(m => (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => setEditForm(p => ({ ...p, modalidad: m }))}
+                            className={`py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${
+                              editForm.modalidad === m
+                                ? "bg-white text-violet-600 shadow-sm"
+                                : "text-neutral-500 hover:text-neutral-700"
+                            }`}
+                          >
+                            {m === "online" ? <Video className="w-4 h-4" /> : <MapPin className="w-4 h-4" />}
+                            {m === "online" ? "Virtual" : "Presencial"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {editForm.start_time && (
+                      <div className="p-4 bg-violet-50/70 border border-violet-100 rounded-2xl">
+                        <p className="text-[9px] font-black text-violet-400 uppercase tracking-widest mb-1">Horario Elegido</p>
+                        <p className="text-sm font-black text-violet-900 flex items-center gap-1.5">
+                          <span>📅 {new Date(editForm.date + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}</span>
+                        </p>
+                        <p className="text-xs font-bold text-violet-700 mt-1">
+                          ⏰ {formatTime(editForm.start_time)} a {formatTime(editForm.end_time)} ({cls.duration} min)
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Col 2: Availability Slots Grid */}
+                  <div className="space-y-4">
+                    <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Horarios Disponibles del Profesor</label>
+                    {loadingSlots ? (
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="h-12 bg-neutral-50 rounded-xl animate-pulse" />
+                        <div className="h-12 bg-neutral-50 rounded-xl animate-pulse" />
+                        <div className="h-12 bg-neutral-50 rounded-xl animate-pulse" />
+                      </div>
+                    ) : availableSlots.length === 0 ? (
+                      <div className="p-6 bg-neutral-50 border border-dashed border-neutral-200 rounded-3xl text-center">
+                        <p className="text-xs text-neutral-400 font-bold italic">No hay horarios disponibles para esta fecha.</p>
+                        <p className="text-[10px] text-neutral-400 mt-1">Por favor, selecciona otra fecha.</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-2 max-h-[260px] overflow-y-auto pr-1 scrollbar-thin">
+                        {availableSlots.map(slot => {
+                          const isSelected = editForm.start_time === slot;
+                          const isOriginal = cls.date === editForm.date && cls.start_time.slice(0, 5) === slot;
+
+                          return (
+                            <button
+                              key={slot}
+                              type="button"
+                              onClick={() => {
+                                setEditForm(p => ({
+                                  ...p,
+                                  start_time: slot,
+                                  end_time: addMinutes(slot, cls.duration)
+                                }))
+                              }}
+                              className={`py-3 px-2 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center gap-0.5 border ${
+                                isSelected
+                                  ? "bg-violet-600 text-white border-violet-600 shadow-md shadow-violet-950/20"
+                                  : isOriginal
+                                  ? "bg-violet-50 text-violet-600 border-violet-200"
+                                  : "bg-neutral-50 text-neutral-600 border-neutral-100/50 hover:border-neutral-300"
+                              }`}
+                              style={{ minHeight: "48px" }}
+                            >
+                              <span>{formatTime(slot)}</span>
+                              {isOriginal && (
+                                <span className={`text-[7px] px-1 rounded uppercase tracking-wider font-black leading-none ${isSelected ? 'bg-violet-700 text-white' : 'bg-violet-200 text-violet-700'}`}>
+                                  Actual
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
-              )}
-            </div>
-
-            <div className={`grid grid-cols-1 ${profile?.role !== "STUDENT" ? "md:grid-cols-2" : ""} gap-4`}>
-              <div>
-                <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Modalidad</label>
-                <div className="grid grid-cols-2 gap-2 p-1 bg-neutral-100 rounded-xl">
-                  {(["online", "presencial"] as const).map(m => (
-                    <button key={m} type="button" onClick={() => setEditForm(p => ({ ...p, modalidad: m }))}
-                      className={`py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${editForm.modalidad === m ? "bg-white text-violet-600 shadow-sm" : "text-neutral-400 hover:text-neutral-600"}`}>
-                      {m === "online" ? <Video className="w-3.5 h-3.5" /> : <MapPin className="w-3.5 h-3.5" />}
-                      {m}
-                    </button>
-                  ))}
-                </div>
               </div>
-              {profile?.role !== "STUDENT" && (
-                <div>
-                  <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Estado</label>
-                  <div className="grid grid-cols-4 gap-1.5 p-1 bg-neutral-100 rounded-xl">
-                    {(["SCHEDULED", "CONFIRMED", "COMPLETED", "CANCELLED"] as const).map(s => (
-                      <button key={s} type="button" onClick={() => setEditForm(p => ({ ...p, status: s }))}
-                        className={`py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${
-                          editForm.status === s ? statusConfig[s].color + " shadow-sm font-black" : "text-neutral-400 hover:text-neutral-600"
-                        }`}>
-                        {statusConfig[s].label.slice(0, 4)}
-                      </button>
-                    ))}
+            ) : (
+              /* TEACHER EDIT FORM (REMAINS FLEXIBLE & MANUAL) */
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Fecha</label>
+                    <input type="date" value={editForm.date} onChange={e => setEditForm(p => ({ ...p, date: e.target.value }))} className="field" />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Inicio</label>
+                    <input type="time" value={editForm.start_time} onChange={e => setEditForm(p => ({ ...p, start_time: e.target.value }))} className="field" />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Fin</label>
+                    <input type="time" value={editForm.end_time} onChange={e => setEditForm(p => ({ ...p, end_time: e.target.value }))} className="field" />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Alumno</label>
+                    <select value={editForm.student_id} onChange={e => setEditForm(p => ({ ...p, student_id: e.target.value }))} className="field">
+                      <option value="">Sin asignar</option>
+                      {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
                   </div>
                 </div>
-              )}
-            </div>
 
-            {/* Danger zone */}
-            {profile?.role !== "STUDENT" && (
-              <div className="pt-4 border-t border-neutral-100 flex justify-between items-center">
-                <p className="text-[9px] text-neutral-400 font-bold uppercase tracking-tight">Riesgo</p>
-                <button onClick={deleteClass} className="px-3 py-1.5 text-[10px] text-red-400 font-bold hover:bg-red-50 rounded-lg transition-all flex items-center gap-1.5">
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Eliminar
-                </button>
-              </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Modalidad</label>
+                    <div className="grid grid-cols-2 gap-2 p-1 bg-neutral-100 rounded-xl">
+                      {(["online", "presencial"] as const).map(m => (
+                        <button key={m} type="button" onClick={() => setEditForm(p => ({ ...p, modalidad: m }))}
+                          className={`py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${editForm.modalidad === m ? "bg-white text-violet-600 shadow-sm" : "text-neutral-400 hover:text-neutral-600"}`}>
+                          {m === "online" ? <Video className="w-3.5 h-3.5" /> : <MapPin className="w-3.5 h-3.5" />}
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest mb-1.5 px-1">Estado</label>
+                    <div className="grid grid-cols-4 gap-1.5 p-1 bg-neutral-100 rounded-xl">
+                      {(["SCHEDULED", "CONFIRMED", "COMPLETED", "CANCELLED"] as const).map(s => (
+                        <button key={s} type="button" onClick={() => setEditForm(p => ({ ...p, status: s }))}
+                          className={`py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${
+                            editForm.status === s ? statusConfig[s].color + " shadow-sm font-black" : "text-neutral-400 hover:text-neutral-600"
+                          }`}>
+                          {statusConfig[s].label.slice(0, 4)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Danger zone */}
+                <div className="pt-4 border-t border-neutral-100 flex justify-between items-center">
+                  <p className="text-[9px] text-neutral-400 font-bold uppercase tracking-tight">Riesgo</p>
+                  <button onClick={deleteClass} className="px-3 py-1.5 text-[10px] text-red-400 font-bold hover:bg-red-50 rounded-lg transition-all flex items-center gap-1.5">
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Eliminar
+                  </button>
+                </div>
+              </>
             )}
           </div>
         ) : (
