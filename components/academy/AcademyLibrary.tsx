@@ -325,7 +325,19 @@ export default function AcademyLibrary({ academyId }: Props) {
                     <div>
                       <label className="block text-[11px] font-semibold text-neutral-500 uppercase mb-1">Subir Archivo</label>
                       <input
-                        type="file" ref={fileInputRef} required onChange={e => setFile(e.target.files?.[0] || null)}
+                        type="file" 
+                        ref={fileInputRef} 
+                        required 
+                        onChange={e => {
+                          const f = e.target.files?.[0]
+                          if (f && f.size > 50 * 1024 * 1024) {
+                            alert("El archivo es demasiado grande. El límite máximo es de 50 MB.")
+                            e.target.value = ""
+                            setFile(null)
+                          } else {
+                            setFile(f || null)
+                          }
+                        }}
                         className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-neutral-50 file:text-neutral-700 hover:file:bg-neutral-100"
                       />
                     </div>
