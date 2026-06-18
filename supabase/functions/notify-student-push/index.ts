@@ -17,58 +17,82 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseKey)
 
   try {
-    const { classId } = await req.json()
+    const { classId, type, customParams } = await req.json()
 
-    if (!classId) {
+    if (!classId && !customParams) {
       return new Response(
-        JSON.stringify({ error: "Missing classId parameter" }),
+        JSON.stringify({ error: "Missing classId or customParams parameter" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
       )
     }
 
-    // 1. Obtener detalles de la clase, estudiante y profesor
-    const { data: cls, error: classErr } = await supabase
-      .from("Class")
-      .select(`
-        id,
-        date,
-        start_time,
-        status,
-        StudentProfile (
-          user_id,
-          User ( name )
-        ),
-        TeacherProfile (
-          User ( name )
+    let studentUserId: string
+    let teacherName: string
+    let date: string
+    let formattedTime: string
+    let finalClassId = classId
+
+    if (customParams) {
+      studentUserId = customParams.studentUserId
+      teacherName = customParams.teacherName || "Tu profesor"
+      date = customParams.date
+      formattedTime = customParams.time
+      if (customParams.classId) {
+        finalClassId = customParams.classId
+      }
+
+      if (!studentUserId || !date || !formattedTime) {
+        return new Response(
+          JSON.stringify({ error: "Missing required fields in customParams: studentUserId, date, time" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
         )
-      `)
-      .eq("id", classId)
-      .maybeSingle()
+      }
+    } else {
+      // 1. Obtener detalles de la clase, estudiante y profesor de la base de datos
+      const { data: cls, error: classErr } = await supabase
+        .from("Class")
+        .select(`
+          id,
+          date,
+          start_time,
+          status,
+          StudentProfile (
+            user_id,
+            User ( name )
+          ),
+          TeacherProfile (
+            User ( name )
+          )
+        `)
+        .eq("id", classId)
+        .maybeSingle()
 
-    if (classErr) throw classErr
-    if (!cls) {
-      return new Response(
-        JSON.stringify({ error: "Class not found" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 404 }
-      )
+      if (classErr) throw classErr
+      if (!cls) {
+        return new Response(
+          JSON.stringify({ error: "Class not found" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 404 }
+        )
+      }
+
+      // Robustez de tipos
+      const studentProfile = Array.isArray(cls.StudentProfile) ? cls.StudentProfile[0] : cls.StudentProfile
+      const teacherProfile = Array.isArray(cls.TeacherProfile) ? cls.TeacherProfile[0] : cls.TeacherProfile
+      
+      const tUser = Array.isArray(teacherProfile?.User) ? teacherProfile?.User[0] : teacherProfile?.User
+      studentUserId = studentProfile?.user_id
+
+      if (!studentUserId) {
+        return new Response(
+          JSON.stringify({ message: "Student has no user_id, skipping push notification" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+        )
+      }
+
+      teacherName = tUser?.name || "Tu profesor"
+      date = cls.date
+      formattedTime = cls.start_time.slice(0, 5)
     }
-
-    // Robustez de tipos
-    const studentProfile = Array.isArray(cls.StudentProfile) ? cls.StudentProfile[0] : cls.StudentProfile
-    const teacherProfile = Array.isArray(cls.TeacherProfile) ? cls.TeacherProfile[0] : cls.TeacherProfile
-    
-    const tUser = Array.isArray(teacherProfile?.User) ? teacherProfile?.User[0] : teacherProfile?.User
-    const studentUserId = studentProfile?.user_id
-
-    if (!studentUserId) {
-      return new Response(
-        JSON.stringify({ message: "Student has no user_id, skipping push notification" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
-      )
-    }
-
-    const teacherName = tUser?.name || "Tu profesor"
-    const formattedTime = cls.start_time.slice(0, 5)
 
     // 2. Obtener las suscripciones push activas del estudiante
     const { data: subs, error: subsErr } = await supabase
@@ -87,16 +111,28 @@ serve(async (req) => {
 
     // 3. Enviar notificación push
     const webpush = await import("https://esm.sh/web-push@3.6.7")
+    const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY") || Deno.env.get("VITE_VAPID_PUBLIC_KEY") || "BC3N_V7TcV1Wo-u4IdieY9eJYuHfO-zC3ghLAho4Lj2BsLtQf2lgrQURxmq_I0vNigamO5lRB1C_AG-2jLm1Cm4"
+    const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY") || "HTsnrmAK-XWgfOHMO2u2I_t9rbL-4qmaisaF00mcEdI"
     webpush.setVapidDetails(
       "mailto:hola@khora.cl",
-      "BC3N_V7TcV1Wo-u4IdieY9eJYuHfO-zC3ghLAho4Lj2BsLtQf2lgrQURxmq_I0vNigamO5lRB1C_AG-2jLm1Cm4",
-      "HTsnrmAK-XWgfOHMO2u2I_t9rbL-4qmaisaF00mcEdI"
+      vapidPublicKey,
+      vapidPrivateKey
     )
 
+    const isCancelled = type === 'CANCELLED'
+    const notificationTitle = isCancelled ? "✕ Clase Cancelada" : "🎸 ¡Clase Confirmada!"
+    const notificationBody = isCancelled 
+      ? `${teacherName} canceló tu clase del ${date} a las ${formattedTime} hs.`
+      : `${teacherName} confirmó tu clase del ${date} a las ${formattedTime} hs.`
+    
+    const notificationUrl = (isCancelled || !finalClassId) 
+      ? "/dashboard" 
+      : `/dashboard/clases/detalles?id=${finalClassId}`
+
     const payload = JSON.stringify({
-      title: "🎸 ¡Clase Confirmada!",
-      body: `${teacherName} confirmó tu clase del ${cls.date} a las ${formattedTime} hs.`,
-      url: `/dashboard/clases/detalles?id=${cls.id}`
+      title: notificationTitle,
+      body: notificationBody,
+      url: notificationUrl
     })
 
     let successCount = 0
