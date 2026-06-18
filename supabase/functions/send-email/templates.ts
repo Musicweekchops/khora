@@ -1,4 +1,4 @@
-export type EmailType = 'WELCOME' | 'CLASS_CONFIRMATION' | 'CLASS_REMINDER' | 'TEACHER_CLASS_CONFIRMED' | 'TEACHER_NEW_STUDENT' | 'PAYMENT_CONFIRMATION' | 'STUDENT_CLASS_CONFIRMED' | 'TEACHER_CLASS_RESCHEDULED' | 'STUDENT_CLASS_CANCELLED';
+export type EmailType = 'WELCOME' | 'CLASS_CONFIRMATION' | 'CLASS_REMINDER' | 'TEACHER_CLASS_CONFIRMED' | 'TEACHER_NEW_STUDENT' | 'PAYMENT_CONFIRMATION' | 'STUDENT_CLASS_CONFIRMED' | 'TEACHER_CLASS_RESCHEDULED' | 'STUDENT_CLASS_CANCELLED' | 'TEACHER_NEW_BOOKING' | 'STUDENT_BOOKING_REJECTED';
 
 
 interface TemplateParams {
@@ -461,6 +461,107 @@ export function getTemplate(type: EmailType, params: TemplateParams): string {
         
         <a href="https://khora.cl/dashboard/agenda" style="display: inline-block; background: linear-gradient(135deg, #5b4fcf 0%, #3d2fa8 100%); background-color: #5b4fcf; color: #ffffff !important; text-decoration: none; font-size: 15px; font-weight: 800; padding: 16px 36px; border-radius: 100px; box-shadow: 0 4px 15px rgba(91, 79, 207, 0.3); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
           Ver mi Agenda
+        </a>
+      </div>
+    `);
+  }
+
+  if (type === 'TEACHER_NEW_BOOKING') {
+    return getLayout(`
+      <div style="padding: 0 40px 40px 40px; text-align: center;">
+        <div style="width: 60px; height: 60px; background-color: #5b4fcf; border-radius: 50%; font-size: 24px; color: #ffffff; display: inline-block; text-align: center; margin: 0 auto 24px auto; line-height: 60px;">
+          🔔
+        </div>
+        <h2 style="font-size: 24px; font-weight: 800; color: #ffffff; margin: 0 0 10px 0; letter-spacing: -0.5px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.2;">
+          Nueva Solicitud de Reserva 🔔
+        </h2>
+        <p style="font-size: 15px; color: #a1a1aa; margin: 0 0 32px 0; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+          ¡Hola ${params.teacherName}! Tu alumno <strong>${params.studentName}</strong> ha solicitado reservar un horario.
+        </p>
+        
+        <div style="background-color: #13131a; border: 1px solid #2d2d3d; border-radius: 20px; padding: 24px; margin-bottom: 32px; text-align: left;">
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 12px;">
+            <tr>
+              <td align="left" style="font-size: 14px; color: #a1a1aa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Alumno:</td>
+              <td align="right" style="font-size: 14px; color: #ffffff; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${params.studentName}</td>
+            </tr>
+          </table>
+          
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 12px;">
+            <tr>
+              <td align="left" style="font-size: 14px; color: #a1a1aa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Fecha:</td>
+              <td align="right" style="font-size: 14px; color: #ffffff; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${params.date}</td>
+            </tr>
+          </table>
+          
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 12px;">
+            <tr>
+              <td align="left" style="font-size: 14px; color: #a1a1aa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Hora:</td>
+              <td align="right" style="font-size: 14px; color: #ffffff; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${params.time} hs</td>
+            </tr>
+          </table>
+
+          <table width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td align="left" style="font-size: 14px; color: #a1a1aa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Servicio:</td>
+              <td align="right" style="font-size: 14px; color: #ffffff; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${params.classType}</td>
+            </tr>
+          </table>
+        </div>
+        
+        <p style="font-size: 14px; color: #a1a1aa; margin: 0 0 32px 0; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+          Ingresa a tu agenda para confirmar o rechazar esta solicitud de reserva.
+        </p>
+
+        <a href="https://khora.cl/dashboard/agenda" style="display: inline-block; background: linear-gradient(135deg, #5b4fcf 0%, #3d2fa8 100%); background-color: #5b4fcf; color: #ffffff !important; text-decoration: none; font-size: 15px; font-weight: 800; padding: 16px 36px; border-radius: 100px; box-shadow: 0 4px 15px rgba(91, 79, 207, 0.3); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+          Ver Agenda y Responder
+        </a>
+      </div>
+    `);
+  }
+
+  if (type === 'STUDENT_BOOKING_REJECTED') {
+    return getLayout(`
+      <div style="padding: 0 40px 40px 40px; text-align: center;">
+        <div style="width: 60px; height: 60px; background-color: #ef4444; border-radius: 50%; font-size: 24px; color: #ffffff; display: inline-block; text-align: center; margin: 0 auto 24px auto; line-height: 60px;">
+          ✕
+        </div>
+        <h2 style="font-size: 24px; font-weight: 800; color: #ffffff; margin: 0 0 10px 0; letter-spacing: -0.5px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.2;">
+          Reserva no disponible ✕
+        </h2>
+        <p style="font-size: 15px; color: #a1a1aa; margin: 0 0 32px 0; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+          ¡Hola ${params.studentName}! Tu solicitud de reserva de clase con <strong>${params.teacherName}</strong> no ha podido ser confirmada en esta ocasión.
+        </p>
+        
+        <div style="background-color: #13131a; border: 1px solid #2d2d3d; border-radius: 20px; padding: 24px; margin-bottom: 32px; text-align: left;">
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 12px;">
+            <tr>
+              <td align="left" style="font-size: 14px; color: #a1a1aa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Profesor:</td>
+              <td align="right" style="font-size: 14px; color: #ffffff; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${params.teacherName}</td>
+            </tr>
+          </table>
+          
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 12px;">
+            <tr>
+              <td align="left" style="font-size: 14px; color: #a1a1aa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Fecha solicitada:</td>
+              <td align="right" style="font-size: 14px; color: #ffffff; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${params.date}</td>
+            </tr>
+          </table>
+          
+          <table width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td align="left" style="font-size: 14px; color: #a1a1aa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Hora solicitada:</td>
+              <td align="right" style="font-size: 14px; color: #ffffff; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${params.time} hs</td>
+            </tr>
+          </table>
+        </div>
+        
+        <p style="font-size: 14px; color: #a1a1aa; margin: 0 0 32px 0; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+          Por favor, intenta solicitar otro horario que se acomode a la disponibilidad de tu profesor ingresando a tu portal.
+        </p>
+
+        <a href="https://khora.cl/dashboard/agendar" style="display: inline-block; background: linear-gradient(135deg, #5b4fcf 0%, #3d2fa8 100%); background-color: #5b4fcf; color: #ffffff !important; text-decoration: none; font-size: 15px; font-weight: 800; padding: 16px 36px; border-radius: 100px; box-shadow: 0 4px 15px rgba(91, 79, 207, 0.3); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+          Reagendar Clase
         </a>
       </div>
     `);

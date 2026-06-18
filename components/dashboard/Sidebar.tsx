@@ -113,6 +113,7 @@ const STUDENT_NAV = [
   { name: "Dashboard", href: "/dashboard", icon: Icons.dashboard },
   { name: "Mi Roadmap", href: "/dashboard/roadmap", icon: Icons.roadmap },
   { name: "Mis Clases", href: "/dashboard/clases", icon: Icons.calendar },
+  { name: "Agendar Clase", href: "/dashboard/agendar", icon: Icons.calendar },
   { name: "Mi Biblioteca", href: "/dashboard/biblioteca", icon: Icons.library },
   { name: "Ajustes", href: "/dashboard/ajustes", icon: Icons.settings },
 ]

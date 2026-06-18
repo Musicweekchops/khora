@@ -40,21 +40,9 @@ export default function AgendaPage() {
   const [showModal, setShowModal] = useState(false)
   const [showAvailModal, setShowAvailModal] = useState(false)
 
-  // Lock body scroll when modals are active to prevent background scroll drifting
-  useEffect(() => {
-    if (showModal || showAvailModal) {
-      document.body.style.overflow = "hidden"
-    } else {
-      document.body.style.overflow = ""
-    }
-    return () => {
-      document.body.style.overflow = ""
-    }
-  }, [showModal, showAvailModal])
-
   const [selectedSlot, setSelectedSlot] = useState<{ date: string; hour: number } | null>(null)
   const [mobileSelectedDate, setMobileSelectedDate] = useState(() => new Date())
-  const [students, setStudents] = useState<{ id: string; name: string }[]>([])
+  const [students, setStudents] = useState<{ id: string; name: string; email: string }[]>([])
   const [currentMonthDate, setCurrentMonthDate] = useState(() => new Date())
   const [searchTerm, setSearchTerm] = useState("")
   const [filterTab, setFilterTab] = useState<"ALL" | "PENDING" | "COMPLETED">("ALL")
@@ -62,6 +50,25 @@ export default function AgendaPage() {
   // Quick-add form state
   const [quickForm, setQuickForm] = useState({ student_id: "", start_time: "10:00", end_time: "11:00", modalidad: "online" })
   const [saving, setSaving] = useState(false)
+
+  // Booking approval state
+  const [selectedBooking, setSelectedBooking] = useState<any | null>(null)
+  const [showBookingModal, setShowBookingModal] = useState(false)
+  const [bookingStudentId, setBookingStudentId] = useState("")
+  const [bookingModalidad, setBookingModalidad] = useState("online")
+  const [processingBooking, setProcessingBooking] = useState(false)
+
+  // Lock body scroll when modals are active to prevent background scroll drifting
+  useEffect(() => {
+    if (showModal || showAvailModal || showBookingModal) {
+      document.body.style.overflow = "hidden"
+    } else {
+      document.body.style.overflow = ""
+    }
+    return () => {
+      document.body.style.overflow = ""
+    }
+  }, [showModal, showAvailModal, showBookingModal])
 
   const weekDays = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => {
@@ -141,7 +148,10 @@ export default function AgendaPage() {
       // Load pending bookings
       const { data: bookingData, error: bookErr } = await supabase
         .from("Booking")
-        .select("id, date, start_time, end_time, status, name")
+        .select(`
+          id, date, start_time, end_time, status, name, email, phone, message, class_type_id, total_price,
+          ClassType ( name )
+        `)
         .eq("teacher_id", profile!.teacherProfileId!)
         .eq("status", "PENDING")
         .gte("date", start)
@@ -159,9 +169,15 @@ export default function AgendaPage() {
 
       const formattedBookings = (bookingData || []).map((b: any) => ({
         id: b.id, date: b.date, start_time: b.start_time, end_time: b.end_time,
-        status: "PENDING", modalidad: "N/A", is_recurring: false,
+        status: "PENDING", modalidad: "online", is_recurring: false,
         student_name: `SOLICITUD: ${b.name}`,
-        is_booking: true
+        is_booking: true,
+        booking_email: b.email,
+        booking_phone: b.phone,
+        booking_message: b.message,
+        class_type_id: b.class_type_id,
+        class_type_name: b.ClassType?.name || "Clase",
+        total_price: b.total_price
       }))
 
       setClasses([...formattedClasses, ...formattedBookings])
@@ -193,10 +209,204 @@ export default function AgendaPage() {
   async function loadStudents() {
     const { data } = await supabase
       .from("StudentProfile")
-      .select("id, User ( name )")
+      .select("id, User ( name, email )")
       .eq("teacher_id", profile!.teacherProfileId!)
 
-    if (data) setStudents(data.map((s: any) => ({ id: s.id, name: s.User?.name ?? "—" })))
+    if (data) {
+      setStudents(data.map((s: any) => {
+        const u = Array.isArray(s.User) ? s.User[0] : s.User
+        return {
+          id: s.id,
+          name: u?.name ?? "—",
+          email: u?.email ?? ""
+        }
+      }))
+    }
+  }
+
+  function handleBookingClick(cls: any) {
+    const matched = students.find(s => s.email.toLowerCase() === cls.booking_email.toLowerCase())
+    setBookingStudentId(matched ? matched.id : "")
+    setBookingModalidad("online")
+    setSelectedBooking(cls)
+    setShowBookingModal(true)
+  }
+
+  async function handleAcceptBooking() {
+    if (!selectedBooking || !profile?.teacherProfileId) return
+    setProcessingBooking(true)
+
+    try {
+      // 1. Conflict Check
+      const hasConflict = await checkTeacherConflict(
+        profile.teacherProfileId,
+        selectedBooking.date,
+        selectedBooking.start_time,
+        selectedBooking.end_time
+      )
+
+      if (hasConflict) {
+        toast.error("El profesor ya tiene una clase o reserva programada en ese horario.")
+        setProcessingBooking(false)
+        return
+      }
+
+      // 2. Create the class
+      const { data: newClass, error: classErr } = await supabase
+        .from("Class")
+        .insert({
+          teacher_id: profile.teacherProfileId,
+          student_id: bookingStudentId || null,
+          class_type_id: selectedBooking.class_type_id || null,
+          booking_id: selectedBooking.id,
+          date: selectedBooking.date,
+          start_time: selectedBooking.start_time,
+          end_time: selectedBooking.end_time,
+          modalidad: bookingModalidad,
+          status: "CONFIRMED",
+        })
+        .select()
+        .single()
+
+      if (classErr) throw classErr
+
+      // 3. Update the booking status to CONFIRMED
+      const { error: bookingErr } = await supabase
+        .from("Booking")
+        .update({ status: "CONFIRMED" })
+        .eq("id", selectedBooking.id)
+
+      if (bookingErr) throw bookingErr
+
+      // 4. Send email & push notifications to student
+      const friendlyDate = new Date(selectedBooking.date + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
+      const friendlyTime = selectedBooking.start_time.slice(0, 5)
+      const teacherName = profile.name || "Tu profesor"
+
+      if (selectedBooking.booking_email) {
+        supabase.functions.invoke("send-email", {
+          body: {
+            to: selectedBooking.booking_email,
+            type: "STUDENT_CLASS_CONFIRMED",
+            params: {
+              studentName: selectedBooking.student_name.replace("SOLICITUD: ", ""),
+              teacherName: teacherName,
+              date: friendlyDate,
+              time: friendlyTime
+            }
+          }
+        }).catch(err => console.error("Error sending booking confirmation email:", err))
+      }
+
+      let studentUserId = null
+      if (bookingStudentId) {
+        const { data: studentUser } = await supabase
+          .from("StudentProfile")
+          .select("user_id")
+          .eq("id", bookingStudentId)
+          .maybeSingle()
+        if (studentUser) studentUserId = studentUser.user_id
+      }
+
+      if (studentUserId) {
+        supabase.functions.invoke("notify-student-push", {
+          body: {
+            type: "CONFIRMED",
+            customParams: {
+              studentUserId: studentUserId,
+              teacherName: teacherName,
+              date: friendlyDate,
+              time: friendlyTime,
+              classId: newClass.id
+            }
+          }
+        }).catch(err => console.error("Error sending push notification to student:", err))
+      } else {
+        supabase.functions.invoke("notify-student-push", {
+          body: {
+            classId: newClass.id,
+            type: "CONFIRMED"
+          }
+        }).catch(err => console.error("Error sending push notification to student:", err))
+      }
+
+      toast.success("¡Reserva confirmada con éxito!")
+      setShowBookingModal(false)
+      loadClasses()
+    } catch (err: any) {
+      toast.error("Error al confirmar reserva: " + err.message)
+    } finally {
+      setProcessingBooking(false)
+    }
+  }
+
+  async function handleRejectBooking() {
+    if (!selectedBooking) return
+    if (!confirm("¿Estás seguro de que deseas rechazar esta solicitud de reserva? Se le notificará al alumno.")) return
+    setProcessingBooking(true)
+
+    try {
+      // 1. Update the booking status to REJECTED
+      const { error: bookingErr } = await supabase
+        .from("Booking")
+        .update({ status: "REJECTED" })
+        .eq("id", selectedBooking.id)
+
+      if (bookingErr) throw bookingErr
+
+      // 2. Send email & push notifications to student
+      const friendlyDate = new Date(selectedBooking.date + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
+      const friendlyTime = selectedBooking.start_time.slice(0, 5)
+      const teacherName = profile?.name || "Tu profesor"
+
+      if (selectedBooking.booking_email) {
+        supabase.functions.invoke("send-email", {
+          body: {
+            to: selectedBooking.booking_email,
+            type: "STUDENT_BOOKING_REJECTED",
+            params: {
+              studentName: selectedBooking.student_name.replace("SOLICITUD: ", ""),
+              teacherName: teacherName,
+              date: friendlyDate,
+              time: friendlyTime
+            }
+          }
+        }).catch(err => console.error("Error sending booking rejection email:", err))
+      }
+
+      let studentUserId = null
+      const matched = students.find(s => s.email.toLowerCase() === selectedBooking.booking_email.toLowerCase())
+      if (matched) {
+        const { data: studentUser } = await supabase
+          .from("StudentProfile")
+          .select("user_id")
+          .eq("id", matched.id)
+          .maybeSingle()
+        if (studentUser) studentUserId = studentUser.user_id
+      }
+
+      if (studentUserId) {
+        supabase.functions.invoke("notify-student-push", {
+          body: {
+            type: "REJECTED",
+            customParams: {
+              studentUserId: studentUserId,
+              teacherName: teacherName,
+              date: friendlyDate,
+              time: friendlyTime
+            }
+          }
+        }).catch(err => console.error("Error sending rejection push notification to student:", err))
+      }
+
+      toast.success("Reserva rechazada y alumno notificado.")
+      setShowBookingModal(false)
+      loadClasses()
+    } catch (err: any) {
+      toast.error("Error al rechazar reserva: " + err.message)
+    } finally {
+      setProcessingBooking(false)
+    }
   }
 
   function prevWeek() { setWeekStart(prev => { const d = new Date(prev); d.setDate(d.getDate() - 7); return d }) }
@@ -397,29 +607,47 @@ export default function AgendaPage() {
                           }}
                           onClick={e => e.stopPropagation()}
                         >
-                          <Link 
-                            href={cls.is_booking ? `/dashboard/crm` : `/dashboard/clases/detalles?id=${cls.id}`}
-                            className="block w-full h-full"
-                          >
-                            <div
-                              className={`h-full rounded-md p-1.5 text-xs hover:shadow-lg hover:z-20 transition-all cursor-pointer overflow-hidden flex flex-col shadow-sm border ${
-                                cls.status === "COMPLETED"
-                                  ? "bg-emerald-50/95 border-emerald-200 border-l-4 border-l-emerald-400 text-emerald-700"
-                                  : cls.is_booking 
-                                    ? "bg-amber-50/95 border-amber-200 border-l-4 border-l-amber-400 text-amber-700 border-dashed"
+                          {cls.is_booking ? (
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                handleBookingClick(cls)
+                              }}
+                              className="block w-full h-full text-left"
+                            >
+                              <div
+                                className="h-full rounded-md p-1.5 text-xs hover:shadow-lg hover:z-20 transition-all cursor-pointer overflow-hidden flex flex-col shadow-sm border bg-amber-50/95 border-amber-200 border-l-4 border-l-amber-400 text-amber-700 border-dashed"
+                              >
+                                <div className="flex items-start justify-between gap-1 leading-tight">
+                                  <p className="font-black truncate pr-4">{cls.student_name.replace("SOLICITUD: ", "")}</p>
+                                  <span className="text-[9px] animate-pulse flex-shrink-0">🔔</span>
+                                </div>
+                                <p className="opacity-70 text-[9px] font-medium mt-auto truncate">{formatTime(cls.start_time)} - {formatTime(cls.end_time)}</p>
+                              </div>
+                            </button>
+                          ) : (
+                            <Link 
+                              href={`/dashboard/clases/detalles?id=${cls.id}`}
+                              className="block w-full h-full"
+                            >
+                              <div
+                                className={`h-full rounded-md p-1.5 text-xs hover:shadow-lg hover:z-20 transition-all cursor-pointer overflow-hidden flex flex-col shadow-sm border ${
+                                  cls.status === "COMPLETED"
+                                    ? "bg-emerald-50/95 border-emerald-200 border-l-4 border-l-emerald-400 text-emerald-700"
                                     : cls.is_trial
                                       ? "bg-orange-50/95 border-orange-200 border-l-4 border-l-orange-400 text-orange-700"
                                       : "bg-violet-50/95 border-violet-200 border-l-4 border-l-violet-400 text-violet-700"
-                              }`}
-                            >
-                              <div className="flex items-start justify-between gap-1 leading-tight">
-                                <p className="font-black truncate pr-4">{cls.student_name}</p>
-                                {cls.is_recurring && <span className="text-[9px] opacity-70 flex-shrink-0" title="Clase recurrente">↻</span>}
-                                {cls.is_booking && <span className="text-[9px] animate-pulse flex-shrink-0">🔔</span>}
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-1 leading-tight">
+                                  <p className="font-black truncate pr-4">{cls.student_name}</p>
+                                  {cls.is_recurring && <span className="text-[9px] opacity-70 flex-shrink-0" title="Clase recurrente">↻</span>}
+                                </div>
+                                <p className="opacity-70 text-[9px] font-medium mt-auto truncate">{formatTime(cls.start_time)} - {formatTime(cls.end_time)}</p>
                               </div>
-                              <p className="opacity-70 text-[9px] font-medium mt-auto truncate">{formatTime(cls.start_time)} - {formatTime(cls.end_time)}</p>
-                            </div>
-                          </Link>
+                            </Link>
+                          )}
 
                           {cls.is_booking && (
                             <button
@@ -613,24 +841,49 @@ export default function AgendaPage() {
                   </div>
 
                   <div className="flex-1 min-w-0 flex items-center gap-2">
-                    <Link
-                      href={cls.is_booking ? `/dashboard/crm` : `/dashboard/clases/detalles?id=${cls.id}`}
-                      className="flex-1 min-w-0"
-                    >
-                      <div className={`rounded-[24px] border p-4 shadow-sm transition-all flex items-center justify-between gap-4 cursor-pointer hover:shadow-md ${cardBg}`}>
-                        <div className="min-w-0 flex-1">
-                          <h4 className="font-black text-sm md:text-base truncate">{cls.student_name}</h4>
-                          <p className="text-[10px] font-bold opacity-75 uppercase tracking-wider mt-1 flex items-center gap-1.5">
-                            <span>🕒 {formatTime(cls.start_time)} - {formatTime(cls.end_time)}</span>
-                            <span>•</span>
-                            <span>{cls.modalidad === "online" ? "📹 Virtual" : "🏠 Presencial"}</span>
-                          </p>
+                    {cls.is_booking ? (
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          handleBookingClick(cls)
+                        }}
+                        className="flex-1 min-w-0 text-left"
+                      >
+                        <div className={`rounded-[24px] border p-4 shadow-sm transition-all flex items-center justify-between gap-4 cursor-pointer hover:shadow-md ${cardBg}`}>
+                          <div className="min-w-0 flex-1">
+                            <h4 className="font-black text-sm md:text-base truncate">{cls.student_name.replace("SOLICITUD: ", "")}</h4>
+                            <p className="text-[10px] font-bold opacity-75 uppercase tracking-wider mt-1 flex items-center gap-1.5">
+                              <span>🕒 {formatTime(cls.start_time)} - {formatTime(cls.end_time)}</span>
+                              <span>•</span>
+                              <span>📹 Virtual</span>
+                            </p>
+                          </div>
+                          <div className="w-8 h-8 rounded-full bg-white/70 flex items-center justify-center text-neutral-500 hover:text-neutral-900 font-bold transition-all shadow-sm flex-shrink-0">
+                            →
+                          </div>
                         </div>
-                        <div className="w-8 h-8 rounded-full bg-white/70 flex items-center justify-center text-neutral-500 hover:text-neutral-900 font-bold transition-all shadow-sm flex-shrink-0">
-                          →
+                      </button>
+                    ) : (
+                      <Link
+                        href={`/dashboard/clases/detalles?id=${cls.id}`}
+                        className="flex-1 min-w-0"
+                      >
+                        <div className={`rounded-[24px] border p-4 shadow-sm transition-all flex items-center justify-between gap-4 cursor-pointer hover:shadow-md ${cardBg}`}>
+                          <div className="min-w-0 flex-1">
+                            <h4 className="font-black text-sm md:text-base truncate">{cls.student_name}</h4>
+                            <p className="text-[10px] font-bold opacity-75 uppercase tracking-wider mt-1 flex items-center gap-1.5">
+                              <span>🕒 {formatTime(cls.start_time)} - {formatTime(cls.end_time)}</span>
+                              <span>•</span>
+                              <span>{cls.modalidad === "online" ? "📹 Virtual" : "🏠 Presencial"}</span>
+                            </p>
+                          </div>
+                          <div className="w-8 h-8 rounded-full bg-white/70 flex items-center justify-center text-neutral-500 hover:text-neutral-900 font-bold transition-all shadow-sm flex-shrink-0">
+                            →
+                          </div>
                         </div>
-                      </div>
-                    </Link>
+                      </Link>
+                    )}
 
                     {cls.is_booking && (
                       <button
@@ -854,6 +1107,109 @@ export default function AgendaPage() {
               ✕
             </button>
             <AvailabilitySettings teacherId={profile.teacherProfileId} />
+          </div>
+        </div>
+      )}
+
+      {/* Booking Approval Modal */}
+      {showBookingModal && selectedBooking && (
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-0 md:p-4 animate-in fade-in duration-200" 
+          onClick={() => setShowBookingModal(false)}
+        >
+          <div 
+            onClick={e => e.stopPropagation()} 
+            className="bg-white w-full md:max-w-md rounded-t-[40px] md:rounded-[32px] p-6 md:p-8 shadow-2xl flex flex-col max-h-[90vh] md:max-h-[95vh] overflow-y-auto animate-in slide-in-from-bottom md:slide-in-from-bottom-0 duration-300"
+          >
+            <div className="w-12 h-1.5 bg-neutral-200 rounded-full mx-auto mb-4 md:hidden flex-shrink-0" />
+            
+            <div className="flex items-center justify-between mb-5 flex-shrink-0">
+              <div>
+                <h3 className="text-xl md:text-2xl font-black text-neutral-900 tracking-tight">Solicitud de Reserva</h3>
+                <p className="text-xs text-neutral-400 font-medium mt-0.5">Revisa y responde a la solicitud de clase</p>
+              </div>
+              <button 
+                onClick={() => setShowBookingModal(false)}
+                className="w-9 h-9 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-500 hover:text-neutral-900 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Event details */}
+              <div className="bg-neutral-50 border border-neutral-200/60 rounded-2xl p-4 space-y-2.5">
+                <div className="flex justify-between text-xs">
+                  <span className="text-neutral-400 font-bold">Fecha:</span>
+                  <span className="text-neutral-800 font-black">{new Date(selectedBooking.date + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-neutral-400 font-bold">Horario:</span>
+                  <span className="text-neutral-800 font-black">{formatTime(selectedBooking.start_time)} - {formatTime(selectedBooking.end_time)} hs</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-neutral-400 font-bold">Servicio:</span>
+                  <span className="text-neutral-800 font-black">{selectedBooking.class_type_name}</span>
+                </div>
+              </div>
+
+              {/* Student info */}
+              <div className="space-y-2">
+                <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-widest ml-1">Datos de Contacto</label>
+                <div className="bg-neutral-50 border border-neutral-200/60 rounded-2xl p-4 space-y-1.5">
+                  <p className="text-sm font-black text-neutral-900">{selectedBooking.student_name.replace("SOLICITUD: ", "")}</p>
+                  <p className="text-xs text-neutral-500 font-medium">{selectedBooking.booking_email} {selectedBooking.booking_phone ? `· ${selectedBooking.booking_phone}` : ""}</p>
+                  
+                  {selectedBooking.booking_message && (
+                    <div className="mt-3 p-3 bg-neutral-100/50 rounded-xl border-l-4 border-violet-400 italic text-xs text-neutral-600 font-medium">
+                      "{selectedBooking.booking_message}"
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Match Select Dropdown */}
+              <div>
+                <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-2 ml-1">Alumno Asociado</label>
+                <select
+                  value={bookingStudentId}
+                  onChange={e => setBookingStudentId(e.target.value)}
+                  className="w-full px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl outline-none focus:border-violet-400 text-sm font-bold text-neutral-700 appearance-none bg-no-repeat bg-[right_1rem_center]"
+                  style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundSize: '1.25rem' }}
+                >
+                  <option value="">Sin asignar (clase puntual)</option>
+                  {students.map(s => <option key={s.id} value={s.id}>{s.name} ({s.email})</option>)}
+                </select>
+              </div>
+
+              {/* Modality selector */}
+              <div className="grid grid-cols-2 gap-2 p-1.5 bg-neutral-100 rounded-2xl">
+                {(["online", "presencial"] as const).map(m => (
+                  <button key={m} type="button" onClick={() => setBookingModalidad(m)}
+                    className={`py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${bookingModalidad === m ? "bg-white text-violet-600 shadow-sm" : "text-neutral-400"}`}>
+                    {m === "online" ? "📹 Virtual" : "🏠 Presencial"}
+                  </button>
+                ))}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row gap-2.5 pt-3">
+                <button 
+                  onClick={handleRejectBooking} 
+                  disabled={processingBooking}
+                  className="flex-1 py-3.5 border border-red-200 text-red-500 hover:bg-red-50 rounded-full text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50"
+                >
+                  Rechazar Solicitud
+                </button>
+                <button 
+                  onClick={handleAcceptBooking} 
+                  disabled={processingBooking} 
+                  className="flex-1 py-3.5 bg-neutral-900 hover:bg-emerald-600 text-white rounded-full text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50 shadow-md shadow-neutral-900/10"
+                >
+                  {processingBooking ? "Procesando..." : "Confirmar Reserva"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

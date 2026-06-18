@@ -142,6 +142,10 @@ serve(async (req) => {
       payloadTitle = "✕ Clase Cancelada"
       payloadBody = `La clase con ${studentName} del ${date} a las ${formattedTime} hs ha sido cancelada.`
       payloadUrl = "/dashboard"
+    } else if (type === "BOOKING_CREATED") {
+      payloadTitle = "🔔 Nueva Solicitud de Reserva"
+      payloadBody = `${studentName} ha solicitado reservar una clase el ${date} a las ${formattedTime} hs.`
+      payloadUrl = "/dashboard/agenda"
     }
 
     const payload = JSON.stringify({

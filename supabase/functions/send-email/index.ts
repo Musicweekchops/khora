@@ -44,6 +44,8 @@ serve(async (req) => {
       STUDENT_CLASS_CONFIRMED: "¡Tu clase de música ha sido confirmada!",
       TEACHER_CLASS_RESCHEDULED: "🔄 Tu clase de música ha sido reagendada",
       STUDENT_CLASS_CANCELLED: "Tu clase de música ha sido cancelada",
+      TEACHER_NEW_BOOKING: "Nueva solicitud de reserva de clase 🔔",
+      STUDENT_BOOKING_REJECTED: "Tu solicitud de reserva no pudo ser confirmada ✕",
     }
 
     const finalSubject = subject || defaultSubjects[type as EmailType] || "Notificación de Khora"
