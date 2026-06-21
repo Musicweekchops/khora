@@ -1,23 +1,47 @@
 "use client"
-
+ 
 import { useState } from "react"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
+import { useRouter } from "next/navigation"
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("")
+  const [emailOrName, setEmailOrName] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const router = useRouter()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError("")
     setLoading(true)
 
-    const { error: err } = await supabase.auth.signInWithPassword({ email, password })
+    let finalEmail = emailOrName.trim()
+
+    // Si no contiene '@', asumimos que es un nombre completo e intentamos resolver su email
+    if (!finalEmail.includes("@")) {
+      try {
+        const { data: resolvedEmail, error: rpcErr } = await supabase.rpc("get_email_by_name", { 
+          p_name: finalEmail 
+        })
+        
+        if (rpcErr || !resolvedEmail) {
+          setError("Nombre, email o contraseña incorrectos")
+          setLoading(false)
+          return
+        }
+        finalEmail = resolvedEmail
+      } catch (err) {
+        setError("Error al resolver el nombre de usuario")
+        setLoading(false)
+        return
+      }
+    }
+
+    const { error: err } = await supabase.auth.signInWithPassword({ email: finalEmail, password })
     if (err) {
-      setError(err.message === "Invalid login credentials" ? "Email o contraseña incorrectos" : err.message)
+      setError(err.message === "Invalid login credentials" ? "Nombre, email o contraseña incorrectos" : err.message)
       setLoading(false)
     }
   }
@@ -47,8 +71,15 @@ export default function LoginPage() {
             )}
 
             <div>
-              <label className="kh-label">Email</label>
-              <input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="kh-input" placeholder="tu@email.com" />
+              <label className="kh-label">Nombre o Email</label>
+              <input 
+                type="text" 
+                required 
+                value={emailOrName} 
+                onChange={e => setEmailOrName(e.target.value)} 
+                className="kh-input" 
+                placeholder="Nombre completo o email" 
+              />
             </div>
 
             <div>
@@ -80,3 +111,4 @@ export default function LoginPage() {
     </div>
   )
 }
+

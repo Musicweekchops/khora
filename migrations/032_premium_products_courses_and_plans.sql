@@ -92,3 +92,4 @@ FOR SELECT USING (
 
 -- 8. Decouple Booking from rigid class types for quick landing page conversions
 ALTER TABLE public."Booking" ALTER COLUMN class_type_id DROP NOT NULL;
+

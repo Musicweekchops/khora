@@ -1,4 +1,4 @@
-export type EmailType = 'WELCOME' | 'CLASS_CONFIRMATION' | 'CLASS_REMINDER' | 'TEACHER_CLASS_CONFIRMED' | 'TEACHER_NEW_STUDENT' | 'PAYMENT_CONFIRMATION' | 'STUDENT_CLASS_CONFIRMED' | 'TEACHER_CLASS_RESCHEDULED' | 'STUDENT_CLASS_CANCELLED' | 'TEACHER_NEW_BOOKING' | 'STUDENT_BOOKING_REJECTED';
+export type EmailType = 'WELCOME' | 'CLASS_CONFIRMATION' | 'CLASS_REMINDER' | 'TEACHER_CLASS_CONFIRMED' | 'TEACHER_NEW_STUDENT' | 'PAYMENT_CONFIRMATION' | 'STUDENT_CLASS_CONFIRMED' | 'TEACHER_CLASS_RESCHEDULED' | 'STUDENT_CLASS_CANCELLED' | 'TEACHER_NEW_BOOKING' | 'STUDENT_BOOKING_REJECTED' | 'STUDENT_CLASS_RESCHEDULED';
 
 
 interface TemplateParams {
@@ -261,16 +261,26 @@ export function getTemplate(type: EmailType, params: TemplateParams): string {
   }
 
   if (type === 'STUDENT_CLASS_CANCELLED') {
+    const isPendingAuth = params.status === 'PENDING_AUTHORIZATION';
+    const headerColor = isPendingAuth ? '#f59e0b' : '#ef4444';
+    const btnBg = isPendingAuth 
+      ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' 
+      : 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+    
     return getLayout(`
       <div style="padding: 0 40px 40px 40px; text-align: center;">
-        <div style="width: 60px; height: 60px; background-color: #ef4444; border-radius: 50%; font-size: 24px; color: #ffffff; display: inline-block; text-align: center; margin: 0 auto 24px auto; line-height: 60px;">
-          ✕
+        <div style="width: 60px; height: 60px; background-color: ${headerColor}; border-radius: 50%; font-size: 24px; color: #ffffff; display: inline-block; text-align: center; margin: 0 auto 24px auto; line-height: 60px;">
+          ${isPendingAuth ? '⏳' : '✕'}
         </div>
         <h2 style="font-size: 24px; font-weight: 800; color: #ffffff; margin: 0 0 10px 0; letter-spacing: -0.5px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.2;">
-          Clase Cancelada ✕
+          ${isPendingAuth ? 'Cancelación Pendiente de Autorización ⏳' : 'Clase Cancelada ✕'}
         </h2>
         <p style="font-size: 15px; color: #a1a1aa; margin: 0 0 32px 0; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-          ¡Hola ${params.studentName}! Tu clase con tu profesor <strong>${params.teacherName}</strong> ha sido cancelada.
+          ¡Hola ${params.studentName}! ${
+            isPendingAuth 
+              ? `Tu solicitud de cancelación para la clase con tu profesor <strong>${params.teacherName}</strong> está pendiente de autorización por parte del administrador, ya que fue realizada con menos de 24 horas de anticipación.`
+              : `Tu clase con tu profesor <strong>${params.teacherName}</strong> ha sido cancelada.`
+          }
         </p>
         
         <div style="background-color: #13131a; border: 1px solid #2d2d3d; border-radius: 20px; padding: 24px; margin-bottom: 32px; text-align: left;">
@@ -296,7 +306,7 @@ export function getTemplate(type: EmailType, params: TemplateParams): string {
           </table>
         </div>
         
-        <a href="https://khora.cl/dashboard" style="display: inline-block; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); background-color: #ef4444; color: #ffffff !important; text-decoration: none; font-size: 15px; font-weight: 800; padding: 16px 36px; border-radius: 100px; box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+        <a href="https://khora.cl/dashboard" style="display: inline-block; background: ${btnBg}; background-color: ${headerColor}; color: #ffffff !important; text-decoration: none; font-size: 15px; font-weight: 800; padding: 16px 36px; border-radius: 100px; box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
           Ir a mi Portal
         </a>
       </div>
@@ -562,6 +572,56 @@ export function getTemplate(type: EmailType, params: TemplateParams): string {
 
         <a href="https://khora.cl/dashboard/agendar" style="display: inline-block; background: linear-gradient(135deg, #5b4fcf 0%, #3d2fa8 100%); background-color: #5b4fcf; color: #ffffff !important; text-decoration: none; font-size: 15px; font-weight: 800; padding: 16px 36px; border-radius: 100px; box-shadow: 0 4px 15px rgba(91, 79, 207, 0.3); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
           Reagendar Clase
+        </a>
+      </div>
+    `);
+  }
+
+  if (type === 'STUDENT_CLASS_RESCHEDULED') {
+    return getLayout(`
+      <div style="padding: 0 40px 40px 40px; text-align: center;">
+        <div style="width: 60px; height: 60px; background-color: #5b4fcf; border-radius: 50%; font-size: 24px; color: #ffffff; display: inline-block; text-align: center; margin: 0 auto 24px auto; line-height: 60px;">
+          🔄
+        </div>
+        <h2 style="font-size: 24px; font-weight: 800; color: #ffffff; margin: 0 0 10px 0; letter-spacing: -0.5px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.2;">
+          Clase Reprogramada 🔄
+        </h2>
+        <p style="font-size: 15px; color: #a1a1aa; margin: 0 0 32px 0; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+          ¡Hola ${params.studentName}! Tu clase con tu profesor <strong>${params.teacherName}</strong> ha sido reprogramada con éxito.
+        </p>
+        
+        <div style="background-color: #13131a; border: 1px solid #2d2d3d; border-radius: 20px; padding: 24px; margin-bottom: 32px; text-align: left;">
+          <div style="font-size: 11px; font-weight: 800; color: #10b981; margin-bottom: 15px; text-align: center; text-transform: uppercase; letter-spacing: 1.5px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+            NUEVOS DETALLES
+          </div>
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 8px;">
+            <tr>
+              <td align="left" style="font-size: 13px; color: #a1a1aa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Profesor:</td>
+              <td align="right" style="font-size: 13px; color: #ffffff; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${params.teacherName}</td>
+            </tr>
+          </table>
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 8px;">
+            <tr>
+              <td align="left" style="font-size: 13px; color: #a1a1aa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Fecha:</td>
+              <td align="right" style="font-size: 13px; color: #ffffff; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${params.date}</td>
+            </tr>
+          </table>
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 8px;">
+            <tr>
+              <td align="left" style="font-size: 13px; color: #a1a1aa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Hora:</td>
+              <td align="right" style="font-size: 13px; color: #ffffff; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${params.time} hs</td>
+            </tr>
+          </table>
+          <table width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td align="left" style="font-size: 13px; color: #a1a1aa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Modalidad:</td>
+              <td align="right" style="font-size: 13px; color: #ffffff; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-transform: capitalize;">${params.modalidad || 'online'}</td>
+            </tr>
+          </table>
+        </div>
+        
+        <a href="https://khora.cl/dashboard" style="display: inline-block; background: linear-gradient(135deg, #5b4fcf 0%, #3d2fa8 100%); background-color: #5b4fcf; color: #ffffff !important; text-decoration: none; font-size: 15px; font-weight: 800; padding: 16px 36px; border-radius: 100px; box-shadow: 0 4px 15px rgba(91, 79, 207, 0.3); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+          Ir a mi Portal
         </a>
       </div>
     `);

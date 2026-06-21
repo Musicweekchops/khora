@@ -17,6 +17,7 @@ import {
   CheckCircle2, 
   Circle, 
   Plus, 
+  AlertTriangle, 
   Save, 
   StickyNote, 
   ClipboardList,
@@ -41,6 +42,7 @@ interface ClassData {
   schedule_id: string | null; is_recurring: boolean
   student_user_id?: string | null
   teacher_user_id?: string | null
+  preferred_day?: string | null
 }
 interface Note { 
   id: string; content: string; created_at: string; content_id?: string | null; playlist_id?: string | null;
@@ -256,7 +258,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
     try {
       const { data: c } = await supabase
         .from("Class")
-        .select("id, date, start_time, end_time, status, modalidad, duration, student_id, teacher_id, schedule_id, is_recurring, StudentProfile ( user_id, User ( name, email ) ), TeacherProfile ( user_id, User ( name, email ) )")
+        .select("id, date, start_time, end_time, status, modalidad, duration, student_id, teacher_id, schedule_id, is_recurring, StudentProfile ( id, preferred_day, user_id, User ( name, email ) ), TeacherProfile ( user_id, User ( name, email ) )")
         .eq("id", classId).maybeSingle()
 
       if (c) {
@@ -271,6 +273,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
           schedule_id: c.schedule_id, is_recurring: !!c.is_recurring,
           student_user_id: (c as any).StudentProfile?.user_id,
           teacher_user_id: (c as any).TeacherProfile?.user_id,
+          preferred_day: (c as any).StudentProfile?.preferred_day ?? null,
         }
         setCls(classData)
         setEditForm({
@@ -459,6 +462,203 @@ export default function ClassDetailView({ classId }: { classId: string }) {
     }
   }
 
+  const [showStudentCancelModal, setShowStudentCancelModal] = useState(false)
+
+  function isLessThan24Hours(dateStr: string, startTimeStr: string): boolean {
+    const classStart = new Date(`${dateStr}T${startTimeStr.slice(0, 5)}:00`)
+    const now = new Date()
+    const diffMs = classStart.getTime() - now.getTime()
+    const diffHours = diffMs / (1000 * 60 * 60)
+    return diffHours < 24
+  }
+
+  async function checkStudentLimitsForDate(targetDate: string, excludeClassId?: string) {
+    if (!cls?.student_id) return { allowed: true }
+    
+    const targetDateObj = new Date(targetDate + "T12:00")
+    const targetYear = targetDateObj.getFullYear()
+    const targetMonth = targetDateObj.getMonth()
+
+    const pDay = cls.preferred_day
+    
+    const dayMap: Record<string, number> = {
+      domingo: 0, sunday: 0,
+      lunes: 1, monday: 1,
+      martes: 2, tuesday: 2,
+      miercoles: 3, wednesday: 3,
+      jueves: 4, thursday: 4,
+      viernes: 5, friday: 5,
+      sabado: 6, saturday: 6
+    }
+    
+    const getPreferredDayOfWeek = (dayStr: string | null | undefined): number | null => {
+      if (!dayStr) return null
+      const normalized = dayStr.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      return normalized in dayMap ? dayMap[normalized] : null
+    }
+
+    const countDaysInMonth = (yr: number, mth: number, dow: number): number => {
+      let count = 0
+      const date = new Date(yr, mth, 1)
+      while (date.getMonth() === mth) {
+        if (date.getDay() === dow) {
+          count++
+        }
+        date.setDate(date.getDate() + 1)
+      }
+      return count
+    }
+
+    const dayOfWeekNum = getPreferredDayOfWeek(pDay)
+    const calculatedMonthlyLimit = dayOfWeekNum !== null 
+      ? countDaysInMonth(targetYear, targetMonth, dayOfWeekNum)
+      : 4
+
+    // Count monthly classes
+    const startOfMonth = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-01`
+    const endOfMonth = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(new Date(targetYear, targetMonth + 1, 0).getDate()).padStart(2, '0')}`
+
+    let query = supabase
+      .from("Class")
+      .select("id", { count: "exact" })
+      .eq("student_id", cls.student_id)
+      .neq("status", "CANCELLED")
+      .gte("date", startOfMonth)
+      .lte("date", endOfMonth)
+
+    if (excludeClassId) {
+      query = query.neq("id", excludeClassId)
+    }
+
+    const { count: mCount, error: mErr } = await query
+    if (mErr) throw mErr
+
+    if (mCount !== null && mCount >= calculatedMonthlyLimit) {
+      return {
+        allowed: false,
+        reason: `Has alcanzado el límite mensual de ${calculatedMonthlyLimit} clases para el mes de ${targetDateObj.toLocaleDateString("es-CL", { month: "long" })}.`
+      }
+    }
+
+    // Count weekly classes
+    const getWeekRange = (dStr: string) => {
+      const date = new Date(dStr + "T12:00")
+      const day = date.getDay()
+      const diffToMonday = day === 0 ? -6 : 1 - day
+      const monday = new Date(date)
+      monday.setDate(date.getDate() + diffToMonday)
+      
+      const sunday = new Date(monday)
+      sunday.setDate(monday.getDate() + 6)
+      
+      return {
+        startOfWeek: monday.toISOString().split("T")[0],
+        endOfWeek: sunday.toISOString().split("T")[0]
+      }
+    }
+
+    const { startOfWeek, endOfWeek } = getWeekRange(targetDate)
+    let weekQuery = supabase
+      .from("Class")
+      .select("id", { count: "exact" })
+      .eq("student_id", cls.student_id)
+      .neq("status", "CANCELLED")
+      .gte("date", startOfWeek)
+      .lte("date", endOfWeek)
+
+    if (excludeClassId) {
+      weekQuery = weekQuery.neq("id", excludeClassId)
+    }
+
+    const { count: wCount, error: wErr } = await weekQuery
+    if (wErr) throw wErr
+
+    if (wCount !== null && wCount >= 1) {
+      return {
+        allowed: false,
+        reason: "Ya tienes una clase programada para esa semana (límite de 1 clase por semana)."
+      }
+    }
+
+    return { allowed: true }
+  }
+
+  async function handleStudentCancelClass() {
+    if (!cls) return
+    
+    const isLate = isLessThan24Hours(cls.date, cls.start_time)
+    const newStatus = isLate ? "PENDING_AUTHORIZATION" : "CANCELLED"
+    
+    setSavingEdit(true)
+    try {
+      const { error } = await supabase
+        .from("Class")
+        .update({ status: newStatus })
+        .eq("id", classId)
+        
+      if (error) {
+        toast("Error al cancelar la clase: " + error.message, "error")
+        setSavingEdit(false)
+        return
+      }
+      
+      const friendlyDate = new Date(cls.date + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
+      const friendlyTime = cls.start_time.slice(0, 5)
+      const tName = cls.teacher_name || "Tu profesor"
+      
+      // Notify Student
+      if (cls.student_email) {
+        supabase.functions.invoke("send-email", {
+          body: {
+            to: cls.student_email,
+            type: "STUDENT_CLASS_CANCELLED",
+            params: {
+              studentName: cls.student_name,
+              teacherName: tName,
+              date: friendlyDate,
+              time: friendlyTime,
+              status: newStatus,
+              classId: cls.id,
+              rawDate: cls.date,
+              rawStartTime: cls.start_time,
+              endTime: cls.end_time
+            }
+          }
+        }).catch(err => console.error("Error sending cancellation email to student:", err))
+      }
+      
+      // Notify Teacher via push
+      if (cls.teacher_user_id) {
+        supabase.functions.invoke("notify-teacher-push", {
+          body: {
+            type: "CANCELLED",
+            customParams: {
+              teacherUserId: cls.teacher_user_id,
+              studentName: cls.student_name,
+              date: friendlyDate,
+              time: friendlyTime,
+              classId: cls.id
+            }
+          }
+        }).catch(err => console.error("Error sending push to teacher:", err))
+      }
+      
+      toast(
+        isLate 
+          ? "Cancelación enviada. Quedó pendiente de autorización ya que faltan menos de 24 horas." 
+          : "Clase cancelada exitosamente.",
+        "success"
+      )
+      
+      setShowStudentCancelModal(false)
+      await loadAll()
+    } catch (e: any) {
+      toast("Error al cancelar la clase: " + e.message, "error")
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
   async function handleSaveClick() {
     // Check if anything changed that affects scheduling
     const dateChanged = editForm.date !== cls?.date
@@ -478,6 +678,22 @@ export default function ClassDetailView({ classId }: { classId: string }) {
   async function executeSave(applyToAll: boolean) {
     if (!cls) return
     setSavingEdit(true)
+    
+    // Validar limites del alumno antes de continuar si el rol es STUDENT
+    if (profile?.role === "STUDENT") {
+      try {
+        const limitCheck = await checkStudentLimitsForDate(editForm.date, classId)
+        if (!limitCheck.allowed) {
+          toast(limitCheck.reason || "Límite alcanzado", "error")
+          setSavingEdit(false)
+          return
+        }
+      } catch (e: any) {
+        toast("Error al validar límites de agendamiento: " + e.message, "error")
+        setSavingEdit(false)
+        return
+      }
+    }
     
     const originalDate = cls.date
     const originalStartTime = cls.start_time.slice(0, 5)
@@ -1289,6 +1505,17 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                     {profile?.role === "STUDENT" ? "Reagendar / Mover" : "Editar"}
                   </button>
                 )}
+
+                {profile?.role === "STUDENT" && cls && cls.status !== "CANCELLED" && cls.status !== "PENDING_AUTHORIZATION" && (
+                  <button 
+                    onClick={() => setShowStudentCancelModal(true)} 
+                    disabled={savingEdit}
+                    className="flex-1 sm:flex-none px-4 py-2 md:px-6 md:py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl md:rounded-2xl text-xs md:text-sm font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-red-950/20 disabled:opacity-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                    Cancelar Clase
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1869,6 +2096,74 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                   Cancelar
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showStudentCancelModal && cls && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-3xl overflow-hidden shadow-2xl p-6 text-white space-y-6">
+            {isLessThan24Hours(cls.date, cls.start_time) ? (
+              <div className="w-12 h-12 rounded-full bg-amber-600/10 text-amber-400 flex items-center justify-center text-xl mx-auto">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+            ) : (
+              <div className="w-12 h-12 rounded-full bg-red-600/10 text-red-400 flex items-center justify-center text-xl mx-auto">
+                <Trash2 className="w-6 h-6" />
+              </div>
+            )}
+            
+            <div className="text-center space-y-2">
+              <h3 className="text-lg font-black tracking-tight">
+                {isLessThan24Hours(cls.date, cls.start_time) 
+                  ? "Advertencia de Cancelación Tardía" 
+                  : "Confirmar Cancelación"}
+              </h3>
+              
+              <p className="text-xs text-neutral-400 font-medium leading-relaxed">
+                {isLessThan24Hours(cls.date, cls.start_time) ? (
+                  <>
+                    Esta clase comienza el <strong className="text-white capitalize">{new Date(cls.date + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}</strong> a las <strong className="text-white">{cls.start_time.slice(0, 5)} hs</strong> (en menos de 24 horas).
+                    <br /><br />
+                    <span className="text-amber-400 font-semibold bg-amber-950/20 px-2 py-1 rounded border border-amber-500/20 block text-left mt-2 font-sans">
+                      ⚠️ De acuerdo a las políticas de cancelación de Khora, el cupo no se liberará automáticamente y quedará en estado <strong>'Pendiente de Autorización'</strong>. El slot permanecerá bloqueado.
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    ¿Estás seguro de que deseas cancelar tu clase del <strong className="text-white capitalize">{new Date(cls.date + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}</strong> a las <strong className="text-white">{cls.start_time.slice(0, 5)} hs</strong>?
+                    <br /><br />
+                    Tu cupo será liberado de forma automática e inmediata, permitiéndote agendar otro bloque.
+                  </>
+                )}
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowStudentCancelModal(false)
+                }}
+                className="flex-1 py-3 bg-neutral-800 hover:bg-neutral-750 text-neutral-300 hover:text-white rounded-xl text-xs font-black uppercase tracking-wider transition-colors border border-neutral-700 font-sans"
+              >
+                No, mantener clase
+              </button>
+              
+              <button
+                type="button"
+                onClick={handleStudentCancelClass}
+                className={`flex-1 py-3 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all border font-sans ${
+                  isLessThan24Hours(cls.date, cls.start_time)
+                    ? "bg-amber-600 hover:bg-amber-700 border-amber-500"
+                    : "bg-red-600 hover:bg-red-700 border-red-500"
+                }`}
+              >
+                {isLessThan24Hours(cls.date, cls.start_time) 
+                  ? "Confirmar Cancelación Tardía" 
+                  : "Sí, cancelar clase"}
+              </button>
             </div>
           </div>
         </div>

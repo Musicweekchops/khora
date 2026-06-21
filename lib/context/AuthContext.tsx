@@ -178,7 +178,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (event === 'SIGNED_IN') {
           // Si no había sesión, o si estamos en una ruta pública (como /login), redirigir
           if (!sessionRef.current || isPublicPath(pathname)) {
-            router.push(fetchedProfile?.is_admin ? '/dashboard/admin' : '/dashboard')
+            if (fetchedProfile?.is_admin) {
+              router.push('/dashboard/admin')
+            } else if (fetchedProfile?.role === 'STUDENT') {
+              router.push('/dashboard/agendar')
+            } else {
+              router.push('/dashboard')
+            }
           }
         }
         if (event === 'SIGNED_OUT') {
@@ -229,7 +235,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     // 2. Authenticated users sitting on /login -> to dashboard
     if (user && profile && isPublicPath(pathname)) {
-      router.push(profile.is_admin ? '/dashboard/admin' : '/dashboard')
+      if (profile.is_admin) {
+        router.push('/dashboard/admin')
+      } else if (profile.role === 'STUDENT') {
+        router.push('/dashboard/agendar')
+      } else {
+        router.push('/dashboard')
+      }
     }
   }, [user, profile, loading, pathname, router])
 
