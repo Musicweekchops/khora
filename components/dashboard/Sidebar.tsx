@@ -181,13 +181,16 @@ export default function Sidebar({ user }: SidebarProps) {
   }
 
   const themeColor = user.role === 'ACADEMY' ? 'emerald' : user.role === 'TEACHER' ? 'violet' : 'neutral'
+  const isStudent = profile?.role === 'STUDENT'
 
   return (
     <>
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex flex-col h-screen w-[240px] fixed left-0 top-0 z-50 bg-white border-r border-neutral-200/80">
+      <aside className={`hidden lg:flex flex-col h-screen w-[240px] fixed left-0 top-0 z-50 border-r ${
+        isStudent ? "bg-neutral-900 border-neutral-800 text-white" : "bg-white border-neutral-200/80"
+      }`}>
         {/* Logo */}
-        <div className="h-16 flex items-center gap-3 px-5 border-b border-neutral-100">
+        <div className={`h-16 flex items-center gap-3 px-5 border-b ${isStudent ? "border-neutral-800" : "border-neutral-100"}`}>
           {academyBrand ? (
             <>
               {academyBrand.logo_url ? (
@@ -204,12 +207,12 @@ export default function Sidebar({ user }: SidebarProps) {
             </>
           ) : (
             <>
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${user.role === 'TEACHER' ? 'bg-violet-600 shadow-sm shadow-violet-200' : 'bg-neutral-900'}`}>
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${user.role === 'TEACHER' ? 'bg-violet-600 shadow-sm shadow-violet-200' : isStudent ? 'bg-violet-600' : 'bg-neutral-900'}`}>
                 <span className="text-white text-sm font-bold">K</span>
               </div>
               <div>
-                <h1 className="text-sm font-semibold text-neutral-900 tracking-tight leading-none">Khora</h1>
-                <p className="text-[10px] text-neutral-400 font-medium mt-0.5">Gestión de clases</p>
+                <h1 className={`text-sm font-semibold tracking-tight leading-none ${isStudent ? "text-white animate-pulse" : "text-neutral-900"}`}>Khora</h1>
+                <p className={`text-[10px] font-medium mt-0.5 ${isStudent ? "text-neutral-500" : "text-neutral-400"}`}>Gestión de clases</p>
               </div>
             </>
           )}
@@ -223,10 +226,10 @@ export default function Sidebar({ user }: SidebarProps) {
               <Link key={item.name} href={item.href}>
                 <div className={`flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150 ${
                   isActive
-                    ? "bg-neutral-100 text-neutral-900"
-                    : "text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50"
+                    ? isStudent ? "bg-neutral-800 text-white" : "bg-neutral-100 text-neutral-900"
+                    : isStudent ? "text-neutral-400 hover:text-white hover:bg-neutral-800/50" : "text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50"
                 }`}>
-                  <span className={`transition-colors ${isActive ? "text-neutral-900" : "text-neutral-400"}`}>
+                  <span className={`transition-colors ${isActive ? (isStudent ? "text-white" : "text-neutral-900") : (isStudent ? "text-neutral-500" : "text-neutral-400")}`}>
                     {item.icon}
                   </span>
                   <span>{item.name}</span>
@@ -252,24 +255,26 @@ export default function Sidebar({ user }: SidebarProps) {
         </nav>
 
         {/* Profile */}
-        <div className="p-3 border-t border-neutral-100 bg-neutral-50/50">
+        <div className={`p-3 border-t ${isStudent ? "border-neutral-800 bg-neutral-950/40" : "border-neutral-100 bg-neutral-50/50"}`}>
           <div className="flex items-center gap-3 px-3 py-2 mb-1">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${user.role === 'TEACHER' ? 'bg-violet-100 text-violet-700' : 'bg-neutral-200 text-neutral-700'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${user.role === 'TEACHER' ? 'bg-violet-100 text-violet-700' : isStudent ? 'bg-violet-600 text-white' : 'bg-neutral-200 text-neutral-700'}`}>
               {user.name.charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[13px] font-medium text-neutral-900 truncate leading-tight">{user.name}</p>
+              <p className={`text-[13px] font-medium truncate leading-tight ${isStudent ? "text-white" : "text-neutral-900"}`}>{user.name}</p>
               {user.role === 'TEACHER' ? (
                 <p className="text-[9px] font-black uppercase tracking-widest text-violet-600 mt-0.5 px-1.5 py-0.5 bg-violet-100/50 rounded inline-block">Profesor</p>
               ) : (
-                <p className="text-[11px] text-neutral-400 capitalize mt-0.5">{user.role.toLowerCase()}</p>
+                <p className={`text-[11px] capitalize mt-0.5 ${isStudent ? "text-neutral-500" : "text-neutral-400"}`}>{user.role.toLowerCase()}</p>
               )}
             </div>
           </div>
           
           <button
             onClick={() => window.dispatchEvent(new CustomEvent("khora-trigger-onboarding"))}
-            className="w-full flex items-center gap-2 px-3 py-2 text-neutral-500 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors text-[13px] font-medium mb-1"
+            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-colors text-[13px] font-medium mb-1 ${
+              isStudent ? "text-neutral-400 hover:text-white hover:bg-neutral-800/50" : "text-neutral-500 hover:text-violet-600 hover:bg-violet-50"
+            }`}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" />
@@ -281,7 +286,9 @@ export default function Sidebar({ user }: SidebarProps) {
 
           <button
             onClick={() => signOut()}
-            className="w-full flex items-center gap-2 px-3 py-2 text-neutral-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors text-[13px] font-medium"
+            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-colors text-[13px] font-medium ${
+              isStudent ? "text-neutral-400 hover:text-red-400 hover:bg-red-950/20" : "text-neutral-500 hover:text-red-600 hover:bg-red-50"
+            }`}
           >
             {Icons.logout}
             <span>Cerrar Sesión</span>
@@ -291,7 +298,9 @@ export default function Sidebar({ user }: SidebarProps) {
 
       {/* Mobile Bottom Navigation */}
       <nav 
-        className="lg:hidden fixed left-4 right-4 z-50 bg-white/95 backdrop-blur-md border border-neutral-200/60 shadow-[0_8px_32px_rgba(0,0,0,0.08)] py-3 px-2 rounded-2xl animate-in slide-in-from-bottom duration-300"
+        className={`lg:hidden fixed left-4 right-4 z-50 backdrop-blur-md border shadow-[0_8px_32px_rgba(0,0,0,0.08)] py-3 px-2 rounded-2xl animate-in slide-in-from-bottom duration-300 ${
+          isStudent ? "bg-neutral-900/95 border-neutral-800" : "bg-white/95 border-neutral-200/60"
+        }`}
         style={{ bottom: 'calc(env(safe-area-inset-bottom, 16px) + 12px)' }}
       >
         <div className="flex items-center justify-around">
@@ -300,7 +309,9 @@ export default function Sidebar({ user }: SidebarProps) {
             return (
               <Link key={item.name} href={item.href} className="flex-1">
                 <div className={`flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
-                  isActive ? "text-violet-600 scale-110" : "text-neutral-400"
+                  isActive 
+                    ? isStudent ? "text-violet-400 scale-110" : "text-violet-600 scale-110"
+                    : isStudent ? "text-neutral-500" : "text-neutral-400"
                 }`}>
                   <span className="mb-0.5">{item.icon}</span>
                   <span className="text-[10px] font-bold uppercase tracking-tighter">{item.name}</span>
@@ -312,7 +323,7 @@ export default function Sidebar({ user }: SidebarProps) {
           {/* Mobile Onboarding Trigger */}
           <button
             onClick={() => window.dispatchEvent(new CustomEvent("khora-trigger-onboarding"))}
-            className="flex-1 flex flex-col items-center justify-center gap-1 text-neutral-400"
+            className={`flex-1 flex flex-col items-center justify-center gap-1 ${isStudent ? "text-neutral-500 hover:text-white" : "text-neutral-400"}`}
           >
             <span className="mb-0.5">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -326,8 +337,12 @@ export default function Sidebar({ user }: SidebarProps) {
 
           {/* Mobile Profile/Menu Trigger */}
           <Link href="/dashboard/ajustes" className="flex-1">
-             <div className={`flex flex-col items-center justify-center gap-1 ${pathname === '/dashboard/ajustes' ? "text-violet-600" : "text-neutral-400"}`}>
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold border ${pathname === '/dashboard/ajustes' ? "border-violet-600 bg-violet-50" : "border-neutral-300"}`}>
+             <div className={`flex flex-col items-center justify-center gap-1 ${pathname === '/dashboard/ajustes' ? (isStudent ? "text-violet-400" : "text-violet-600") : "text-neutral-400"}`}>
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold border ${
+                  pathname === '/dashboard/ajustes' 
+                    ? isStudent ? "border-violet-400 bg-violet-950/30" : "border-violet-600 bg-violet-50" 
+                    : isStudent ? "border-neutral-700" : "border-neutral-300"
+                }`}>
                   {user.name.charAt(0).toUpperCase()}
                 </div>
                 <span className="text-[10px] font-bold uppercase tracking-tighter">Perfil</span>

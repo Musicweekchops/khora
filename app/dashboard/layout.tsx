@@ -52,8 +52,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     )
   }
 
+  const isStudent = profile.role === "STUDENT"
+
   return (
-    <div className="flex min-h-screen bg-[#fafafa]">
+    <div className={`flex min-h-screen ${isStudent ? "bg-neutral-950 text-white" : "bg-[#fafafa]"}`}>
       <OnboardingTour />
       <PushRegister />
       <Sidebar user={{ name: profile.name, role: profile.role, is_admin: profile.is_admin }} />
