@@ -71,14 +71,14 @@ export default function LoginPage() {
             )}
 
             <div>
-              <label className="kh-label">Nombre o Email</label>
+              <label className="kh-label">Nombre</label>
               <input 
                 type="text" 
                 required 
                 value={emailOrName} 
                 onChange={e => setEmailOrName(e.target.value)} 
                 className="kh-input" 
-                placeholder="Nombre completo o email" 
+                placeholder="Nombre completo" 
               />
             </div>
 

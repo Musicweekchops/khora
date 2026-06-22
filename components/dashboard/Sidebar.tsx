@@ -110,11 +110,7 @@ const ACADEMY_NAV = [
 ]
 
 const STUDENT_NAV = [
-  { name: "Dashboard", href: "/dashboard", icon: Icons.dashboard },
-  { name: "Mi Roadmap", href: "/dashboard/roadmap", icon: Icons.roadmap },
-  { name: "Mis Clases", href: "/dashboard/clases", icon: Icons.calendar },
   { name: "Agendar Clase", href: "/dashboard/agendar", icon: Icons.calendar },
-  { name: "Mi Biblioteca", href: "/dashboard/biblioteca", icon: Icons.library },
   { name: "Ajustes", href: "/dashboard/ajustes", icon: Icons.settings },
 ]
 
@@ -304,7 +300,7 @@ export default function Sidebar({ user }: SidebarProps) {
         style={{ bottom: 'calc(env(safe-area-inset-bottom, 16px) + 12px)' }}
       >
         <div className="flex items-center justify-around">
-          {navItems.slice(0, 3).map(item => { // Limit to 3 items on mobile for space when Help button is added
+          {navItems.filter(item => !(isStudent && item.href === "/dashboard/ajustes")).slice(0, 3).map(item => { // Limit to 3 items on mobile for space when Help button is added
             const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname?.startsWith(item.href))
             return (
               <Link key={item.name} href={item.href} className="flex-1">

@@ -70,7 +70,7 @@ function generateIcs(params: any): string {
   let eventStatus = "CONFIRMED"
   if (isCancelled) {
     eventStatus = "CANCELLED"
-  } else if (status === "PENDING_AUTHORIZATION") {
+  } else if (status === "PENDING_AUTHORIZATION" || status === "PENDING" || status === "STUDENT_BOOKING_REQUEST" || status === "TEACHER_NEW_BOOKING") {
     eventStatus = "TENTATIVE"
   }
 
@@ -143,6 +143,7 @@ serve(async (req) => {
       TEACHER_NEW_BOOKING: "Nueva solicitud de reserva de clase 🔔",
       STUDENT_BOOKING_REJECTED: "Tu solicitud de reserva no pudo ser confirmada ✕",
       STUDENT_CLASS_RESCHEDULED: "🔄 Tu clase de música ha sido reprogramada",
+      STUDENT_BOOKING_REQUEST: "Solicitud de reserva recibida ⏳",
     }
 
     const finalSubject = subject || defaultSubjects[type as EmailType] || "Notificación de Khora"
@@ -156,7 +157,7 @@ serve(async (req) => {
     }
 
     // Si params tiene información de la clase, generar y adjuntar el archivo .ics
-    const isClassNotification = ['STUDENT_CLASS_CONFIRMED', 'TEACHER_CLASS_RESCHEDULED', 'STUDENT_CLASS_CANCELLED', 'STUDENT_CLASS_RESCHEDULED', 'CLASS_CONFIRMATION'].includes(type)
+    const isClassNotification = ['STUDENT_CLASS_CONFIRMED', 'TEACHER_CLASS_RESCHEDULED', 'STUDENT_CLASS_CANCELLED', 'STUDENT_CLASS_RESCHEDULED', 'CLASS_CONFIRMATION', 'STUDENT_BOOKING_REQUEST'].includes(type)
     const hasDateAndTime = (params.date || params.rawDate) && (params.time || params.rawStartTime || params.startTime)
 
     if (isClassNotification || hasDateAndTime) {

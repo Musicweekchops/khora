@@ -520,6 +520,27 @@ export default function StudentBookingDashboardPage() {
         }).catch(err => console.error("Error invoking send-email for teacher:", err))
       }
 
+      // Notify Student via Email with .ics file
+      if (profile?.email) {
+        supabase.functions.invoke("send-email", {
+          body: {
+            to: profile.email,
+            type: "STUDENT_BOOKING_REQUEST",
+            params: {
+              studentName: profile.name,
+              teacherName: teacher.name,
+              date: friendlyDate,
+              time: friendlyTime,
+              classType: selectedClass.name,
+              rawDate: bookingDate,
+              rawStartTime: startTime,
+              endTime: endTime,
+              status: "PENDING"
+            }
+          }
+        }).catch(err => console.error("Error invoking send-email for student booking request:", err))
+      }
+
       // Invoke Teacher Push Notification
       if (teacher.user_id) {
         supabase.functions.invoke("notify-teacher-push", {
@@ -852,6 +873,48 @@ export default function StudentBookingDashboardPage() {
           )}
         </AnimatePresence>
 
+        {/* Class monthly counter card (glassmorphism) - Always visible */}
+        <div className="relative overflow-hidden rounded-3xl bg-neutral-900/60 border border-neutral-800 p-5 shadow-xl backdrop-blur-xl animate-in fade-in duration-300">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-violet-600/10 rounded-full blur-2xl pointer-events-none" />
+          
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <span className="text-[9px] font-black text-violet-400 uppercase tracking-widest block">Consumo del Ciclo Mensual</span>
+              <h2 className="text-xl font-extrabold tracking-tight">Estado de clases mensuales</h2>
+              <p className="text-xs text-neutral-400">
+                Tu profesor: <strong className="text-white font-bold">{teacher?.name}</strong>
+              </p>
+            </div>
+
+            {/* Progress Visual */}
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <span className="text-3xl font-black tracking-tight text-white">{monthlyClassesCount}</span>
+                <span className="text-base text-neutral-500 font-bold"> / {monthlyLimit}</span>
+                <p className="text-[9px] text-neutral-500 font-bold uppercase tracking-wider leading-none mt-0.5">Clases Consumidas</p>
+              </div>
+              
+              {/* Bar Visual representation */}
+              <div className="w-16 h-2 bg-neutral-800 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-to-r from-violet-500 to-indigo-500 transition-all duration-500" 
+                  style={{ width: `${Math.min(100, (monthlyClassesCount / monthlyLimit) * 100)}%` }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Edge Case Warning: cycle completed */}
+          {monthlyClassesCount >= monthlyLimit && (
+            <div className="mt-4 border-t border-neutral-850 pt-3 flex gap-2.5 text-amber-300 text-xs font-medium">
+              <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+              <div>
+                <strong className="text-white font-bold">¡Ciclo Mensual Completado!</strong> Hemos bloqueado las reservas para este mes. Cualquier nueva reserva se habilitará a partir del día 1 del próximo mes.
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* ========================================================================= */}
         {/* VIEW: HUB / HOME                                                          */}
         {/* ========================================================================= */}
@@ -861,47 +924,6 @@ export default function StudentBookingDashboardPage() {
             animate={{ opacity: 1, y: 0 }}
             className="space-y-8"
           >
-            {/* Class monthly counter card (glassmorphism) */}
-            <div className="relative overflow-hidden rounded-3xl bg-neutral-900/60 border border-neutral-800 p-6 shadow-xl backdrop-blur-xl">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-violet-600/10 rounded-full blur-2xl pointer-events-none" />
-              
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                <div className="space-y-1.5">
-                  <span className="text-[10px] font-black text-violet-400 uppercase tracking-widest block">Consumo del Ciclo Mensual</span>
-                  <h2 className="text-3xl font-extrabold tracking-tight">Clases este mes</h2>
-                  <p className="text-xs text-neutral-400">
-                    Tu profesor: <strong className="text-white font-bold">{teacher?.name}</strong>
-                  </p>
-                </div>
-
-                {/* Progress Visual */}
-                <div className="flex items-center gap-5">
-                  <div className="text-right">
-                    <span className="text-4xl font-black tracking-tight text-white">{monthlyClassesCount}</span>
-                    <span className="text-lg text-neutral-500 font-bold"> / {monthlyLimit}</span>
-                    <p className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider mt-0.5">Clases Consumidas</p>
-                  </div>
-                  
-                  {/* Radial/Bar Visual representation */}
-                  <div className="w-16 h-2.5 bg-neutral-800 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-gradient-to-r from-violet-500 to-indigo-500 transition-all duration-500" 
-                      style={{ width: `${Math.min(100, (monthlyClassesCount / monthlyLimit) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Edge Case Warning: cycle completed */}
-              {monthlyClassesCount >= monthlyLimit && (
-                <div className="mt-5 border-t border-neutral-800/80 pt-4 flex gap-3 text-amber-300 text-xs font-medium">
-                  <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
-                  <div>
-                    <strong className="text-white font-bold">¡Ciclo Mensual Completado!</strong> Hemos bloqueado las reservas para este mes de calendario. Cualquier nueva reserva se habilitará de forma automática para fechas a partir del día 1 del próximo mes.
-                  </div>
-                </div>
-              )}
-            </div>
 
             {/* Core Action Hub Menu */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
