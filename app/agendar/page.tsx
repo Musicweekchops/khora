@@ -55,7 +55,7 @@ interface Academy {
 export default function AgendarPageWrapper() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-neutral-950 flex items-center justify-center text-white">
+      <div className="min-h-screen bg-[#fafafa] flex items-center justify-center text-neutral-900">
         <p className="animate-pulse font-bold text-neutral-400">Cargando...</p>
       </div>
     }>
@@ -72,6 +72,7 @@ function PublicBookingPage() {
   const [academy, setAcademy] = useState<Academy | null>(null)
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null)
+  const [trialClassPrice, setTrialClassPrice] = useState(25000)
 
   const [classTypes, setClassTypes] = useState<ClassType[]>([])
   const [selectedClass, setSelectedClass] = useState<ClassType | null>(null)
@@ -190,6 +191,22 @@ function PublicBookingPage() {
       loadStudentLimits()
     }
   }, [profile])
+
+  // Fetch teacher trial class price configuration
+  useEffect(() => {
+    if (selectedTeacher) {
+      supabase
+        .from("TeacherBillingConfig")
+        .select("trial_class_price")
+        .eq("teacher_id", selectedTeacher.id)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data && data.trial_class_price) {
+            setTrialClassPrice(data.trial_class_price)
+          }
+        })
+    }
+  }, [selectedTeacher])
 
   // Fetch active classes when regular student wants to cancel or reschedule
   async function loadActiveClasses() {
@@ -345,7 +362,7 @@ function PublicBookingPage() {
           status,
           TeacherProfile (
             id, user_id, slug, instrumento,
-            User ( name, email )
+            User ( name, email, phone )
           )
         `)
         .eq("academy_id", ac.id)
@@ -361,7 +378,7 @@ function PublicBookingPage() {
           user_id: tp?.user_id ?? "",
           slug: tp?.slug ?? "",
           instrumento: tp?.instrumento ?? null,
-          User: { name: u?.name ?? "—", email: u?.email }
+          User: { name: u?.name ?? "—", email: u?.email, phone: u?.phone }
         }
       })
       setTeachers(list)
@@ -379,7 +396,7 @@ function PublicBookingPage() {
     try {
       const { data: t, error: tErr } = await supabase
         .from("TeacherProfile")
-        .select("id, user_id, slug, instrumento, User ( name, email )")
+        .select("id, user_id, slug, instrumento, User ( name, email, phone )")
         .eq("slug", teacherSlug!)
         .maybeSingle()
 
@@ -394,7 +411,8 @@ function PublicBookingPage() {
         instrumento: t.instrumento,
         User: { 
           name: (t.User as any)?.name ?? "—", 
-          email: (t.User as any)?.email 
+          email: (t.User as any)?.email,
+          phone: (t.User as any)?.phone 
         }
       }
       setSelectedTeacher(formattedTeacher)
@@ -930,6 +948,60 @@ function PublicBookingPage() {
         throw new Error("Este horario acaba de ser reservado. Por favor elige otro.")
       }
 
+      // If it is a trial class, redirect to Mercado Pago instead of inserting booking directly
+      if (newClassCategory === "prueba") {
+        let targetStudentProfileId = profile?.studentProfileId
+        if (!targetStudentProfileId && (studentUserId || profile?.id)) {
+          const { data: spProfile } = await supabase
+            .from("StudentProfile")
+            .select("id")
+            .eq("user_id", studentUserId || profile?.id)
+            .maybeSingle()
+          targetStudentProfileId = spProfile?.id
+        }
+
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+        const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+        const checkoutRes = await fetch(`${supabaseUrl}/functions/v1/mercadopago-checkout`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": anonKey || "",
+            "Authorization": `Bearer ${anonKey}`
+          },
+          body: JSON.stringify({
+            teacher_id: selectedTeacher.id,
+            student_id: targetStudentProfileId || null,
+            item_type: "TRIAL",
+            prospect_name: formData.name,
+            prospect_email: formData.email,
+            prospect_phone: formData.phone,
+            selected_date: formData.date,
+            selected_slot: selectedSlot,
+            modalidad: formData.message || "online"
+          })
+        })
+
+        const checkoutData = await checkoutRes.json()
+        if (!checkoutRes.ok || checkoutData?.error) {
+          throw new Error(checkoutData?.error || "Error al conectar con la pasarela de pagos. Contacta soporte.")
+        }
+
+        // Save details in sessionStorage so success page displays correctly
+        sessionStorage.setItem("khora-booking-success", JSON.stringify({
+          teacherName: selectedTeacher.User?.name,
+          teacherPhone: selectedTeacher.User?.phone || "56944291538",
+          instrument: selectedClass.name,
+          date: formData.date,
+          time: selectedSlot.slice(0, 5)
+        }))
+
+        // Redirect to Mercado Pago checkout
+        window.location.href = checkoutData.checkoutUrl
+        return
+      }
+
       // Insert booking request
       const { error: insertErr } = await supabase.from("Booking").insert({
         teacher_id: selectedTeacher.id,
@@ -1038,7 +1110,7 @@ function PublicBookingPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-neutral-950 text-white flex flex-col items-center justify-center gap-4">
+      <div className="min-h-screen bg-[#fafafa] text-neutral-900 flex flex-col items-center justify-center gap-4">
         <div className="w-12 h-12 border-4 border-violet-500/20 border-t-violet-500 rounded-full animate-spin" />
         <p className="text-neutral-400 font-bold animate-pulse">Cargando disponibilidad...</p>
       </div>
@@ -1046,11 +1118,11 @@ function PublicBookingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-white font-sans antialiased pb-safe relative">
+    <div className="min-h-screen bg-[#fafafa] text-neutral-900 font-sans antialiased pb-safe relative">
       
       {/* Background gradients */}
-      <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-violet-600/10 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute top-1/3 right-1/4 w-[400px] h-[400px] bg-indigo-600/10 rounded-full blur-[100px] pointer-events-none" />
+      <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-violet-600/5 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute top-1/3 right-1/4 w-[400px] h-[400px] bg-indigo-600/5 rounded-full blur-[100px] pointer-events-none" />
 
       <div className="max-w-3xl mx-auto px-4 py-12 relative z-10 space-y-10">
         
@@ -1065,10 +1137,10 @@ function PublicBookingPage() {
                   {academy.name.charAt(0).toUpperCase()}
                 </div>
               )}
-              <h1 className="text-3xl md:text-4xl font-black tracking-tight bg-gradient-to-r from-white to-neutral-400 bg-clip-text text-transparent">
+              <h1 className="text-3xl md:text-4xl font-black tracking-tight text-neutral-900">
                 {academy.name}
               </h1>
-              <p className="text-neutral-500 font-bold text-xs md:text-sm uppercase tracking-wider">
+              <p className="text-neutral-400 font-bold text-xs md:text-sm uppercase tracking-wider">
                 {academy.description || "Agenda tus clases en línea"}
               </p>
             </>
@@ -1077,10 +1149,10 @@ function PublicBookingPage() {
               <div className="w-16 h-16 bg-gradient-to-tr from-violet-600 to-indigo-600 text-white rounded-3xl flex items-center justify-center text-2xl font-black mx-auto mb-4 shadow-xl shadow-violet-950/40">
                 {selectedTeacher?.User?.name.charAt(0).toUpperCase()}
               </div>
-              <h1 className="text-3xl md:text-4xl font-black tracking-tight bg-gradient-to-r from-white to-neutral-400 bg-clip-text text-transparent">
+              <h1 className="text-3xl md:text-4xl font-black tracking-tight text-neutral-900">
                 Agenda con {selectedTeacher?.User?.name}
               </h1>
-              <p className="text-neutral-500 font-bold text-xs md:text-sm uppercase tracking-wider">
+              <p className="text-neutral-400 font-bold text-xs md:text-sm uppercase tracking-wider">
                 Selecciona el servicio para ver la disponibilidad
               </p>
             </>
@@ -1094,10 +1166,10 @@ function PublicBookingPage() {
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="bg-red-950/40 border border-red-500/30 rounded-2xl p-4 flex items-center justify-between gap-3 text-red-300 text-xs font-semibold"
+              className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-center justify-between gap-3 text-red-800 text-xs font-semibold"
             >
               <div className="flex items-center gap-2.5">
-                <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
+                <AlertTriangle className="w-5 h-5 text-red-650 shrink-0" />
                 <span>{error}</span>
               </div>
               <button onClick={() => setError("")} className="text-red-400 hover:text-red-200">
@@ -1112,12 +1184,12 @@ function PublicBookingPage() {
           <motion.div 
             initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-neutral-900/60 border border-neutral-800 rounded-3xl p-8 md:p-12 text-center max-w-md mx-auto shadow-2xl backdrop-blur-xl animate-in zoom-in duration-300"
+            className="bg-white border border-neutral-200 rounded-3xl p-8 md:p-12 text-center max-w-md mx-auto shadow-lg animate-in zoom-in duration-300"
           >
-            <div className="w-16 h-16 bg-emerald-600/10 text-emerald-400 rounded-full flex items-center justify-center text-3xl mx-auto mb-6 border border-emerald-500/20">
+            <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-full border border-emerald-200 flex items-center justify-center text-3xl mx-auto mb-6 border border-emerald-500/20">
               ✓
             </div>
-            <h2 className="text-2xl font-black text-white mb-3">¡Proceso Exitoso!</h2>
+            <h2 className="text-2xl font-black text-neutral-900 mb-3">¡Proceso Exitoso!</h2>
             <p className="text-neutral-400 text-xs font-medium leading-relaxed mb-8">
               Tu solicitud ha sido procesada de manera correcta. Te enviaremos los detalles y confirmación por correo de inmediato.
             </p>
@@ -1132,7 +1204,7 @@ function PublicBookingPage() {
                 setFormData({ name: "", email: "", phone: "", message: "", date: "" })
                 setSelectedSlot(null)
               }} 
-              className="w-full kh-btn-primary py-3.5 bg-violet-600 hover:bg-violet-750 text-white font-black border border-violet-500"
+              className="w-full kh-btn-primary py-3.5 bg-violet-600 hover:bg-violet-700 text-white font-black border border-violet-600"
             >
               Volver a mi Agenda
             </button>
@@ -1143,8 +1215,8 @@ function PublicBookingPage() {
             {/* Step 1: Selection (Alumno Regular vs Alumno Nuevo) */}
             {flowType === null && (
               <div className="space-y-6 max-w-md mx-auto animate-in fade-in duration-300">
-                <div className="bg-neutral-900/60 border border-neutral-800 rounded-3xl p-8 text-center space-y-6 shadow-xl backdrop-blur-xl">
-                  <h2 className="text-xl font-black text-white">¿Ya eres alumno de Khora?</h2>
+                <div className="bg-white border border-neutral-200 rounded-3xl p-8 text-center space-y-6 shadow-md">
+                  <h2 className="text-xl font-black text-neutral-900">¿Ya eres alumno de Khora?</h2>
                   <p className="text-xs text-neutral-400 leading-relaxed">
                     Si ya asistes a clases con nosotros, inicia sesión para gestionar tu agenda. Si es tu primera vez, selecciona "Alumno Nuevo".
                   </p>
@@ -1157,7 +1229,7 @@ function PublicBookingPage() {
                     </button>
                     <button
                       onClick={() => setFlowType("nuevo")}
-                      className="w-full py-4 bg-neutral-900 hover:bg-neutral-800 text-neutral-300 rounded-xl text-xs font-black uppercase tracking-wider transition-all border border-neutral-800 flex items-center justify-center gap-2"
+                      className="w-full py-4 bg-white hover:bg-neutral-50 text-neutral-700 rounded-xl text-xs font-black uppercase tracking-wider transition-all border border-neutral-200 flex items-center justify-center gap-2 shadow-sm"
                     >
                       <Sparkles className="w-4 h-4" /> No, soy alumno nuevo
                     </button>
@@ -1181,10 +1253,10 @@ function PublicBookingPage() {
 
                 {/* Inline Login form for Regular Student */}
                 {!profile ? (
-                  <div className="max-w-md mx-auto bg-neutral-900/60 border border-neutral-800 rounded-3xl p-8 shadow-xl backdrop-blur-xl space-y-6">
+                  <div className="max-w-md mx-auto bg-white border border-neutral-200 rounded-3xl p-8 shadow-md">
                     <div className="text-center">
                       <LogIn className="w-10 h-10 text-violet-400 mx-auto mb-3" />
-                      <h2 className="text-lg font-black text-white uppercase tracking-wider">Identifícate</h2>
+                      <h2 className="text-lg font-black text-neutral-900 uppercase tracking-wider">Identifícate</h2>
                       <p className="text-xs text-neutral-500 mt-1">Nombre de usuario y contraseña solamente</p>
                     </div>
 
@@ -1196,7 +1268,7 @@ function PublicBookingPage() {
                           required
                           value={loginEmailOrName}
                           onChange={e => setLoginEmailOrName(e.target.value)}
-                          className="kh-input bg-neutral-950 border-neutral-800 text-white"
+                          className="kh-input bg-white border-neutral-200 text-neutral-900"
                           placeholder="Nombre completo"
                         />
                       </div>
@@ -1207,7 +1279,7 @@ function PublicBookingPage() {
                           required
                           value={loginPassword}
                           onChange={e => setLoginPassword(e.target.value)}
-                          className="kh-input bg-neutral-950 border-neutral-800 text-white"
+                          className="kh-input bg-white border-neutral-200 text-neutral-900"
                           placeholder="••••••••"
                         />
                       </div>
@@ -1225,9 +1297,9 @@ function PublicBookingPage() {
                 ) : (
                   // Logged-in regular student view
                   <div className="space-y-6 animate-in fade-in duration-300">
-                    <div className="flex items-center justify-between bg-neutral-900/40 px-5 py-3 rounded-2xl border border-neutral-800">
+                    <div className="flex items-center justify-between bg-white px-5 py-3 rounded-2xl border border-neutral-200 shadow-sm">
                       <p className="text-xs text-neutral-400">
-                        Sesión: <strong className="text-white">{profile.name}</strong> (Alumno Regular)
+                        Sesión: <strong className="text-neutral-900">{profile.name}</strong> (Alumno Regular)
                       </p>
                       <button
                         onClick={() => {
@@ -1242,7 +1314,7 @@ function PublicBookingPage() {
                     </div>
 
                     {/* Class monthly counter card (glassmorphism) - Always visible to regular students */}
-                    <div className="relative overflow-hidden rounded-3xl bg-neutral-900/60 border border-neutral-800 p-5 shadow-xl backdrop-blur-xl">
+                    <div className="relative overflow-hidden rounded-3xl bg-white border border-neutral-200/80 p-5 shadow-sm">
                       <div className="absolute top-0 right-0 w-32 h-32 bg-violet-600/10 rounded-full blur-2xl pointer-events-none" />
                       
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1250,20 +1322,20 @@ function PublicBookingPage() {
                           <span className="text-[9px] font-black text-violet-400 uppercase tracking-widest block">Consumo del Ciclo Mensual</span>
                           <h2 className="text-xl font-extrabold tracking-tight">Estado de clases mensuales</h2>
                           <p className="text-xs text-neutral-400">
-                            Tu profesor: <strong className="text-white font-bold">{selectedTeacher?.User?.name || "Tu profesor"}</strong>
+                            Tu profesor: <strong className="text-neutral-900 font-bold">{selectedTeacher?.User?.name || "Tu profesor"}</strong>
                           </p>
                         </div>
 
                         {/* Progress Visual */}
                         <div className="flex items-center gap-4">
                           <div className="text-right">
-                            <span className="text-3xl font-black tracking-tight text-white">{monthlyClassesCount}</span>
+                            <span className="text-3xl font-black tracking-tight text-neutral-900">{monthlyClassesCount}</span>
                             <span className="text-base text-neutral-500 font-bold"> / {monthlyLimit}</span>
                             <p className="text-[9px] text-neutral-500 font-bold uppercase tracking-wider leading-none mt-0.5">Clases Consumidas</p>
                           </div>
                           
                           {/* Bar Visual representation */}
-                          <div className="w-16 h-2 bg-neutral-800 rounded-full overflow-hidden">
+                          <div className="w-16 h-2 bg-neutral-200 rounded-full overflow-hidden">
                             <div 
                               className="h-full bg-gradient-to-r from-violet-500 to-indigo-500 transition-all duration-500" 
                               style={{ width: `${Math.min(100, (monthlyClassesCount / monthlyLimit) * 100)}%` }}
@@ -1277,7 +1349,7 @@ function PublicBookingPage() {
                         <div className="mt-4 border-t border-neutral-850 pt-3 flex gap-2.5 text-amber-300 text-xs font-medium">
                           <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
                           <div>
-                            <strong className="text-white font-bold">¡Ciclo Mensual Completado!</strong> Hemos bloqueado las reservas para este mes. Cualquier nueva reserva se habilitará a partir del día 1 del próximo mes.
+                            <strong className="text-neutral-900 font-bold">¡Ciclo Mensual Completado!</strong> Hemos bloqueado las reservas para este mes. Cualquier nueva reserva se habilitará a partir del día 1 del próximo mes.
                           </div>
                         </div>
                       )}
@@ -1292,13 +1364,13 @@ function PublicBookingPage() {
                           {/* Option: Reagendar */}
                           <button
                             onClick={() => setRegularAction("reagendar")}
-                            className="group text-left p-6 bg-neutral-900/40 border border-neutral-800 hover:border-violet-500/50 hover:bg-violet-950/10 rounded-2xl transition-all flex flex-col justify-between gap-5 relative overflow-hidden"
+                            className="group text-left p-6 bg-white border border-neutral-200 hover:border-violet-300 hover:bg-violet-50/30 rounded-2xl transition-all flex flex-col justify-between gap-5 relative overflow-hidden"
                           >
                             <div className="w-10 h-10 rounded-xl bg-violet-600/10 text-violet-400 flex items-center justify-center group-hover:bg-violet-600 group-hover:text-white transition-all shadow-md">
                               <Clock className="w-5 h-5" />
                             </div>
                             <div>
-                              <h3 className="text-sm font-black text-white group-hover:text-violet-400 transition-colors uppercase tracking-wider">Re-agendar Clase</h3>
+                              <h3 className="text-sm font-black text-neutral-900 group-hover:text-violet-600 transition-colors uppercase tracking-wider">Re-agendar Clase</h3>
                               <p className="text-[11px] text-neutral-500 mt-1 leading-relaxed">
                                 Cambia la fecha u hora de alguna de tus próximas clases agendadas.
                               </p>
@@ -1309,13 +1381,13 @@ function PublicBookingPage() {
                           {/* Option: Recuperar */}
                           <button
                             onClick={() => setRegularAction("recuperar")}
-                            className="group text-left p-6 bg-neutral-900/40 border border-neutral-800 hover:border-amber-500/50 hover:bg-amber-950/10 rounded-2xl transition-all flex flex-col justify-between gap-5 relative overflow-hidden"
+                            className="group text-left p-6 bg-white border border-neutral-200 hover:border-amber-300 hover:bg-amber-50/20 rounded-2xl transition-all flex flex-col justify-between gap-5 relative overflow-hidden"
                           >
                             <div className="w-10 h-10 rounded-xl bg-amber-600/10 text-amber-400 flex items-center justify-center group-hover:bg-amber-600 group-hover:text-white transition-all shadow-md">
                               <Plus className="w-5 h-5" />
                             </div>
                             <div>
-                              <h3 className="text-sm font-black text-white group-hover:text-amber-400 transition-colors uppercase tracking-wider">Recuperar Clase</h3>
+                              <h3 className="text-sm font-black text-neutral-900 group-hover:text-amber-400 transition-colors uppercase tracking-wider">Recuperar Clase</h3>
                               <p className="text-[11px] text-neutral-500 mt-1 leading-relaxed">
                                 Programa una clase a favor por inasistencias o saldos justificables.
                               </p>
@@ -1326,13 +1398,13 @@ function PublicBookingPage() {
                           {/* Option: Cancelar */}
                           <button
                             onClick={() => setRegularAction("cancelar")}
-                            className="group text-left p-6 bg-neutral-900/40 border border-neutral-800 hover:border-red-500/50 hover:bg-red-950/10 rounded-2xl transition-all flex flex-col justify-between gap-5 relative overflow-hidden"
+                            className="group text-left p-6 bg-white border border-neutral-200 hover:border-red-300 hover:bg-red-50/30 rounded-2xl transition-all flex flex-col justify-between gap-5 relative overflow-hidden"
                           >
                             <div className="w-10 h-10 rounded-xl bg-red-600/10 text-red-400 flex items-center justify-center group-hover:bg-red-600 group-hover:text-white transition-all shadow-md">
                               <Trash2 className="w-5 h-5" />
                             </div>
                             <div>
-                              <h3 className="text-sm font-black text-white group-hover:text-red-400 transition-colors uppercase tracking-wider">Cancelar Clase</h3>
+                              <h3 className="text-sm font-black text-neutral-900 group-hover:text-red-400 transition-colors uppercase tracking-wider">Cancelar Clase</h3>
                               <p className="text-[11px] text-neutral-500 mt-1 leading-relaxed">
                                 Cancela tu asistencia a una clase. Aplica política de aviso de 24 horas.
                               </p>
@@ -1358,11 +1430,11 @@ function PublicBookingPage() {
                           <h3 className="text-xs font-black text-neutral-400 uppercase tracking-widest pl-1">Selecciona la Clase a Cancelar</h3>
                           {loadingActiveClasses ? (
                             <div className="space-y-2">
-                              <div className="kh-skeleton h-16 bg-neutral-900" />
-                              <div className="kh-skeleton h-16 bg-neutral-900" />
+                              <div className="kh-skeleton h-16 bg-neutral-250" />
+                              <div className="kh-skeleton h-16 bg-neutral-250" />
                             </div>
                           ) : activeClasses.length === 0 ? (
-                            <div className="bg-neutral-900/30 rounded-2xl border border-neutral-800 p-8 text-center">
+                            <div className="bg-white rounded-2xl border border-neutral-200/80 p-8 text-center">
                               <p className="text-xs text-neutral-500 font-bold italic">No tienes clases próximas activas programadas.</p>
                             </div>
                           ) : (
@@ -1370,9 +1442,9 @@ function PublicBookingPage() {
                               {activeClasses.map(c => {
                                 const isLate = isLessThan24Hours(c.date, c.start_time)
                                 return (
-                                  <div key={c.id} className="bg-neutral-900/40 border border-neutral-800 rounded-2xl p-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4 hover:border-neutral-700 transition-all">
+                                  <div key={c.id} className="bg-white border border-neutral-200 rounded-2xl p-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4 hover:border-neutral-300 transition-all shadow-sm">
                                     <div>
-                                      <h4 className="text-sm font-black text-white capitalize">
+                                      <h4 className="text-sm font-black text-neutral-900 capitalize">
                                         {new Date(c.date + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}
                                       </h4>
                                       <p className="text-[10px] text-neutral-400 font-bold mt-1 uppercase tracking-wider">
@@ -1413,7 +1485,7 @@ function PublicBookingPage() {
                           <ArrowLeft className="w-4 h-4" /> Volver a acciones
                         </button>
                         
-                        <div className="bg-amber-950/20 border border-amber-500/20 rounded-3xl p-8 text-center space-y-4 max-w-md mx-auto shadow-xl">
+                        <div className="bg-amber-50 border border-amber-200 rounded-3xl p-8 text-center space-y-4 max-w-md mx-auto shadow-sm">
                           <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto" />
                           <h3 className="text-base font-black text-amber-300 uppercase tracking-wider">Límite de recuperaciones alcanzado</h3>
                           <p className="text-xs text-neutral-300 leading-relaxed font-medium">
@@ -1446,10 +1518,10 @@ function PublicBookingPage() {
                             <h3 className="text-xs font-black text-neutral-400 uppercase tracking-widest pl-1">Selecciona la Clase a Re-agendar</h3>
                             {loadingActiveClasses ? (
                               <div className="space-y-2">
-                                <div className="kh-skeleton h-16 bg-neutral-900" />
+                                <div className="kh-skeleton h-16 bg-neutral-250" />
                               </div>
                             ) : activeClasses.length === 0 ? (
-                              <div className="bg-neutral-900/30 rounded-2xl border border-neutral-800 p-8 text-center">
+                              <div className="bg-white rounded-2xl border border-neutral-200/80 p-8 text-center">
                                 <p className="text-xs text-neutral-500 font-bold italic">No tienes clases próximas activas programadas.</p>
                               </div>
                             ) : (
@@ -1469,10 +1541,10 @@ function PublicBookingPage() {
                                         });
                                       }
                                     }}
-                                    className="text-left bg-neutral-900/40 border border-neutral-800 hover:border-violet-500 rounded-2xl p-6 flex items-center justify-between gap-4 transition-all"
+                                    className="text-left bg-white border border-neutral-200 hover:border-violet-350 rounded-2xl p-6 flex items-center justify-between gap-4 transition-all shadow-sm"
                                   >
                                     <div>
-                                      <h4 className="text-sm font-black text-white capitalize">
+                                      <h4 className="text-sm font-black text-neutral-900 capitalize">
                                         {new Date(c.date + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}
                                       </h4>
                                       <p className="text-[10px] text-neutral-400 font-bold mt-1 uppercase tracking-wider">
@@ -1487,10 +1559,10 @@ function PublicBookingPage() {
                           </div>
                         ) : (
                           // Rescheduling Date and Time selection
-                          <div className="bg-neutral-900/60 border border-neutral-800 rounded-3xl overflow-hidden shadow-xl">
-                            <div className="bg-neutral-900 p-5 border-b border-neutral-800">
+                          <div className="bg-white border border-neutral-200 rounded-3xl overflow-hidden shadow-md">
+                            <div className="bg-neutral-50 p-5 border-b border-neutral-200">
                               <p className="text-[9px] font-black text-violet-400 uppercase tracking-widest">Re-agendando clase</p>
-                              <h3 className="text-sm font-black text-white">
+                              <h3 className="text-sm font-black text-neutral-900">
                                 Original: {new Date(classToReschedule.date + "T12:00").toLocaleDateString("es-CL", { day: "numeric", month: "long" })} a las {classToReschedule.start_time.slice(0, 5)} hs
                               </h3>
                             </div>
@@ -1519,14 +1591,14 @@ function PublicBookingPage() {
                                     const target = e.target;
                                     setTimeout(() => target.blur(), 50);
                                   }}
-                                  className="kh-input bg-neutral-950 border-neutral-800 text-white"
+                                  className="kh-input bg-white border-neutral-200 text-neutral-900"
                                   min={new Date().toLocaleDateString("sv-SE")}
                                 />
                               </div>
 
                               {/* Alternative Suggestion Banner */}
                               {alternativeDateMsg && (
-                                <div className="bg-amber-950/20 border border-amber-500/20 rounded-2xl p-4 space-y-3 text-amber-300 text-xs">
+                                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-3 text-amber-800 text-xs">
                                   <p className="font-semibold leading-relaxed">⚠️ {alternativeDateMsg}</p>
                                   <button
                                     type="button"
@@ -1547,10 +1619,10 @@ function PublicBookingPage() {
 
                                   {loadingRescheduleSlots ? (
                                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                      <div className="kh-skeleton h-12 bg-neutral-900" />
+                                      <div className="kh-skeleton h-12 bg-neutral-200" />
                                     </div>
                                   ) : availableRescheduleSlots.length === 0 ? (
-                                    <p className="p-6 bg-neutral-950 border border-neutral-900 rounded-2xl text-center text-xs font-bold text-neutral-500 italic">
+                                    <p className="p-6 bg-white border border-neutral-200 rounded-2xl text-center text-xs font-bold text-neutral-500 italic">
                                       No hay bloques libres para el día seleccionado.
                                     </p>
                                   ) : (
@@ -1563,7 +1635,7 @@ function PublicBookingPage() {
                                           className={`py-3.5 px-2 rounded-xl text-xs font-black transition-all ${
                                             rescheduleSlot === slot
                                               ? "bg-violet-600 text-white shadow-lg border border-violet-500"
-                                              : "bg-neutral-950 hover:bg-neutral-900 text-neutral-300 border border-neutral-800"
+                                              : "bg-white hover:bg-neutral-50 text-neutral-700 border border-neutral-200/80 shadow-sm"
                                           }`}
                                         >
                                           {formatTime(slot)}
@@ -1615,11 +1687,11 @@ function PublicBookingPage() {
                       
                       <button
                         onClick={() => setNewClassCategory("prueba")}
-                        className="group text-left p-6 bg-neutral-900/40 border border-neutral-800 hover:border-violet-500/50 hover:bg-violet-950/10 rounded-2xl transition-all flex flex-col justify-between gap-5 relative overflow-hidden"
+                        className="group text-left p-6 bg-white border border-neutral-200 hover:border-violet-300 hover:bg-violet-50/30 rounded-2xl transition-all flex flex-col justify-between gap-5 relative overflow-hidden"
                       >
                         <span className="text-3xl">⭐</span>
                         <div>
-                          <h3 className="text-sm font-black text-white group-hover:text-violet-400 transition-colors uppercase tracking-wider">Clase de Prueba</h3>
+                          <h3 className="text-sm font-black text-neutral-900 group-hover:text-violet-600 transition-colors uppercase tracking-wider">Clase de Prueba</h3>
                           <p className="text-[11px] text-neutral-500 mt-1 leading-relaxed">
                             Sesión de diagnóstico de 1 hora para conocernos.
                           </p>
@@ -1628,11 +1700,11 @@ function PublicBookingPage() {
 
                       <button
                         onClick={() => setNewClassCategory("mensual")}
-                        className="group text-left p-6 bg-neutral-900/40 border border-neutral-800 hover:border-violet-500/50 hover:bg-violet-950/10 rounded-2xl transition-all flex flex-col justify-between gap-5 relative overflow-hidden"
+                        className="group text-left p-6 bg-white border border-neutral-200 hover:border-violet-300 hover:bg-violet-50/30 rounded-2xl transition-all flex flex-col justify-between gap-5 relative overflow-hidden"
                       >
                         <span className="text-3xl">📅</span>
                         <div>
-                          <h3 className="text-sm font-black text-white group-hover:text-violet-400 transition-colors uppercase tracking-wider">Plan Mensual</h3>
+                          <h3 className="text-sm font-black text-neutral-900 group-hover:text-violet-600 transition-colors uppercase tracking-wider">Plan Mensual</h3>
                           <p className="text-[11px] text-neutral-500 mt-1 leading-relaxed">
                             4 clases recurrentes al mes. Reserva tu horario permanente.
                           </p>
@@ -1641,11 +1713,11 @@ function PublicBookingPage() {
 
                       <button
                         onClick={() => setNewClassCategory("unitaria")}
-                        className="group text-left p-6 bg-neutral-900/40 border border-neutral-800 hover:border-violet-500/50 hover:bg-violet-950/10 rounded-2xl transition-all flex flex-col justify-between gap-5 relative overflow-hidden"
+                        className="group text-left p-6 bg-white border border-neutral-200 hover:border-violet-300 hover:bg-violet-50/30 rounded-2xl transition-all flex flex-col justify-between gap-5 relative overflow-hidden"
                       >
                         <span className="text-3xl">🎵</span>
                         <div>
-                          <h3 className="text-sm font-black text-white group-hover:text-violet-400 transition-colors uppercase tracking-wider">Clase Unitaria</h3>
+                          <h3 className="text-sm font-black text-neutral-900 group-hover:text-violet-600 transition-colors uppercase tracking-wider">Clase Unitaria</h3>
                           <p className="text-[11px] text-neutral-500 mt-1 leading-relaxed">
                             Bloques sueltos e individuales. Flexibilidad total sin planes fijos.
                           </p>
@@ -1686,18 +1758,40 @@ function PublicBookingPage() {
                           // Fallback to all classes if no matches found
                           const listToRender = filtered.length > 0 ? filtered : classTypes
 
-                          return listToRender.map(ct => (
+                          const mappedList = listToRender.map(ct => {
+                            let name = ct.name
+                            let price = ct.price
+                            let icon = ct.icon || "🎵"
+                            
+                            if (newClassCategory === "prueba") {
+                              name = name.toLowerCase().includes("prueba") ? ct.name : `Clase de Prueba (${ct.name})`
+                              price = trialClassPrice
+                              icon = "⭐"
+                            } else if (newClassCategory === "mensual") {
+                              name = name.toLowerCase().includes("mensual") ? ct.name : `Plan Mensual (${ct.name})`
+                              price = 90000
+                              icon = "📅"
+                            } else if (newClassCategory === "unitaria") {
+                              name = name.toLowerCase().includes("unitaria") ? ct.name : `Clase Unitaria (${ct.name})`
+                              price = 40000
+                              icon = "🎵"
+                            }
+                            
+                            return { ...ct, name, price, icon }
+                          })
+
+                          return mappedList.map(ct => (
                             <button
                               key={ct.id}
                               onClick={() => setSelectedClass(ct)}
                               className="group text-left p-0.5 block"
                             >
-                              <div className="bg-neutral-900/40 rounded-2xl border border-neutral-800 p-6 flex items-center justify-between gap-4 group-hover:border-violet-500 group-hover:bg-violet-950/5 transition-all">
+                              <div className="bg-white rounded-2xl border border-neutral-200 p-6 flex items-center justify-between gap-4 group-hover:border-violet-300 group-hover:bg-violet-50/20 transition-all">
                                 <div className="flex items-center gap-4">
-                                  <span className="text-3xl">{ct.icon || "🎵"}</span>
+                                  <span className="text-3xl">{ct.icon}</span>
                                   <div>
-                                    <h3 className="text-sm font-black text-white group-hover:text-violet-400 transition-colors">{ct.name}</h3>
-                                    <p className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider mt-0.5">{ct.duration} minutos • ${ct.price}</p>
+                                    <h3 className="text-sm font-black text-neutral-900 group-hover:text-violet-600 transition-colors">{ct.name}</h3>
+                                    <p className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider mt-0.5">{ct.duration} minutos • ${ct.price.toLocaleString("es-CL")}</p>
                                   </div>
                                 </div>
                                 <ChevronRight className="w-4 h-4 text-neutral-600" />
@@ -1724,13 +1818,13 @@ function PublicBookingPage() {
                       <ArrowLeft className="w-4 h-4" /> Cambiar servicio
                     </button>
 
-                    <div className="bg-neutral-900/60 border border-neutral-800 rounded-3xl overflow-hidden shadow-xl backdrop-blur-xl">
-                      <div className="bg-neutral-900 p-5 flex items-center justify-between border-b border-neutral-800/80">
+                    <div className="bg-white border border-neutral-200 rounded-3xl overflow-hidden shadow-md">
+                      <div className="bg-neutral-50 p-5 flex items-center justify-between border-b border-neutral-200">
                         <div>
                           <p className="text-[9px] font-black text-violet-400 uppercase tracking-widest mb-0.5">Servicio seleccionado</p>
-                          <h3 className="text-sm font-black text-white">{selectedClass.icon} {selectedClass.name}</h3>
+                          <h3 className="text-sm font-black text-neutral-900">{selectedClass.icon} {selectedClass.name}</h3>
                         </div>
-                        <span className="text-[9px] font-black bg-neutral-800 border border-neutral-700 text-white px-2.5 py-1 rounded-md uppercase tracking-wider">
+                        <span className="text-[9px] font-black bg-neutral-100 border border-neutral-200 text-neutral-800 px-2.5 py-1 rounded-md uppercase tracking-wider">
                           {selectedClass.duration} MIN
                         </span>
                       </div>
@@ -1747,13 +1841,13 @@ function PublicBookingPage() {
                                   key={t.id}
                                   type="button"
                                   onClick={() => setSelectedTeacher(t)}
-                                  className="flex items-center gap-4 p-4 border border-neutral-800 rounded-2xl hover:border-violet-500 hover:bg-neutral-950/10 transition-all text-left bg-neutral-950"
+                                  className="flex items-center gap-4 p-4 border border-neutral-200 rounded-2xl hover:border-violet-500 hover:bg-violet-50/20 transition-all text-left bg-white shadow-sm"
                                 >
                                   <div className="w-10 h-10 rounded-full bg-violet-600/10 text-violet-400 font-bold flex items-center justify-center text-xs">
                                     {t.User.name.charAt(0).toUpperCase()}
                                   </div>
                                   <div>
-                                    <p className="font-bold text-white text-xs">{t.User.name}</p>
+                                    <p className="font-bold text-neutral-900 text-xs">{t.User.name}</p>
                                     <p className="text-[10px] text-neutral-500">{t.instrumento || "Instructor"}</p>
                                   </div>
                                 </button>
@@ -1765,7 +1859,7 @@ function PublicBookingPage() {
                         {selectedTeacher && (
                           <>
                             {academySlug && (
-                              <div className="flex items-center justify-between bg-neutral-950 px-4 py-3 rounded-2xl border border-neutral-800/60">
+                              <div className="flex items-center justify-between bg-neutral-50 px-4 py-3 rounded-2xl border border-neutral-200">
                                 <div className="flex items-center gap-3 min-w-0">
                                   <div className="w-7 h-7 rounded-full bg-violet-600/10 text-violet-400 font-bold flex items-center justify-center text-xs shrink-0">
                                     {selectedTeacher.User.name.charAt(0).toUpperCase()}
@@ -1808,14 +1902,14 @@ function PublicBookingPage() {
                                   const target = e.target;
                                   setTimeout(() => target.blur(), 50);
                                 }}
-                                className="kh-input bg-neutral-950 border-neutral-800 text-white"
+                                className="kh-input bg-white border-neutral-200 text-neutral-900"
                                 min={minBookingDate}
                               />
                             </div>
 
                             {/* Alternative Suggestion Banner */}
                             {alternativeDateMsg && (
-                              <div className="bg-amber-950/20 border border-amber-500/20 rounded-2xl p-4 space-y-3 text-amber-300 text-xs">
+                              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-3 text-amber-800 text-xs">
                                 <p className="font-semibold leading-relaxed">⚠️ {alternativeDateMsg}</p>
                                 <button
                                   type="button"
@@ -1836,10 +1930,10 @@ function PublicBookingPage() {
 
                                 {loadingSlots ? (
                                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                    <div className="kh-skeleton h-12 bg-neutral-900" />
+                                    <div className="kh-skeleton h-12 bg-neutral-200" />
                                   </div>
                                 ) : availableSlots.length === 0 ? (
-                                  <p className="p-6 bg-neutral-950 border border-neutral-900 rounded-2xl text-center text-xs font-bold text-neutral-500 italic">
+                                  <p className="p-6 bg-white border border-neutral-200 rounded-2xl text-center text-xs font-bold text-neutral-500 italic">
                                     No hay bloques libres para el día seleccionado.
                                   </p>
                                 ) : (
@@ -1852,7 +1946,7 @@ function PublicBookingPage() {
                                         className={`py-3.5 px-2 rounded-xl text-xs font-black transition-all ${
                                           selectedSlot === slot
                                             ? "bg-violet-600 text-white shadow-lg border border-violet-500"
-                                            : "bg-neutral-950 hover:bg-neutral-900 text-neutral-300 border border-neutral-800"
+                                            : "bg-white hover:bg-neutral-50 text-neutral-700 border border-neutral-200/80 shadow-sm"
                                         }`}
                                       >
                                         {formatTime(slot)}
@@ -1873,7 +1967,7 @@ function PublicBookingPage() {
                                       required
                                       value={formData.name}
                                       onChange={e => setFormData(p => ({ ...p, name: e.target.value }))}
-                                      className="kh-input bg-neutral-950 border-neutral-800 text-white"
+                                      className="kh-input bg-white border-neutral-200 text-neutral-900"
                                       placeholder="Tu nombre completo"
                                     />
                                   </div>
@@ -1884,7 +1978,7 @@ function PublicBookingPage() {
                                       required
                                       value={formData.email}
                                       onChange={e => setFormData(p => ({ ...p, email: e.target.value }))}
-                                      className="kh-input bg-neutral-950 border-neutral-800 text-white"
+                                      className="kh-input bg-white border-neutral-200 text-neutral-900"
                                       placeholder="ejemplo@correo.com"
                                     />
                                   </div>
@@ -1897,7 +1991,7 @@ function PublicBookingPage() {
                                       required
                                       value={formData.phone}
                                       onChange={e => setFormData(p => ({ ...p, phone: e.target.value }))}
-                                      className="kh-input bg-neutral-950 border-neutral-800 text-white"
+                                      className="kh-input bg-white border-neutral-200 text-neutral-900"
                                       placeholder="+56912345678"
                                     />
                                   </div>
@@ -1908,7 +2002,7 @@ function PublicBookingPage() {
                                       required
                                       value={loginPassword}
                                       onChange={e => setLoginPassword(e.target.value)}
-                                      className="kh-input bg-neutral-950 border-neutral-800 text-white"
+                                      className="kh-input bg-white border-neutral-200 text-neutral-900"
                                       placeholder="Mínimo 6 caracteres"
                                     />
                                   </div>
@@ -1916,14 +2010,14 @@ function PublicBookingPage() {
                                 
                                 <div>
                                   <label className="kh-label block text-[10px] text-neutral-400">Modalidad de Clase</label>
-                                  <div className="grid grid-cols-2 gap-2 p-1 bg-neutral-950 border border-neutral-800 rounded-xl">
+                                  <div className="grid grid-cols-2 gap-2 p-1 bg-neutral-100 border border-neutral-200 rounded-xl">
                                     {["presencial", "online"].map(m => (
                                       <button
                                         key={m}
                                         type="button"
                                         onClick={() => setFormData(p => ({ ...p, message: m }))}
                                         className={`py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${
-                                          formData.message === m ? "bg-neutral-800 text-white shadow" : "text-neutral-500 hover:text-neutral-300"
+                                          formData.message === m ? "bg-white text-neutral-900 shadow-sm border border-neutral-200/50" : "text-neutral-500 hover:text-neutral-300"
                                         }`}
                                       >
                                         {m === "presencial" ? "🏠 Presencial" : "📹 Online"}
@@ -1960,19 +2054,19 @@ function PublicBookingPage() {
       {/* Cancellation Modal */}
       {cancelModalOpen && classToCancel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-6 animate-in zoom-in duration-200">
+          <div className="bg-white border border-neutral-200 rounded-3xl p-6 max-w-md w-full shadow-lg space-y-6 animate-in zoom-in duration-200">
             <div className="text-center">
               <Trash2 className="w-12 h-12 text-red-500 mx-auto mb-3" />
-              <h3 className="text-lg font-black text-white uppercase tracking-wider">Confirmar Cancelación</h3>
+              <h3 className="text-lg font-black text-neutral-900 uppercase tracking-wider">Confirmar Cancelación</h3>
               <p className="text-xs text-neutral-400 mt-2 leading-relaxed">
                 ¿Estás seguro de que deseas cancelar tu clase del{" "}
-                <strong className="text-white capitalize">
+                <strong className="text-neutral-900 capitalize">
                   {new Date(classToCancel.date + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}
                 </strong>{" "}
-                a las <strong className="text-white">{classToCancel.start_time.slice(0, 5)} hs</strong>?
+                a las <strong className="text-neutral-900">{classToCancel.start_time.slice(0, 5)} hs</strong>?
               </p>
               {isLessThan24Hours(classToCancel.date, classToCancel.start_time) && (
-                <div className="mt-4 bg-amber-950/20 border border-amber-500/20 p-3.5 rounded-xl text-[11px] text-amber-300 font-semibold leading-relaxed text-left">
+                <div className="mt-4 bg-amber-50 border border-amber-200 p-3.5 rounded-xl text-[11px] text-amber-900 font-semibold leading-relaxed text-left">
                   ⚠️ <strong>Cancelación Tardía (menos de 24h):</strong> La clase se marcará como cancelada por el alumno, se descontará de tu saldo y tu profesor evaluará si se puede recuperar manualmente.
                 </div>
               )}
@@ -1984,7 +2078,7 @@ function PublicBookingPage() {
                   setCancelModalOpen(false);
                   setClassToCancel(null);
                 }}
-                className="flex-1 py-3 bg-neutral-950 hover:bg-neutral-800 text-neutral-400 rounded-xl text-xs font-black uppercase tracking-wider transition-all border border-neutral-800"
+                className="flex-1 py-3 bg-white hover:bg-neutral-50 text-neutral-500 rounded-xl text-xs font-black uppercase tracking-wider transition-all border border-neutral-200"
               >
                 No, mantener clase
               </button>
@@ -2019,7 +2113,7 @@ function WeeklyAvailabilityView({
     return (
       <div className="flex gap-2 justify-center py-4">
         {Array.from({ length: 7 }).map((_, idx) => (
-          <div key={idx} className="w-12 h-14 bg-neutral-900 rounded-xl animate-pulse" />
+          <div key={idx} className="w-12 h-14 bg-neutral-200 rounded-xl animate-pulse" />
         ))}
       </div>
     )
@@ -2057,12 +2151,12 @@ function WeeklyAvailabilityView({
                 }
               }}
               disabled={!hasSlots}
-              className={`p-2 rounded-xl flex flex-col items-center justify-center border transition-all ${
+              className={`p-1.5 sm:p-2 rounded-xl flex flex-col items-center justify-center border transition-all ${
                 isSelected
                   ? "bg-violet-600 text-white border-violet-500 shadow-md shadow-violet-950/40"
                   : hasSlots
-                  ? "bg-neutral-950 hover:bg-neutral-900 text-white border-neutral-800 hover:border-neutral-700"
-                  : "bg-neutral-950/20 text-neutral-600 border-neutral-900/60 cursor-not-allowed opacity-50"
+                  ? "bg-white hover:bg-neutral-50 text-neutral-900 border-neutral-200 hover:border-neutral-300"
+                  : "bg-neutral-100/50 text-neutral-400 border-neutral-200/50 cursor-not-allowed opacity-50"
               }`}
             >
               <span className="text-[8px] font-black uppercase tracking-wider leading-none mb-1">{d.label}</span>
@@ -2071,8 +2165,8 @@ function WeeklyAvailabilityView({
                 isSelected 
                   ? "bg-violet-500 text-white" 
                   : hasSlots 
-                  ? "bg-violet-950/60 text-violet-400" 
-                  : "bg-neutral-900 text-neutral-600"
+                  ? "bg-violet-50 text-violet-600" 
+                  : "bg-neutral-100 text-neutral-400"
               }`}>
                 {hasSlots ? `${d.slotsCount}h` : "Full"}
               </span>

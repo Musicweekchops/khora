@@ -64,7 +64,7 @@ function SuccessDetails() {
     <div className="max-w-md w-full mx-auto space-y-8 relative z-10 animate-in fade-in zoom-in duration-500">
       
       {/* SUCCESS CARD / RECEIPT */}
-      <div className="bg-neutral-900/80 backdrop-blur-xl border border-neutral-800 rounded-[32px] overflow-hidden shadow-2xl relative">
+      <div className="bg-white border border-neutral-200 rounded-[32px] overflow-hidden shadow-xl relative">
         {/* Glow Line decoration */}
         <div className="h-1.5 w-full bg-gradient-to-r from-emerald-500 to-teal-500" />
         
@@ -78,25 +78,25 @@ function SuccessDetails() {
           </div>
 
           <div className="space-y-2">
-            <h1 className="text-2xl font-black text-white tracking-tight uppercase">¡Pago Confirmado!</h1>
-            <p className="text-neutral-400 text-xs font-semibold tracking-wider uppercase">Tu clase ha sido agendada con éxito</p>
+            <h1 className="text-2xl font-black text-neutral-900 tracking-tight uppercase">¡Pago Confirmado!</h1>
+            <p className="text-neutral-500 text-xs font-semibold tracking-wider uppercase">Tu clase ha sido agendada con éxito</p>
           </div>
 
           {/* Dotted border separator */}
           <div className="relative flex items-center my-4">
-            <div className="absolute -left-10 w-4 h-4 bg-neutral-950 rounded-full border border-neutral-800" />
-            <div className="w-full border-t-2 border-dashed border-neutral-800" />
-            <div className="absolute -right-10 w-4 h-4 bg-neutral-950 rounded-full border border-neutral-800" />
+            <div className="absolute -left-10 w-4 h-4 bg-neutral-100 rounded-full border border-neutral-200" />
+            <div className="w-full border-t-2 border-dashed border-neutral-200" />
+            <div className="absolute -right-10 w-4 h-4 bg-neutral-100 rounded-full border border-neutral-200" />
           </div>
 
           {/* Ticket Details */}
-          <div className="space-y-4 text-left font-sans bg-neutral-950/40 p-5 rounded-2xl border border-neutral-800/40">
-            <div className="flex justify-between items-center text-xs pb-3 border-b border-neutral-800/60">
+          <div className="space-y-4 text-left font-sans bg-neutral-100/40 p-5 rounded-2xl border border-neutral-200/40">
+            <div className="flex justify-between items-center text-xs pb-3 border-b border-neutral-200/60">
               <span className="text-neutral-500 font-bold uppercase tracking-widest flex items-center gap-1.5">
-                <Ticket className="w-3.5 h-3.5 text-neutral-600" />
+                <Ticket className="w-3.5 h-3.5 text-neutral-500" />
                 Número de Orden
               </span>
-              <span className="text-white font-mono font-bold text-xs">{paymentId}</span>
+              <span className="text-neutral-900 font-mono font-bold text-xs">{paymentId}</span>
             </div>
 
             <div className="space-y-3 pt-1">
@@ -104,7 +104,7 @@ function SuccessDetails() {
                 <User className="w-4 h-4 text-neutral-500 mt-0.5 flex-shrink-0" />
                 <div>
                   <p className="text-[10px] font-black text-neutral-500 uppercase tracking-widest leading-none">Profesor</p>
-                  <p className="text-sm font-bold text-white mt-1">{teacherName}</p>
+                  <p className="text-sm font-bold text-neutral-900 mt-1">{teacherName}</p>
                 </div>
               </div>
 
@@ -112,7 +112,7 @@ function SuccessDetails() {
                 <span className="text-base text-neutral-500 leading-none mt-0.5 flex-shrink-0">🎸</span>
                 <div>
                   <p className="text-[10px] font-black text-neutral-500 uppercase tracking-widest leading-none">Especialidad</p>
-                  <p className="text-sm font-bold text-white mt-1 capitalize">Clase de {instrument}</p>
+                  <p className="text-sm font-bold text-neutral-900 mt-1 capitalize">Clase de {instrument}</p>
                 </div>
               </div>
 
@@ -120,7 +120,7 @@ function SuccessDetails() {
                 <Calendar className="w-4 h-4 text-neutral-500 mt-0.5 flex-shrink-0" />
                 <div>
                   <p className="text-[10px] font-black text-neutral-500 uppercase tracking-widest leading-none">Fecha de Clase</p>
-                  <p className="text-sm font-bold text-white mt-1 capitalize">{formattedDate}</p>
+                  <p className="text-sm font-bold text-neutral-900 mt-1 capitalize">{formattedDate}</p>
                 </div>
               </div>
 
@@ -128,7 +128,7 @@ function SuccessDetails() {
                 <Clock className="w-4 h-4 text-neutral-500 mt-0.5 flex-shrink-0" />
                 <div>
                   <p className="text-[10px] font-black text-neutral-500 uppercase tracking-widest leading-none">Horario Reservado</p>
-                  <p className="text-sm font-bold text-white mt-1">{time ? `${time} hs` : "Por confirmar"}</p>
+                  <p className="text-sm font-bold text-neutral-900 mt-1">{time ? `${time} hs` : "Por confirmar"}</p>
                 </div>
               </div>
             </div>
@@ -148,19 +148,19 @@ function SuccessDetails() {
 
             <button
               onClick={() => router.push("/dashboard/clases")}
-              className="w-full py-4 bg-neutral-800 hover:bg-neutral-750 active:scale-[0.98] text-neutral-200 rounded-2xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all border border-neutral-700/50"
+              className="w-full py-4 bg-neutral-100 hover:bg-neutral-200 active:scale-[0.98] text-neutral-700 rounded-2xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all border border-neutral-200"
             >
               <span>Ir a mi Panel de Estudio</span>
-              <ArrowRight className="w-4 h-4 text-neutral-400" />
+              <ArrowRight className="w-4 h-4 text-neutral-500" />
             </button>
           </div>
         </div>
       </div>
 
       {/* Trust elements */}
-      <div className="text-center text-neutral-600 text-[10px] space-y-2">
+      <div className="text-center text-neutral-500 text-[10px] space-y-2">
         <div className="flex items-center justify-center gap-4">
-          <span className="flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5 text-neutral-600" /> Transacción Segura</span>
+          <span className="flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5 text-neutral-500" /> Transacción Segura</span>
           <span className="w-1 h-1 rounded-full bg-neutral-800" />
           <span className="flex items-center gap-1">⚡ Procesado por Mercado Pago</span>
         </div>
@@ -173,9 +173,9 @@ function SuccessDetails() {
 export default function SuccessPage() {
   return (
     <div
-      className="min-h-screen flex flex-col justify-center items-center p-4 md:p-8 bg-cover bg-center bg-no-repeat relative font-sans text-white"
+      className="min-h-screen flex flex-col justify-center items-center p-4 md:p-8 bg-cover bg-center bg-no-repeat relative font-sans text-neutral-900"
       style={{
-        backgroundImage: "linear-gradient(rgba(18, 18, 20, 0.94), rgba(18, 18, 20, 0.98)), url('/studio.jpg')"
+        backgroundImage: "linear-gradient(rgba(255, 255, 255, 0.95), rgba(250, 250, 250, 0.98)), url('/studio.jpg')"
       }}
     >
       {/* Glows Ambientales */}
@@ -185,7 +185,7 @@ export default function SuccessPage() {
       <Suspense fallback={
         <div className="flex flex-col items-center justify-center p-4">
           <div className="w-12 h-12 border-4 border-violet-950 border-t-violet-400 rounded-full animate-spin mb-4" />
-          <p className="text-neutral-400 text-xs font-semibold uppercase tracking-widest animate-pulse">Cargando tu Recibo...</p>
+          <p className="text-neutral-500 text-xs font-semibold uppercase tracking-widest animate-pulse">Cargando tu Recibo...</p>
         </div>
       }>
         <SuccessDetails />

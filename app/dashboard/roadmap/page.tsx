@@ -88,41 +88,41 @@ export default function RoadmapPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-neutral-950 flex items-center justify-center">
+      <div className="min-h-screen bg-transparent flex items-center justify-center">
         <div className="w-8 h-8 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100 p-6 sm:p-10 font-sans selection:bg-indigo-500/30">
+    <div className="min-h-screen bg-transparent text-neutral-800 p-6 sm:p-10 font-sans selection:bg-indigo-500/30">
       <div className="max-w-4xl mx-auto space-y-12">
         
         {/* GAMIFICATION HEADER */}
-        <div className="flex flex-col sm:flex-row gap-6 items-center justify-between bg-neutral-900/50 p-6 sm:p-8 rounded-[32px] border border-white/5 backdrop-blur-xl">
+        <div className="flex flex-col sm:flex-row gap-6 items-center justify-between bg-white p-6 sm:p-8 rounded-[32px] border border-neutral-200/80 shadow-sm">
           <div className="flex items-center gap-6">
             {/* TIER BADGE */}
             <div className={`relative flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br ${TIER_COLORS[stats.tier]}`}>
               <div className="absolute inset-0 bg-black/20 rounded-2xl" />
-              <span className="relative z-10 text-4xl font-black text-white drop-shadow-md">{stats.tier}</span>
-              <div className="absolute -bottom-2.5 bg-neutral-950 border border-white/10 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider text-neutral-300">
+              <span className={`relative z-10 text-4xl font-black drop-shadow-md ${stats.tier === 'S' ? 'text-amber-950' : 'text-white'}`}>{stats.tier}</span>
+              <div className="absolute -bottom-2.5 bg-neutral-100 border border-neutral-200 px-3 py-1 rounded-full text-neutral-600 text-[10px] font-black uppercase tracking-wider">
                 Tier
               </div>
             </div>
 
             <div>
               <h1 className="text-2xl sm:text-3xl font-black tracking-tight">Tu Progreso</h1>
-              <p className="text-neutral-400 text-sm font-medium mt-1">Siguiente Tier: A (a los 2000 XP)</p>
+              <p className="text-neutral-500 text-sm font-medium mt-1">Siguiente Tier: A (a los 2000 XP)</p>
             </div>
           </div>
 
           <div className="flex gap-4 w-full sm:w-auto">
-            <div className="flex-1 sm:flex-none bg-neutral-950/50 border border-white/5 p-4 rounded-2xl flex flex-col items-center justify-center gap-1">
+            <div className="flex-1 sm:flex-none bg-neutral-50 border border-neutral-200 p-4 rounded-2xl flex flex-col items-center justify-center gap-1">
               <Trophy className="w-5 h-5 text-indigo-400" />
               <span className="text-xl font-black">{stats.total_xp}</span>
               <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-widest">XP Total</span>
             </div>
-            <div className="flex-1 sm:flex-none bg-neutral-950/50 border border-white/5 p-4 rounded-2xl flex flex-col items-center justify-center gap-1">
+            <div className="flex-1 sm:flex-none bg-neutral-50 border border-neutral-200 p-4 rounded-2xl flex flex-col items-center justify-center gap-1">
               <Flame className="w-5 h-5 text-orange-500" />
               <span className="text-xl font-black">{stats.current_streak}</span>
               <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-widest">Racha Semanal</span>
@@ -133,22 +133,22 @@ export default function RoadmapPage() {
         {/* ROADMAP / SKILL TREE */}
         <div className="space-y-12 relative">
           {/* Vertical connecting line */}
-          <div className="absolute left-6 top-8 bottom-8 w-0.5 bg-neutral-800 hidden sm:block" />
+          <div className="absolute left-6 top-8 bottom-8 w-0.5 bg-neutral-200 hidden sm:block" />
 
           {modules.map((module, mIdx) => (
             <div key={module.id} className="relative z-10">
               <div className="flex flex-col sm:flex-row gap-6">
                 
                 {/* Module Number Indicator */}
-                <div className="hidden sm:flex flex-shrink-0 w-12 h-12 bg-neutral-900 border-2 border-neutral-800 rounded-full items-center justify-center text-neutral-400 font-black text-lg">
+                <div className="hidden sm:flex flex-shrink-0 w-12 h-12 bg-white border-2 border-neutral-200 rounded-full items-center justify-center text-neutral-500 font-black text-lg">
                   {mIdx + 1}
                 </div>
 
                 <div className="flex-1 space-y-6">
                   {/* Module Header */}
                   <div>
-                    <h2 className="text-xl font-black text-white">{module.title}</h2>
-                    <p className="text-sm text-neutral-400 mt-1">{module.description}</p>
+                    <h2 className="text-xl font-black text-neutral-900">{module.title}</h2>
+                    <p className="text-sm text-neutral-500 mt-1">{module.description}</p>
                   </div>
 
                   {/* Lessons Grid */}
@@ -160,7 +160,7 @@ export default function RoadmapPage() {
                         className={`group relative overflow-hidden flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 ${
                           lesson.is_completed 
                             ? "bg-indigo-500/10 border-indigo-500/30 hover:bg-indigo-500/20" 
-                            : "bg-neutral-900/40 border-white/5 hover:border-white/10 hover:bg-neutral-800/40"
+                            : "bg-white border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50/55 shadow-sm"
                         }`}
                       >
                         {/* Glow effect on hover */}
@@ -168,12 +168,12 @@ export default function RoadmapPage() {
                         
                         <div className="flex items-center gap-4 relative z-10">
                           <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
-                            lesson.is_completed ? "bg-indigo-500 text-white" : "bg-neutral-800 text-neutral-500"
+                            lesson.is_completed ? "bg-indigo-500 text-neutral-900" : "bg-neutral-100 text-neutral-400"
                           }`}>
                             {lesson.is_completed ? <CheckCircle2 className="w-5 h-5" /> : <PlayCircle className="w-5 h-5" />}
                           </div>
                           <div>
-                            <h3 className={`text-sm font-bold ${lesson.is_completed ? "text-indigo-100" : "text-neutral-300"}`}>
+                            <h3 className={`text-sm font-bold ${lesson.is_completed ? "text-indigo-900" : "text-neutral-700"}`}>
                               {lesson.title}
                             </h3>
                             <p className="text-[10px] font-black uppercase tracking-wider text-neutral-500 mt-0.5">
