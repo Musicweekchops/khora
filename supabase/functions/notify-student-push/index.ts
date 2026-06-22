@@ -6,6 +6,26 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+function formatFriendlyDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return ""
+  if (/[a-zA-Z]/g.test(dateStr)) return dateStr
+  try {
+    const parts = dateStr.split("-")
+    if (parts.length === 3) {
+      const year = parseInt(parts[0], 10)
+      const month = parseInt(parts[1], 10) - 1
+      const day = parseInt(parts[2], 10)
+      const dateObj = new Date(year, month, day)
+      const weekday = dateObj.toLocaleDateString("es-CL", { weekday: "long" })
+      const monthName = dateObj.toLocaleDateString("es-CL", { month: "long" })
+      const capWeekday = weekday.charAt(0).toUpperCase() + weekday.slice(1)
+      const capMonthName = monthName.charAt(0).toUpperCase() + monthName.slice(1)
+      return `${capWeekday} ${day} de ${capMonthName}`
+    }
+  } catch (_e) {}
+  return dateStr
+}
+
 serve(async (req) => {
   // Manejo de preflight CORS
   if (req.method === 'OPTIONS') {
@@ -123,14 +143,14 @@ serve(async (req) => {
     const isRejected = type === 'REJECTED'
     
     let notificationTitle = "🎸 ¡Clase Confirmada!"
-    let notificationBody = `${teacherName} confirmó tu clase del ${date} a las ${formattedTime} hs.`
+    let notificationBody = `${teacherName} confirmó tu clase del ${formatFriendlyDate(date)} a las ${formattedTime} hs.`
     
     if (isCancelled) {
       notificationTitle = "✕ Clase Cancelada"
-      notificationBody = `${teacherName} canceló tu clase del ${date} a las ${formattedTime} hs.`
+      notificationBody = `${teacherName} canceló tu clase del ${formatFriendlyDate(date)} a las ${formattedTime} hs.`
     } else if (isRejected) {
       notificationTitle = "✕ Reserva Rechazada"
-      notificationBody = `${teacherName} rechazó tu solicitud de reserva del ${date} a las ${formattedTime} hs.`
+      notificationBody = `${teacherName} rechazó tu solicitud de reserva del ${formatFriendlyDate(date)} a las ${formattedTime} hs.`
     }
     
     const notificationUrl = (isCancelled || isRejected || !finalClassId) 

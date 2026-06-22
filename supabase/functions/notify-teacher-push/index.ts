@@ -6,6 +6,26 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+function formatFriendlyDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return ""
+  if (/[a-zA-Z]/g.test(dateStr)) return dateStr
+  try {
+    const parts = dateStr.split("-")
+    if (parts.length === 3) {
+      const year = parseInt(parts[0], 10)
+      const month = parseInt(parts[1], 10) - 1
+      const day = parseInt(parts[2], 10)
+      const dateObj = new Date(year, month, day)
+      const weekday = dateObj.toLocaleDateString("es-CL", { weekday: "long" })
+      const monthName = dateObj.toLocaleDateString("es-CL", { month: "long" })
+      const capWeekday = weekday.charAt(0).toUpperCase() + weekday.slice(1)
+      const capMonthName = monthName.charAt(0).toUpperCase() + monthName.slice(1)
+      return `${capWeekday} ${day} de ${capMonthName}`
+    }
+  } catch (_e) {}
+  return dateStr
+}
+
 serve(async (req) => {
   // Manejo de preflight CORS
   if (req.method === 'OPTIONS') {
@@ -131,20 +151,20 @@ serve(async (req) => {
     )
 
     let payloadTitle = "🎸 ¡Clase Confirmada!"
-    let payloadBody = `${studentName} confirmó su asistencia para la clase del ${date} a las ${formattedTime} hs.`
+    let payloadBody = `${studentName} confirmó su asistencia para la clase del ${formatFriendlyDate(date)} a las ${formattedTime} hs.`
     let payloadUrl = finalClassId ? `/dashboard/clases/detalles?id=${finalClassId}&confirmed=true` : `/dashboard`
 
     if (type === "RESCHEDULED") {
       payloadTitle = "🔄 Clase Reagendada"
-      payloadBody = `${studentName} reagendó su clase del ${originalDate} ${originalStartTime} hs para el ${newDate} a las ${newStartTime} hs.`
+      payloadBody = `${studentName} reagendó su clase del ${formatFriendlyDate(originalDate)} a las ${originalStartTime?.slice(0, 5)} hs para el ${formatFriendlyDate(newDate)} a las ${newStartTime?.slice(0, 5)} hs.`
       payloadUrl = finalClassId ? `/dashboard/clases/detalles?id=${finalClassId}` : `/dashboard`
     } else if (type === "CANCELLED") {
       payloadTitle = "✕ Clase Cancelada"
-      payloadBody = `La clase con ${studentName} del ${date} a las ${formattedTime} hs ha sido cancelada.`
+      payloadBody = `La clase con ${studentName} del ${formatFriendlyDate(date)} a las ${formattedTime} hs ha sido cancelada.`
       payloadUrl = "/dashboard"
     } else if (type === "BOOKING_CREATED") {
       payloadTitle = "🔔 Nueva Solicitud de Reserva"
-      payloadBody = `${studentName} ha solicitado reservar una clase el ${date} a las ${formattedTime} hs.`
+      payloadBody = `${studentName} ha solicitado reservar una clase el ${formatFriendlyDate(date)} a las ${formattedTime} hs.`
       payloadUrl = "/dashboard/agenda"
     }
 
