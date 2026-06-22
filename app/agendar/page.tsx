@@ -1791,7 +1791,9 @@ function PublicBookingPage() {
                                   <span className="text-3xl">{ct.icon}</span>
                                   <div>
                                     <h3 className="text-sm font-black text-neutral-900 group-hover:text-violet-600 transition-colors">{ct.name}</h3>
-                                    <p className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider mt-0.5">{ct.duration} minutos • ${ct.price.toLocaleString("es-CL")}</p>
+                                    <p className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider mt-0.5">
+                                      {ct.duration} minutos{profile?.role !== "STUDENT" && ` • $${ct.price.toLocaleString("es-CL")}`}
+                                    </p>
                                   </div>
                                 </div>
                                 <ChevronRight className="w-4 h-4 text-neutral-600" />
