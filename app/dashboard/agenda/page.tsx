@@ -57,6 +57,7 @@ export default function AgendaPage() {
   const [bookingStudentId, setBookingStudentId] = useState("")
   const [bookingModalidad, setBookingModalidad] = useState("online")
   const [processingBooking, setProcessingBooking] = useState(false)
+  const [bookingError, setBookingError] = useState<string | null>(null)
 
   // Lock body scroll when modals are active to prevent background scroll drifting
   useEffect(() => {
@@ -225,6 +226,7 @@ export default function AgendaPage() {
   }
 
   function handleBookingClick(cls: any) {
+    setBookingError(null)
     const matched = students.find(s => s.email.toLowerCase() === cls.booking_email.toLowerCase())
     setBookingStudentId(matched ? matched.id : "")
     setBookingModalidad("online")
@@ -235,25 +237,36 @@ export default function AgendaPage() {
   async function handleAcceptBooking() {
     if (!selectedBooking || !profile?.teacherProfileId) return
     setProcessingBooking(true)
+    setBookingError(null)
 
     try {
-      // 1. Conflict Check
+      // PASO 1: Conflict Check (excluye este booking para no auto-bloquearse)
       const hasConflict = await checkTeacherConflict(
         profile.teacherProfileId,
         selectedBooking.date,
         selectedBooking.start_time,
         selectedBooking.end_time,
         undefined,
-        selectedBooking.id  // excluir el booking que estamos confirmando
+        selectedBooking.id
       )
 
       if (hasConflict) {
-        toast.error("El profesor ya tiene una clase o reserva programada en ese horario.")
+        setBookingError("El profesor ya tiene una clase o reserva programada en ese horario.")
         setProcessingBooking(false)
         return
       }
 
-      // 2. Create the class
+      // PASO 2: Marcar el Booking como CONFIRMED *PRIMERO*
+      // Así cuando el trigger de la DB valide el INSERT del Class,
+      // no contará este Booking como PENDING (evita el falso límite semanal)
+      const { error: bookingErr } = await supabase
+        .from("Booking")
+        .update({ status: "CONFIRMED" })
+        .eq("id", selectedBooking.id)
+
+      if (bookingErr) throw bookingErr
+
+      // PASO 3: Ahora insertar la Class — el trigger ya no verá el Booking en PENDING
       const { data: newClass, error: classErr } = await supabase
         .from("Class")
         .insert({
@@ -270,17 +283,13 @@ export default function AgendaPage() {
         .select()
         .single()
 
-      if (classErr) throw classErr
+      if (classErr) {
+        // Rollback: devolver el Booking a PENDING si falló la creación de la clase
+        await supabase.from("Booking").update({ status: "PENDING" }).eq("id", selectedBooking.id)
+        throw classErr
+      }
 
-      // 3. Update the booking status to CONFIRMED
-      const { error: bookingErr } = await supabase
-        .from("Booking")
-        .update({ status: "CONFIRMED" })
-        .eq("id", selectedBooking.id)
-
-      if (bookingErr) throw bookingErr
-
-      // 4. Send email & push notifications to student
+      // PASO 4: Notificaciones al alumno (email + push)
       const friendlyDate = new Date(selectedBooking.date + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
       const friendlyTime = selectedBooking.start_time.slice(0, 5)
       const teacherName = profile.name || "Tu profesor"
@@ -325,10 +334,7 @@ export default function AgendaPage() {
         }).catch(err => console.error("Error sending push notification to student:", err))
       } else {
         supabase.functions.invoke("notify-student-push", {
-          body: {
-            classId: newClass.id,
-            type: "CONFIRMED"
-          }
+          body: { classId: newClass.id, type: "CONFIRMED" }
         }).catch(err => console.error("Error sending push notification to student:", err))
       }
 
@@ -336,7 +342,8 @@ export default function AgendaPage() {
       setShowBookingModal(false)
       loadClasses()
     } catch (err: any) {
-      toast.error("Error al confirmar reserva: " + err.message)
+      console.error("[handleAcceptBooking] Error:", err)
+      setBookingError("Error al confirmar: " + (err.message || "Error desconocido. Revisa la consola."))
     } finally {
       setProcessingBooking(false)
     }
@@ -1188,6 +1195,14 @@ export default function AgendaPage() {
                   </button>
                 ))}
               </div>
+
+              {/* Error dentro del modal (visible siempre, no se oculta detrás) */}
+              {bookingError && (
+                <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-2xl">
+                  <span className="text-red-500 text-base flex-shrink-0">⚠️</span>
+                  <p className="text-sm font-bold text-red-700 leading-snug">{bookingError}</p>
+                </div>
+              )}
 
               {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row gap-2.5 pt-3">
