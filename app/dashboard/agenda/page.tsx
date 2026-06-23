@@ -296,26 +296,40 @@ export default function AgendaPage() {
         throw classErr
       }
 
-      // PASO 4: Notificaciones al alumno (email + push)
+      // PASO 4: Notificaciones
       const friendlyDate = new Date(selectedBooking.date + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
       const friendlyTime = selectedBooking.start_time.slice(0, 5)
       const teacherName = profile.name || "Tu profesor"
+      const studentName = selectedBooking.student_name?.replace("SOLICITUD: ", "") || "El alumno"
 
+      // 4a. Email de confirmación al alumno
       if (selectedBooking.booking_email) {
         supabase.functions.invoke("send-email", {
           body: {
             to: selectedBooking.booking_email,
             type: "STUDENT_CLASS_CONFIRMED",
-            params: {
-              studentName: selectedBooking.student_name.replace("SOLICITUD: ", ""),
-              teacherName: teacherName,
-              date: friendlyDate,
-              time: friendlyTime
-            }
+            params: { studentName, teacherName, date: friendlyDate, time: friendlyTime }
           }
-        }).catch(err => console.error("Error sending booking confirmation email:", err))
+        }).catch(err => console.error("[Booking confirm] Error sending student email:", err))
       }
 
+      // 4b. Push al PROFESOR confirmando que la clase quedó agendada
+      if (profile.id) {
+        supabase.functions.invoke("notify-teacher-push", {
+          body: {
+            type: "CONFIRMED",
+            customParams: {
+              teacherUserId: profile.id,
+              studentName: studentName,
+              date: friendlyDate,
+              time: friendlyTime,
+              classId: newClass.id
+            }
+          }
+        }).catch(err => console.error("[Booking confirm] Error sending teacher push:", err))
+      }
+
+      // 4c. Push al ALUMNO (si tiene cuenta en el sistema)
       let studentUserId = null
       if (bookingStudentId) {
         const { data: studentUser } = await supabase
@@ -324,6 +338,7 @@ export default function AgendaPage() {
           .eq("id", bookingStudentId)
           .maybeSingle()
         if (studentUser) studentUserId = studentUser.user_id
+        console.log("[Booking confirm] studentUserId:", studentUserId)
       }
 
       if (studentUserId) {
@@ -331,18 +346,14 @@ export default function AgendaPage() {
           body: {
             type: "CONFIRMED",
             customParams: {
-              studentUserId: studentUserId,
-              teacherName: teacherName,
+              studentUserId,
+              teacherName,
               date: friendlyDate,
               time: friendlyTime,
               classId: newClass.id
             }
           }
-        }).catch(err => console.error("Error sending push notification to student:", err))
-      } else {
-        supabase.functions.invoke("notify-student-push", {
-          body: { classId: newClass.id, type: "CONFIRMED" }
-        }).catch(err => console.error("Error sending push notification to student:", err))
+        }).catch(err => console.error("[Booking confirm] Error sending student push:", err))
       }
 
       toast.success("¡Reserva confirmada con éxito!")

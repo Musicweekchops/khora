@@ -5,8 +5,24 @@
 -- 1. Encontraba una Class huérfana (de un intento previo) en ese horario
 -- 2. El doble-booking check corría incluso en UPDATEs de status
 --
--- Solución: Los checks de double-booking del Booking solo aplican en INSERT
--- o cuando el UPDATE cambia fecha/hora (no cuando solo cambia el status).
+-- Solución: 
+-- A) Limpiar Classes huérfanas que no tienen Booking CONFIRMED asociado
+-- B) Los checks de double-booking del Booking solo aplican en INSERT
+--    o cuando el UPDATE cambia fecha/hora (no cuando solo cambia el status).
+
+-- =====================================================
+-- PASO A: Limpiar Classes huérfanas de intentos fallidos
+-- (Classes con booking_id que apunta a un Booking en PENDING)
+-- =====================================================
+DELETE FROM public."Class"
+WHERE booking_id IS NOT NULL
+  AND booking_id IN (
+    SELECT id FROM public."Booking" WHERE status = 'PENDING'
+  );
+
+-- =====================================================
+-- PASO B: Re-crear el trigger con la lógica corregida
+-- =====================================================
 
 CREATE OR REPLACE FUNCTION public.check_booking_scheduling_rules()
 RETURNS TRIGGER AS $$
