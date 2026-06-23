@@ -86,7 +86,7 @@ export default function AgendaPage() {
     const paddingDays = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1
     const start = new Date(firstDay)
     start.setDate(start.getDate() - paddingDays)
-    
+
     const days = []
     for (let i = 0; i < 35; i++) {
       const d = new Date(start)
@@ -113,11 +113,11 @@ export default function AgendaPage() {
   }, [])
 
   useEffect(() => {
-    console.log("[Agenda] Profile state:", { 
-      hasProfile: !!profile, 
-      teacherId: profile?.teacherProfileId 
+    console.log("[Agenda] Profile state:", {
+      hasProfile: !!profile,
+      teacherId: profile?.teacherProfileId
     })
-    
+
     if (profile?.teacherProfileId) {
       loadClasses()
       loadStudents()
@@ -484,15 +484,15 @@ export default function AgendaPage() {
     const dayStr = toDateStr(mobileSelectedDate)
     return classes.filter(c => {
       if (c.date !== dayStr) return false
-      
+
       // Filter by Search term
       if (searchTerm.trim() && !c.student_name.toLowerCase().includes(searchTerm.toLowerCase())) return false
-      
+
       // Filter by Tab
       if (filterTab === "PENDING") return c.is_booking
       if (filterTab === "COMPLETED") return c.status === "COMPLETED"
       if (filterTab === "ALL") return !c.is_booking // classes tab
-      
+
       return true
     })
   }, [classes, mobileSelectedDate, searchTerm, filterTab])
@@ -527,7 +527,7 @@ export default function AgendaPage() {
         </div>
         <div className="flex items-center gap-2 w-full md:w-auto">
           <button onClick={() => setShowAvailModal(true)} className="flex-1 md:flex-none kh-btn-secondary px-4 py-2 border border-violet-200 text-violet-600 flex items-center justify-center gap-2">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" /></svg>
             <span className="hidden sm:inline">Disponibilidad</span>
             <span className="sm:hidden">Ajustes</span>
           </button>
@@ -580,9 +580,8 @@ export default function AgendaPage() {
                   <div
                     key={dayIdx}
                     onClick={() => slotClasses.length === 0 && handleSlotClick(day, hour)}
-                    className={`border-l border-neutral-50 relative cursor-pointer hover:bg-violet-50/30 transition-colors group ${
-                      isToday ? "bg-violet-50/20" : ""
-                    }`}
+                    className={`border-l border-neutral-50 relative cursor-pointer hover:bg-violet-50/30 transition-colors group ${isToday ? "bg-violet-50/20" : ""
+                      }`}
                   >
                     {/* Hover indicator for creating classes */}
                     <div className="absolute inset-0 opacity-0 group-hover:opacity-100 flex items-center justify-center text-violet-300 font-black text-2xl pb-2">+</div>
@@ -592,7 +591,7 @@ export default function AgendaPage() {
                       const startMins = parseInt(cls.start_time.split(":")[1] || "0")
                       const endHr = parseInt(cls.end_time.split(":")[0])
                       const endMins = parseInt(cls.end_time.split(":")[1] || "0")
-                      
+
                       const durationMins = (endHr * 60 + endMins) - (startHr * 60 + startMins)
                       const heightPx = Math.max(durationMins, 25) // 1 min = 1px, min 25px
                       const topPx = startMins
@@ -629,18 +628,17 @@ export default function AgendaPage() {
                               </div>
                             </button>
                           ) : (
-                            <Link 
+                            <Link
                               href={`/dashboard/clases/detalles?id=${cls.id}`}
                               className="block w-full h-full"
                             >
                               <div
-                                className={`h-full rounded-md p-1.5 text-xs hover:shadow-lg hover:z-20 transition-all cursor-pointer overflow-hidden flex flex-col shadow-sm border ${
-                                  cls.status === "COMPLETED"
+                                className={`h-full rounded-md p-1.5 text-xs hover:shadow-lg hover:z-20 transition-all cursor-pointer overflow-hidden flex flex-col shadow-sm border ${cls.status === "COMPLETED"
                                     ? "bg-emerald-50/95 border-emerald-200 border-l-4 border-l-emerald-400 text-emerald-700"
                                     : cls.is_trial
                                       ? "bg-orange-50/95 border-orange-200 border-l-4 border-l-orange-400 text-orange-700"
                                       : "bg-violet-50/95 border-violet-200 border-l-4 border-l-violet-400 text-violet-700"
-                                }`}
+                                  }`}
                               >
                                 <div className="flex items-start justify-between gap-1 leading-tight">
                                   <p className="font-black truncate pr-4">{cls.student_name}</p>
@@ -680,7 +678,7 @@ export default function AgendaPage() {
         {/* Search bar */}
         <div className="relative">
           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400 text-sm">🔍</span>
-          <input 
+          <input
             type="text"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
@@ -696,7 +694,7 @@ export default function AgendaPage() {
               {currentMonthDate.toLocaleDateString("es-CL", { month: "long", year: "numeric" })}
             </span>
             <div className="flex gap-1.5">
-              <button 
+              <button
                 onClick={() => {
                   const d = new Date(currentMonthDate)
                   d.setMonth(d.getMonth() - 1)
@@ -706,7 +704,7 @@ export default function AgendaPage() {
               >
                 ←
               </button>
-              <button 
+              <button
                 onClick={() => {
                   const d = new Date(currentMonthDate)
                   d.setMonth(d.getMonth() + 1)
@@ -731,7 +729,7 @@ export default function AgendaPage() {
               const isCurrentMonth = day.getMonth() === currentMonthDate.getMonth()
 
               return (
-                <div 
+                <div
                   key={idx}
                   onClick={() => {
                     setMobileSelectedDate(day)
@@ -739,13 +737,12 @@ export default function AgendaPage() {
                       setCurrentMonthDate(new Date(day))
                     }
                   }}
-                  className={`aspect-square rounded-2xl flex flex-col items-center justify-center relative cursor-pointer transition-all ${
-                    isSelected 
-                      ? "bg-neutral-900 text-white shadow-md scale-105" 
-                      : isCurrentMonth 
-                        ? "hover:bg-neutral-50 text-neutral-800" 
+                  className={`aspect-square rounded-2xl flex flex-col items-center justify-center relative cursor-pointer transition-all ${isSelected
+                      ? "bg-neutral-900 text-white shadow-md scale-105"
+                      : isCurrentMonth
+                        ? "hover:bg-neutral-50 text-neutral-800"
                         : "text-neutral-300 hover:bg-neutral-50/50"
-                  }`}
+                    }`}
                 >
                   <span className="text-sm font-black">{day.getDate()}</span>
                   {hasEvents && (
@@ -764,21 +761,20 @@ export default function AgendaPage() {
         <div className="flex border-b border-neutral-200/60 pb-1 gap-4 overflow-x-auto scrollbar-none">
           {(["ALL", "PENDING", "COMPLETED"] as const).map(tab => {
             const label = tab === "ALL" ? "Clases" : tab === "PENDING" ? "Solicitudes" : "Completadas"
-            const count = tab === "ALL" 
+            const count = tab === "ALL"
               ? classes.filter(c => c.date === toDateStr(mobileSelectedDate) && !c.is_booking).length
               : tab === "PENDING"
                 ? classes.filter(c => c.date === toDateStr(mobileSelectedDate) && c.is_booking).length
                 : classes.filter(c => c.date === toDateStr(mobileSelectedDate) && c.status === "COMPLETED").length
-            
+
             const isSelected = filterTab === tab
 
             return (
               <button
                 key={tab}
                 onClick={() => setFilterTab(tab)}
-                className={`pb-2 text-xs font-black transition-all relative whitespace-nowrap flex items-center gap-1.5 ${
-                  isSelected ? "text-neutral-900 font-black" : "text-neutral-400 font-bold"
-                }`}
+                className={`pb-2 text-xs font-black transition-all relative whitespace-nowrap flex items-center gap-1.5 ${isSelected ? "text-neutral-900 font-black" : "text-neutral-400 font-bold"
+                  }`}
               >
                 <span>{label}</span>
                 <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold ${isSelected ? "bg-neutral-900 text-white" : "bg-neutral-100 text-neutral-500"}`}>
@@ -803,7 +799,7 @@ export default function AgendaPage() {
               <span className="text-3xl block mb-2">📅</span>
               <p className="text-sm font-black text-neutral-900">Sin sesiones programadas</p>
               <p className="text-xs text-neutral-400 font-medium mt-1">Presiona el botón flotante de abajo para agendar una clase.</p>
-              
+
               <button
                 onClick={() => {
                   setSelectedSlot({ date: toDateStr(mobileSelectedDate), hour: 10 })
@@ -908,7 +904,7 @@ export default function AgendaPage() {
         </div>
 
         {/* Sticky FAB button */}
-        <div 
+        <div
           className="fixed right-6 z-40"
           style={{ bottom: 'calc(env(safe-area-inset-bottom, 16px) + 88px)' }}
         >
@@ -951,23 +947,23 @@ export default function AgendaPage() {
 
       {/* Quick-Add Modal / Bottom Drawer on Mobile */}
       {showModal && selectedSlot && (
-        <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-0 md:p-4 animate-in fade-in duration-200" 
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-0 md:p-4 animate-in fade-in duration-200"
           onClick={() => setShowModal(false)}
         >
-          <div 
-            onClick={e => e.stopPropagation()} 
+          <div
+            onClick={e => e.stopPropagation()}
             className="bg-white w-full md:max-w-md rounded-t-[40px] md:rounded-[32px] p-6 md:p-8 shadow-2xl flex flex-col max-h-[90vh] md:max-h-[95vh] overflow-y-auto animate-in slide-in-from-bottom md:slide-in-from-bottom-0 duration-300"
           >
             {/* Grab handle for drawer on mobile */}
             <div className="w-12 h-1.5 bg-neutral-200 rounded-full mx-auto mb-4 md:hidden flex-shrink-0" />
-            
+
             <div className="flex items-center justify-between mb-5 flex-shrink-0">
               <div>
                 <h3 className="text-xl md:text-2xl font-black text-neutral-900 tracking-tight">Crear sesión</h3>
                 <p className="text-xs text-neutral-400 font-medium mt-0.5">Asigna una nueva sesión a tu alumno</p>
               </div>
-              <button 
+              <button
                 onClick={() => setShowModal(false)}
                 className="w-9 h-9 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-500 hover:text-neutral-900 transition-colors"
               >
@@ -985,8 +981,8 @@ export default function AgendaPage() {
                       {new Date(selectedSlot.date + "T12:00").toLocaleDateString("es-CL", { month: "long", year: "numeric" })}
                     </span>
                     <div className="flex gap-1">
-                      <button 
-                        type="button" 
+                      <button
+                        type="button"
                         onClick={() => {
                           const d = new Date(selectedSlot.date + "T12:00")
                           d.setDate(d.getDate() - 1)
@@ -996,8 +992,8 @@ export default function AgendaPage() {
                       >
                         ←
                       </button>
-                      <button 
-                        type="button" 
+                      <button
+                        type="button"
                         onClick={() => {
                           const d = new Date(selectedSlot.date + "T12:00")
                           d.setDate(d.getDate() + 1)
@@ -1009,7 +1005,7 @@ export default function AgendaPage() {
                       </button>
                     </div>
                   </div>
-                  
+
                   {/* Visual day grid for current week in modal */}
                   <div className="grid grid-cols-7 gap-1 text-center">
                     {DAY_NAMES.map(n => <span key={n} className="text-[9px] font-bold text-neutral-400 uppercase">{n.charAt(0)}</span>)}
@@ -1017,7 +1013,7 @@ export default function AgendaPage() {
                       const activeDate = new Date(selectedSlot.date + "T12:00")
                       const startOfWeek = new Date(activeDate)
                       startOfWeek.setDate(activeDate.getDate() - activeDate.getDay())
-                      
+
                       return Array.from({ length: 7 }).map((_, idx) => {
                         const d = new Date(startOfWeek)
                         d.setDate(startOfWeek.getDate() + idx)
@@ -1028,11 +1024,10 @@ export default function AgendaPage() {
                             key={idx}
                             type="button"
                             onClick={() => setSelectedSlot(p => p ? { ...p, date: toDateStr(d) } : null)}
-                            className={`aspect-square rounded-xl text-xs font-black flex flex-col items-center justify-center transition-all ${
-                              isSelected 
-                                ? "bg-neutral-900 text-white shadow-sm" 
+                            className={`aspect-square rounded-xl text-xs font-black flex flex-col items-center justify-center transition-all ${isSelected
+                                ? "bg-neutral-900 text-white shadow-sm"
                                 : "hover:bg-neutral-200/50 text-neutral-700"
-                            }`}
+                              }`}
                           >
                             <span>{d.getDate()}</span>
                             {isToday && !isSelected && <div className="w-1 h-1 bg-violet-600 rounded-full mt-0.5" />}
@@ -1080,15 +1075,15 @@ export default function AgendaPage() {
               </div>
 
               <div className="flex gap-3 pt-3">
-                <button 
-                  onClick={() => setShowModal(false)} 
+                <button
+                  onClick={() => setShowModal(false)}
                   className="flex-1 py-3.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-full text-xs font-black uppercase tracking-wider transition-all"
                 >
                   Cancelar
                 </button>
-                <button 
-                  onClick={handleQuickCreate} 
-                  disabled={saving} 
+                <button
+                  onClick={handleQuickCreate}
+                  disabled={saving}
                   className="flex-1 py-3.5 bg-neutral-900 hover:bg-violet-600 text-white rounded-full text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50 shadow-md shadow-neutral-900/10"
                 >
                   {saving ? "Creando..." : "Agendar"}
@@ -1102,7 +1097,7 @@ export default function AgendaPage() {
       {showAvailModal && profile?.teacherProfileId && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
           <div className="bg-white rounded-[40px] p-10 w-full max-w-4xl shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            <button 
+            <button
               onClick={() => setShowAvailModal(false)}
               className="absolute top-8 right-8 w-10 h-10 flex items-center justify-center bg-neutral-100 rounded-full hover:bg-neutral-200 transition-colors text-neutral-500 font-bold"
             >
@@ -1115,22 +1110,22 @@ export default function AgendaPage() {
 
       {/* Booking Approval Modal */}
       {showBookingModal && selectedBooking && (
-        <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-0 md:p-4 animate-in fade-in duration-200" 
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-0 md:p-4 animate-in fade-in duration-200"
           onClick={() => setShowBookingModal(false)}
         >
-          <div 
-            onClick={e => e.stopPropagation()} 
+          <div
+            onClick={e => e.stopPropagation()}
             className="bg-white w-full md:max-w-md rounded-t-[40px] md:rounded-[32px] p-6 md:p-8 shadow-2xl flex flex-col max-h-[90vh] md:max-h-[95vh] overflow-y-auto animate-in slide-in-from-bottom md:slide-in-from-bottom-0 duration-300"
           >
             <div className="w-12 h-1.5 bg-neutral-200 rounded-full mx-auto mb-4 md:hidden flex-shrink-0" />
-            
+
             <div className="flex items-center justify-between mb-5 flex-shrink-0">
               <div>
                 <h3 className="text-xl md:text-2xl font-black text-neutral-900 tracking-tight">Solicitud de Reserva</h3>
                 <p className="text-xs text-neutral-400 font-medium mt-0.5">Revisa y responde a la solicitud de clase</p>
               </div>
-              <button 
+              <button
                 onClick={() => setShowBookingModal(false)}
                 className="w-9 h-9 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-500 hover:text-neutral-900 transition-colors"
               >
@@ -1161,7 +1156,7 @@ export default function AgendaPage() {
                 <div className="bg-neutral-50 border border-neutral-200/60 rounded-2xl p-4 space-y-1.5">
                   <p className="text-sm font-black text-neutral-900">{selectedBooking.student_name.replace("SOLICITUD: ", "")}</p>
                   <p className="text-xs text-neutral-500 font-medium">{selectedBooking.booking_email} {selectedBooking.booking_phone ? `· ${selectedBooking.booking_phone}` : ""}</p>
-                  
+
                   {selectedBooking.booking_message && (
                     <div className="mt-3 p-3 bg-neutral-100/50 rounded-xl border-l-4 border-violet-400 italic text-xs text-neutral-600 font-medium">
                       "{selectedBooking.booking_message}"
@@ -1196,16 +1191,16 @@ export default function AgendaPage() {
 
               {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row gap-2.5 pt-3">
-                <button 
-                  onClick={handleRejectBooking} 
+                <button
+                  onClick={handleRejectBooking}
                   disabled={processingBooking}
                   className="flex-1 py-3.5 border border-red-200 text-red-500 hover:bg-red-50 rounded-full text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50"
                 >
                   Rechazar Solicitud
                 </button>
-                <button 
-                  onClick={handleAcceptBooking} 
-                  disabled={processingBooking} 
+                <button
+                  onClick={handleAcceptBooking}
+                  disabled={processingBooking}
                   className="flex-1 py-3.5 bg-neutral-900 hover:bg-emerald-600 text-white rounded-full text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50 shadow-md shadow-neutral-900/10"
                 >
                   {processingBooking ? "Procesando..." : "Confirmar Reserva"}
