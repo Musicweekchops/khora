@@ -242,7 +242,9 @@ export default function AgendaPage() {
         profile.teacherProfileId,
         selectedBooking.date,
         selectedBooking.start_time,
-        selectedBooking.end_time
+        selectedBooking.end_time,
+        undefined,
+        selectedBooking.id  // excluir el booking que estamos confirmando
       )
 
       if (hasConflict) {

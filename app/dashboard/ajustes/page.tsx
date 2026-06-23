@@ -13,14 +13,108 @@ import {
   Save,
   Eye,
   EyeOff,
-  CreditCard
+  CreditCard,
+  Bell,
+  BellOff
 } from "lucide-react"
+
+const VAPID_PUBLIC_KEY = "BC3N_V7TcV1Wo-u4IdieY9eJYuHfO-zC3ghLAho4Lj2BsLtQf2lgrQURxmq_I0vNigamO5lRB1C_AG-2jLm1Cm4"
+
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4)
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/")
+  const rawData = window.atob(base64)
+  const outputArray = new Uint8Array(rawData.length)
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i)
+  }
+  return outputArray
+}
 
 export default function AjustesPage() {
   const { profile, signOut } = useAuth()
   const [loading, setLoading] = useState(false)
   const [showPass, setShowPass] = useState(false)
-  
+
+  // Push notification state
+  const [pushPermission, setPushPermission] = useState<NotificationPermission | "unsupported">("default")
+  const [hasPushSub, setHasPushSub] = useState(false)
+  const [loadingPush, setLoadingPush] = useState(false)
+
+  useEffect(() => {
+    if ("Notification" in window) {
+      setPushPermission(Notification.permission)
+    } else {
+      setPushPermission("unsupported")
+    }
+    checkPushSubscription()
+  }, [profile])
+
+  async function checkPushSubscription() {
+    if (!profile) return
+    const { data } = await supabase
+      .from("PushSubscription")
+      .select("id")
+      .eq("user_id", profile.id)
+      .limit(1)
+    setHasPushSub(!!(data && data.length > 0))
+  }
+
+  async function handleActivatePush() {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      toast.error("Tu dispositivo no soporta notificaciones push")
+      return
+    }
+    setLoadingPush(true)
+    try {
+      const permission = await Notification.requestPermission()
+      setPushPermission(permission)
+      if (permission !== "granted") {
+        toast.error("Permiso de notificaciones denegado. Actívalas desde la configuración de tu dispositivo.")
+        return
+      }
+      const registration = await navigator.serviceWorker.register("/sw.js")
+      await navigator.serviceWorker.ready
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+      })
+      const subJson = subscription.toJSON()
+      if (subJson.endpoint && subJson.keys?.p256dh && subJson.keys?.auth) {
+        const { error } = await supabase.from("PushSubscription").insert({
+          user_id: profile!.id,
+          endpoint: subJson.endpoint,
+          p256dh: subJson.keys.p256dh,
+          auth: subJson.keys.auth
+        })
+        if (error && !error.message.includes("duplicate key")) {
+          throw error
+        }
+      }
+      localStorage.setItem("khora-push-dismissed", "true")
+      setHasPushSub(true)
+      toast.success("🔔 ¡Notificaciones activadas! Recibirás alertas al instante.")
+    } catch (err: any) {
+      toast.error("Error al activar notificaciones: " + err.message)
+    } finally {
+      setLoadingPush(false)
+    }
+  }
+
+  async function handleDeactivatePush() {
+    if (!profile) return
+    setLoadingPush(true)
+    try {
+      await supabase.from("PushSubscription").delete().eq("user_id", profile.id)
+      setHasPushSub(false)
+      toast.success("Notificaciones desactivadas")
+    } catch (err: any) {
+      toast.error("Error: " + err.message)
+    } finally {
+      setLoadingPush(false)
+    }
+  }
+
   const [passForm, setPassForm] = useState({
     newPassword: "",
     confirmPassword: ""
@@ -406,6 +500,71 @@ export default function AjustesPage() {
               )}
             </section>
           )}
+
+          {/* Push Notifications Section */}
+          <section className="bg-white rounded-[40px] border border-neutral-100 p-10 shadow-sm space-y-6">
+            <h3 className="text-xl font-black text-neutral-900 flex items-center gap-3">
+              <Bell className="w-5 h-5 text-violet-500" />
+              Notificaciones Push
+            </h3>
+
+            <div className={`flex items-start gap-4 p-5 rounded-3xl border ${
+              hasPushSub
+                ? "bg-emerald-50 border-emerald-100"
+                : "bg-neutral-50 border-neutral-100"
+            }`}>
+              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 ${
+                hasPushSub ? "bg-emerald-100" : "bg-neutral-100"
+              }`}>
+                {hasPushSub
+                  ? <Bell className="w-5 h-5 text-emerald-600" />
+                  : <BellOff className="w-5 h-5 text-neutral-400" />}
+              </div>
+              <div className="flex-1">
+                <p className={`text-sm font-black ${
+                  hasPushSub ? "text-emerald-700" : "text-neutral-700"
+                }`}>
+                  {hasPushSub ? "Notificaciones activas" : "Notificaciones desactivadas"}
+                </p>
+                <p className="text-xs text-neutral-400 font-medium mt-1 leading-relaxed">
+                  {hasPushSub
+                    ? "Recibirás alertas al instante cuando un alumno agende, cancele o reprograme."
+                    : "Actívalas para recibir alertas al instante en tu pantalla de bloqueo."}
+                </p>
+                {pushPermission === "denied" && (
+                  <p className="text-xs text-red-500 font-bold mt-2">
+                    ⚠️ Bloqueadas en el dispositivo. Ve a Ajustes → Notificaciones → Khora para habilitarlas.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              {!hasPushSub ? (
+                <button
+                  onClick={handleActivatePush}
+                  disabled={loadingPush || pushPermission === "denied" || pushPermission === "unsupported"}
+                  className="flex items-center gap-2 px-6 py-3 bg-violet-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-violet-700 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-violet-200"
+                >
+                  {loadingPush
+                    ? <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                    : <Bell className="w-4 h-4" />}
+                  Activar Alertas
+                </button>
+              ) : (
+                <button
+                  onClick={handleDeactivatePush}
+                  disabled={loadingPush}
+                  className="flex items-center gap-2 px-6 py-3 bg-neutral-100 text-neutral-600 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-red-50 hover:text-red-600 transition-all disabled:opacity-40"
+                >
+                  {loadingPush
+                    ? <div className="w-4 h-4 border-2 border-neutral-300 border-t-neutral-600 rounded-full animate-spin" />
+                    : <BellOff className="w-4 h-4" />}
+                  Desactivar
+                </button>
+              )}
+            </div>
+          </section>
 
           {/* Security Section */}
           <section className="bg-white rounded-[40px] border border-neutral-100 p-10 shadow-sm space-y-8">

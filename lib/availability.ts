@@ -107,7 +107,8 @@ export async function checkTeacherConflict(
   date: string,
   startTime: string,
   endTime: string,
-  excludeClassId?: string
+  excludeClassId?: string,
+  excludeBookingId?: string
 ): Promise<boolean> {
   if (!teacherId || !date || !startTime || !endTime) return false
 
@@ -129,13 +130,19 @@ export async function checkTeacherConflict(
     return false
   }
 
-  // 2. Reservas pendientes
-  const { data: bookings, error: bookingErr } = await supabase
+  // 2. Reservas pendientes (excluir el booking que estamos confirmando)
+  let bookingQuery = supabase
     .from("Booking")
     .select("id, start_time, end_time")
     .eq("teacher_id", teacherId)
     .eq("date", date)
     .eq("status", "PENDING")
+
+  if (excludeBookingId) {
+    bookingQuery = bookingQuery.neq("id", excludeBookingId)
+  }
+
+  const { data: bookings, error: bookingErr } = await bookingQuery
 
   if (bookingErr) {
     console.error("[checkTeacherConflict] Error fetching bookings:", bookingErr)
