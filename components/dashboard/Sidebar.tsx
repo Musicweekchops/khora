@@ -111,6 +111,8 @@ const ACADEMY_NAV = [
 
 const STUDENT_NAV = [
   { name: "Agendar Clase", href: "/dashboard/agendar", icon: Icons.calendar },
+  { name: "Mis Tareas", href: "/dashboard/tareas", icon: Icons.classes },
+  { name: "Biblioteca", href: "/dashboard/biblioteca", icon: Icons.library },
   { name: "Ajustes", href: "/dashboard/ajustes", icon: Icons.settings },
 ]
 

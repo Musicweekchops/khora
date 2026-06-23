@@ -180,8 +180,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (!sessionRef.current || isPublicPath(pathname)) {
             if (fetchedProfile?.is_admin) {
               router.push('/dashboard/admin')
-            } else if (fetchedProfile?.role === 'STUDENT') {
-              router.push('/dashboard/agendar')
             } else {
               router.push('/dashboard')
             }
@@ -237,8 +235,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (user && profile && isPublicPath(pathname)) {
       if (profile.is_admin) {
         router.push('/dashboard/admin')
-      } else if (profile.role === 'STUDENT') {
-        router.push('/dashboard/agendar')
       } else {
         router.push('/dashboard')
       }
