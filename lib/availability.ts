@@ -101,6 +101,8 @@ export function addMinutes(startTime: string, minutes: number): string {
 
 /**
  * Consulta si un profesor tiene conflicto de horario (clases activas o reservas pendientes).
+ * Al confirmar un booking, pasar excludeBookingId para excluir ese booking del check
+ * y también excluir cualquier clase huérfana que ya tenga ese booking_id.
  */
 export async function checkTeacherConflict(
   teacherId: string,
@@ -112,10 +114,11 @@ export async function checkTeacherConflict(
 ): Promise<boolean> {
   if (!teacherId || !date || !startTime || !endTime) return false
 
-  // 1. Clases activas
+  // 1. Clases activas (excluir la clase indicada por ID, y también
+  //    cualquier clase que ya tenga el mismo booking_id que estamos confirmando)
   let classQuery = supabase
     .from("Class")
-    .select("id, start_time, end_time")
+    .select("id, start_time, end_time, booking_id")
     .eq("teacher_id", teacherId)
     .eq("date", date)
     .neq("status", "CANCELLED")
@@ -129,6 +132,11 @@ export async function checkTeacherConflict(
     console.error("[checkTeacherConflict] Error fetching classes:", classErr)
     return false
   }
+
+  // Filtrar clases que corresponden al mismo booking (intentos previos)
+  const filteredClasses = excludeBookingId
+    ? (classes || []).filter((c: any) => c.booking_id !== excludeBookingId)
+    : (classes || [])
 
   // 2. Reservas pendientes (excluir el booking que estamos confirmando)
   let bookingQuery = supabase
@@ -149,7 +157,7 @@ export async function checkTeacherConflict(
     return false
   }
 
-  const occupied = [...(classes || []), ...(bookings || [])]
+  const occupied = [...filteredClasses, ...(bookings || [])]
   return occupied.some(occ => timesOverlap(startTime, endTime, occ.start_time, occ.end_time))
 }
 

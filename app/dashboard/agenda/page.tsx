@@ -266,7 +266,14 @@ export default function AgendaPage() {
 
       if (bookingErr) throw bookingErr
 
-      // PASO 3: Ahora insertar la Class — el trigger ya no verá el Booking en PENDING
+      // PASO 3: Limpiar cualquier Class huérfana de intentos previos
+      // (puede haber quedado una Class con este booking_id si el trigger la bloqueó antes)
+      await supabase
+        .from("Class")
+        .delete()
+        .eq("booking_id", selectedBooking.id)
+
+      // PASO 4: Insertar la Class limpia
       const { data: newClass, error: classErr } = await supabase
         .from("Class")
         .insert({
