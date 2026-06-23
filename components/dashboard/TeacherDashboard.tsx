@@ -217,18 +217,48 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
         </div>
       )}
 
+      {/* URGENT: Pending Bookings Alert */}
+      {!loading && stats && stats.pendingBookings > 0 && (
+        <Link href="/dashboard/agenda">
+          <div className="flex items-center gap-4 p-5 bg-amber-500 text-white rounded-3xl shadow-xl shadow-amber-500/30 hover:bg-amber-600 transition-all cursor-pointer animate-in fade-in duration-300">
+            <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center flex-shrink-0 animate-pulse">
+              <span className="text-2xl">🔔</span>
+            </div>
+            <div className="flex-1">
+              <p className="font-black text-base leading-tight">
+                {stats.pendingBookings === 1
+                  ? "Tienes 1 solicitud de reserva pendiente"
+                  : `Tienes ${stats.pendingBookings} solicitudes de reserva pendientes`}
+              </p>
+              <p className="text-amber-100 text-sm font-medium mt-0.5">
+                Confirma o rechaza para no dejar al alumno esperando → Ver Agenda
+              </p>
+            </div>
+            <span className="text-white/70 text-xl font-black">→</span>
+          </div>
+        </Link>
+      )}
+
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
         {loading
           ? [1, 2, 3, 4].map(i => <div key={i} className="bg-white/50 rounded-2xl border p-4 md:p-6 animate-pulse h-28" />)
           : cards.map(card => (
-              <div key={card.title} className={`bg-gradient-to-br ${card.color} rounded-2xl p-4 md:p-6 border transition-all hover:shadow-md flex flex-col justify-between`}>
-                <div className="mb-2 md:mb-4"><span className="text-2xl">{card.icon}</span></div>
-                <div>
-                  <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest opacity-60 mb-0.5 md:mb-1 truncate">{card.title}</p>
-                  <p className="text-xl md:text-3xl font-black tracking-tight">{card.value}</p>
+              <Link
+                key={card.title}
+                href={card.title === "Reservas Pendientes" ? "/dashboard/agenda" : "#"}
+                className={card.title === "Reservas Pendientes" ? "cursor-pointer" : "cursor-default pointer-events-none"}
+              >
+                <div className={`bg-gradient-to-br ${card.color} rounded-2xl p-4 md:p-6 border transition-all hover:shadow-md flex flex-col justify-between ${
+                  card.title === "Reservas Pendientes" && (stats?.pendingBookings ?? 0) > 0 ? "ring-2 ring-amber-400 ring-offset-1" : ""
+                }`}>
+                  <div className="mb-2 md:mb-4"><span className="text-2xl">{card.icon}</span></div>
+                  <div>
+                    <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest opacity-60 mb-0.5 md:mb-1 truncate">{card.title}</p>
+                    <p className="text-xl md:text-3xl font-black tracking-tight">{card.value}</p>
+                  </div>
                 </div>
-              </div>
+              </Link>
             ))}
       </div>
 

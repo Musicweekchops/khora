@@ -124,6 +124,7 @@ export default function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname()
   const { profile, signOut } = useAuth()
   const [academyBrand, setAcademyBrand] = useState<{ name: string; logo_url: string | null } | null>(null)
+  const [pendingBookings, setPendingBookings] = useState(0)
 
   useEffect(() => {
     const targetAcademyId = profile?.academyId || profile?.academyProfileId
@@ -138,6 +139,23 @@ export default function Sidebar({ user }: SidebarProps) {
         })
     }
   }, [profile])
+
+  // Fetch pending bookings count for teachers
+  useEffect(() => {
+    if (!profile?.teacherProfileId) return
+    const fetchPending = () => {
+      supabase
+        .from("Booking")
+        .select("id", { count: "exact", head: true })
+        .eq("teacher_id", profile.teacherProfileId!)
+        .eq("status", "PENDING")
+        .then(({ count }) => setPendingBookings(count ?? 0))
+    }
+    fetchPending()
+    // Re-check every 60 seconds
+    const interval = setInterval(fetchPending, 60000)
+    return () => clearInterval(interval)
+  }, [profile?.teacherProfileId])
 
   // Determinar navegación según rol y si el profesor pertenece a una academia
   let navItems =
@@ -218,6 +236,8 @@ export default function Sidebar({ user }: SidebarProps) {
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto scrollbar-thin">
           {navItems.map(item => {
             const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname?.startsWith(item.href))
+            const isAgenda = item.href === "/dashboard/agenda" || item.href === "/dashboard/academy/agenda"
+            const showBadge = isAgenda && pendingBookings > 0
             return (
               <Link key={item.name} href={item.href}>
                 <div className={`flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150 ${
@@ -228,7 +248,12 @@ export default function Sidebar({ user }: SidebarProps) {
                   <span className={`transition-colors ${isActive ? "text-neutral-900" : "text-neutral-400"}`}>
                     {item.icon}
                   </span>
-                  <span>{item.name}</span>
+                  <span className="flex-1">{item.name}</span>
+                  {showBadge && (
+                    <span className="min-w-[18px] h-[18px] bg-amber-500 text-white text-[10px] font-black rounded-full flex items-center justify-center px-1 animate-pulse">
+                      {pendingBookings}
+                    </span>
+                  )}
                 </div>
               </Link>
             )
