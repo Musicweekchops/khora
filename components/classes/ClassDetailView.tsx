@@ -906,73 +906,157 @@ export default function ClassDetailView({ classId }: { classId: string }) {
     const friendlyTime = classData.start_time.slice(0, 5)
     const teacherName = classData.teacher_name || profile?.name || "Tu profesor"
 
+    const promises = []
+
     // 1. Enviar Correo al estudiante
     if (classData.student_email) {
-      supabase.functions.invoke("send-email", {
-        body: {
-          to: classData.student_email,
-          type: "STUDENT_CLASS_CANCELLED",
-          params: {
-            studentName: classData.student_name,
-            teacherName: teacherName,
-            date: friendlyDate,
-            time: friendlyTime
+      promises.push(
+        supabase.functions.invoke("send-email", {
+          body: {
+            to: classData.student_email,
+            type: "STUDENT_CLASS_CANCELLED",
+            params: {
+              studentName: classData.student_name,
+              teacherName: teacherName,
+              date: friendlyDate,
+              time: friendlyTime
+            }
           }
-        }
-      }).catch(err => console.error("Error sending class cancellation email to student:", err))
+        }).catch(err => console.error("Error sending class cancellation email to student:", err))
+      )
     }
 
     // 2. Enviar Notificación Push al estudiante
     if (classData.student_user_id) {
-      supabase.functions.invoke("notify-student-push", {
-        body: {
-          type: "CANCELLED",
-          customParams: {
-            studentUserId: classData.student_user_id,
-            teacherName: teacherName,
-            date: friendlyDate,
-            time: friendlyTime,
-            classId: classData.id
+      promises.push(
+        supabase.functions.invoke("notify-student-push", {
+          body: {
+            type: "CANCELLED",
+            customParams: {
+              studentUserId: classData.student_user_id,
+              teacherName: teacherName,
+              date: friendlyDate,
+              time: friendlyTime,
+              classId: classData.id
+            }
           }
-        }
-      }).catch(err => console.error("Error sending push notification to student:", err))
+        }).catch(err => console.error("Error sending push notification to student:", err))
+      )
     } else {
-      supabase.functions.invoke("notify-student-push", {
-        body: {
-          classId: classData.id,
-          type: "CANCELLED"
-        }
-      }).catch(err => console.error("Error sending push notification to student:", err))
+      promises.push(
+        supabase.functions.invoke("notify-student-push", {
+          body: {
+            classId: classData.id,
+            type: "CANCELLED"
+          }
+        }).catch(err => console.error("Error sending push notification to student:", err))
+      )
     }
 
     // 3. Enviar Notificación Push al profesor
     if (classData.teacher_user_id) {
-      supabase.functions.invoke("notify-teacher-push", {
-        body: {
-          type: "CANCELLED",
-          customParams: {
-            teacherUserId: classData.teacher_user_id,
-            studentName: classData.student_name,
-            date: friendlyDate,
-            time: friendlyTime,
-            classId: classData.id
+      promises.push(
+        supabase.functions.invoke("notify-teacher-push", {
+          body: {
+            type: "CANCELLED",
+            customParams: {
+              teacherUserId: classData.teacher_user_id,
+              studentName: classData.student_name,
+              date: friendlyDate,
+              time: friendlyTime,
+              classId: classData.id
+            }
           }
-        }
-      }).catch(err => console.error("Error sending push notification to teacher:", err))
+        }).catch(err => console.error("Error sending push notification to teacher:", err))
+      )
     } else {
-      supabase.functions.invoke("notify-teacher-push", {
-        body: {
-          classId: classData.id,
-          type: "CANCELLED"
-        }
-      }).catch(err => console.error("Error sending push notification to teacher:", err))
+      promises.push(
+        supabase.functions.invoke("notify-teacher-push", {
+          body: {
+            classId: classData.id,
+            type: "CANCELLED"
+          }
+        }).catch(err => console.error("Error sending push notification to teacher:", err))
+      )
     }
+
+    await Promise.all(promises)
+  }
+
+  async function notifyDeletion(classData: ClassData) {
+    if (!classData.student_id) return
+
+    const friendlyDate = new Date(classData.date + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
+    const friendlyTime = classData.start_time.slice(0, 5)
+    const teacherName = classData.teacher_name || profile?.name || "Tu profesor"
+
+    const promises = []
+
+    // 1. Enviar Correo al estudiante
+    if (classData.student_email) {
+      promises.push(
+        supabase.functions.invoke("send-email", {
+          body: {
+            to: classData.student_email,
+            type: "STUDENT_CLASS_DELETED",
+            params: {
+              studentName: classData.student_name,
+              teacherName: teacherName,
+              date: friendlyDate,
+              time: friendlyTime,
+              classId: classData.id,
+              rawDate: classData.date,
+              rawStartTime: classData.start_time,
+              endTime: classData.end_time
+            }
+          }
+        }).catch(err => console.error("Error sending class deletion email to student:", err))
+      )
+    }
+
+    // 2. Enviar Notificación Push al estudiante
+    if (classData.student_user_id) {
+      promises.push(
+        supabase.functions.invoke("notify-student-push", {
+          body: {
+            type: "DELETED",
+            customParams: {
+              studentUserId: classData.student_user_id,
+              teacherName: teacherName,
+              date: friendlyDate,
+              time: friendlyTime,
+              classId: classData.id
+            }
+          }
+        }).catch(err => console.error("Error sending push notification to student:", err))
+      )
+    }
+
+    // 3. Enviar Notificación Push al profesor
+    if (classData.teacher_user_id) {
+      promises.push(
+        supabase.functions.invoke("notify-teacher-push", {
+          body: {
+            type: "CANCELLED",
+            customParams: {
+              teacherUserId: classData.teacher_user_id,
+              studentName: classData.student_name,
+              date: friendlyDate,
+              time: friendlyTime,
+              classId: classData.id
+            }
+          }
+        }).catch(err => console.error("Error sending push notification to teacher:", err))
+      )
+    }
+
+    await Promise.all(promises)
   }
 
   async function deleteClass() {
     if (!confirm("¿Seguro que deseas eliminar esta clase y todas sus notas y tareas?")) return
     if (cls) {
-      await notifyCancellation(cls)
+      await notifyDeletion(cls)
     }
     await supabase.from("Class").delete().eq("id", classId)
     router.push("/dashboard/clases")

@@ -141,6 +141,7 @@ serve(async (req) => {
 
     const isCancelled = type === 'CANCELLED'
     const isRejected = type === 'REJECTED'
+    const isDeleted = type === 'DELETED'
     
     let notificationTitle = "🎸 ¡Clase Confirmada!"
     let notificationBody = `${teacherName} confirmó tu clase del ${formatFriendlyDate(date)} a las ${formattedTime} hs.`
@@ -151,9 +152,12 @@ serve(async (req) => {
     } else if (isRejected) {
       notificationTitle = "✕ Reserva Rechazada"
       notificationBody = `${teacherName} rechazó tu solicitud de reserva del ${formatFriendlyDate(date)} a las ${formattedTime} hs.`
+    } else if (isDeleted) {
+      notificationTitle = "✕ Clase Eliminada"
+      notificationBody = `${teacherName} eliminó tu clase del ${formatFriendlyDate(date)} a las ${formattedTime} hs.`
     }
     
-    const notificationUrl = (isCancelled || isRejected || !finalClassId) 
+    const notificationUrl = (isCancelled || isRejected || isDeleted || !finalClassId) 
       ? "/dashboard" 
       : `/dashboard/clases/detalles?id=${finalClassId}`
 
