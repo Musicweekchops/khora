@@ -59,6 +59,7 @@ export default function ScheduleManager({ studentId, teacherId }: Props) {
   }
 
   async function handleCreate() {
+    if (saving) return
     setSaving(true)
     setMessage("")
 
