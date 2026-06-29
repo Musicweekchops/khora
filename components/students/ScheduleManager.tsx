@@ -27,6 +27,7 @@ export default function ScheduleManager({ studentId, teacherId }: Props) {
   const [saving, setSaving] = useState(false)
   const [generating, setGenerating] = useState<string | null>(null)
   const [message, setMessage] = useState("")
+  const [formError, setFormError] = useState("")
 
   const [form, setForm] = useState({
     day_of_week: 1,
@@ -62,6 +63,24 @@ export default function ScheduleManager({ studentId, teacherId }: Props) {
     if (saving) return
     setSaving(true)
     setMessage("")
+    setFormError("")
+
+    // Verificar duplicado antes de insertar
+    const { data: existing } = await supabase
+      .from("Schedule")
+      .select("id")
+      .eq("student_id", studentId)
+      .eq("teacher_id", teacherId)
+      .eq("day_of_week", form.day_of_week)
+      .eq("start_time", form.start_time)
+      .maybeSingle()
+
+    if (existing) {
+      const dayName = DAY_NAMES[form.day_of_week]
+      setFormError(`Ya existe un horario los ${dayName} a las ${form.start_time}. Eliminá el anterior o elegí otro horario.`)
+      setSaving(false)
+      return
+    }
 
     const { data, error } = await supabase
       .from("Schedule")
@@ -78,7 +97,12 @@ export default function ScheduleManager({ studentId, teacherId }: Props) {
       .maybeSingle()
 
     if (error) {
-      setMessage("Error: " + error.message)
+      if (error.code === "23505") {
+        const dayName = DAY_NAMES[form.day_of_week]
+        setFormError(`Ya existe un horario los ${dayName} a las ${form.start_time}.`)
+      } else {
+        setFormError("Error al crear horario: " + error.message)
+      }
       setSaving(false)
       return
     }
@@ -102,6 +126,7 @@ export default function ScheduleManager({ studentId, teacherId }: Props) {
 
     setShowForm(false)
     setSaving(false)
+    setFormError("")
     setForm({ day_of_week: 1, start_time: "14:00", end_time: "15:00", modalidad: "presencial", start_date: new Date().toISOString().split("T")[0] })
     loadSchedules()
   }
@@ -207,7 +232,7 @@ export default function ScheduleManager({ studentId, teacherId }: Props) {
           Horarios Recurrentes
         </h3>
         {!showForm && (
-          <button onClick={() => setShowForm(true)} className="kh-btn-primary text-xs py-1.5 px-3">
+          <button onClick={() => { setShowForm(true); setFormError("") }} className="kh-btn-primary text-xs py-1.5 px-3">
             + Agregar
           </button>
         )}
@@ -252,8 +277,13 @@ export default function ScheduleManager({ studentId, teacherId }: Props) {
             <label className="kh-label">Fecha de inicio</label>
             <input type="date" value={form.start_date} onChange={e => setForm(p => ({ ...p, start_date: e.target.value }))} className="kh-input" />
           </div>
+          {formError && (
+            <div className="text-xs font-medium p-3 rounded-lg bg-red-50 text-red-700 border border-red-200">
+              ⚠️ {formError}
+            </div>
+          )}
           <div className="flex gap-2 justify-end">
-            <button onClick={() => setShowForm(false)} className="kh-btn-secondary text-xs py-1.5">Cancelar</button>
+            <button onClick={() => { setShowForm(false); setFormError("") }} className="kh-btn-secondary text-xs py-1.5">Cancelar</button>
             <button onClick={handleCreate} disabled={saving} className="kh-btn-primary text-xs py-1.5">
               {saving ? "Creando..." : "Crear y generar clases"}
             </button>
