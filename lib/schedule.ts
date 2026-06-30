@@ -78,7 +78,7 @@ export async function generateClassesForSchedule(
     return !existingDates.has(dStr) && dStr >= startDateStr
   })
 
-  if (toCreate.length === 0) return { created: 0, skipped: dates.length }
+  if (toCreate.length === 0) return { created: 0, skipped: dates.length, conflicts: 0 }
 
   // Filtrar traslapes/conflictos para el profesor (excluyendo este mismo schedule)
   const conflictFreeDates = await filterConflictFreeDates(
@@ -89,7 +89,9 @@ export async function generateClassesForSchedule(
     scheduleId
   )
 
-  if (conflictFreeDates.length === 0) return { created: 0, skipped: dates.length }
+  const conflicts = toCreate.length - conflictFreeDates.length
+
+  if (conflictFreeDates.length === 0) return { created: 0, skipped: dates.length - toCreate.length, conflicts }
 
   const rows = conflictFreeDates.map(dStr => ({
     teacher_id: teacherId,
@@ -110,7 +112,7 @@ export async function generateClassesForSchedule(
     throw new Error(error.message)
   }
 
-  return { created: conflictFreeDates.length, skipped: dates.length - conflictFreeDates.length }
+  return { created: conflictFreeDates.length, skipped: dates.length - toCreate.length, conflicts }
 }
 
 /**

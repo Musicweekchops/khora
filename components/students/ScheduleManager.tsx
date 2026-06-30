@@ -119,9 +119,29 @@ export default function ScheduleManager({ studentId, teacherId }: Props) {
         data.id, teacherId, studentId,
         form.day_of_week, form.start_time, form.end_time, form.modalidad, nextMonth
       )
-      setMessage(`✓ Horario creado. ${r1.created + r2.created} clases generadas a partir del inicio establecido.`)
+
+      const totalCreated = r1.created + r2.created
+      const totalConflicts = (r1.conflicts ?? 0) + (r2.conflicts ?? 0)
+
+      if (totalCreated === 0) {
+        // Rollback: borrar el Schedule para no dejar un fantasma en la DB
+        await supabase.from("Schedule").delete().eq("id", data.id)
+        if (totalConflicts > 0) {
+          setFormError(`No se pudo crear el horario: el profesor tiene conflictos en todas las fechas de ese día y hora. Verificá que no tenga otra clase agendada a las ${form.start_time}.`)
+        } else {
+          setFormError(`No se generaron clases (el profesor puede no tener disponibilidad configurada para ese día/hora). El horario fue descartado.`)
+        }
+        setSaving(false)
+        return
+      }
+
+      setMessage(`✓ Horario creado. ${totalCreated} clases generadas a partir del inicio establecido.`)
     } catch (e: any) {
-      setMessage("Horario creado pero error generando clases: " + e.message)
+      // Rollback: borrar el Schedule para no dejar un fantasma
+      await supabase.from("Schedule").delete().eq("id", data.id)
+      setFormError("Error al generar clases. El horario fue descartado: " + e.message)
+      setSaving(false)
+      return
     }
 
     setShowForm(false)
@@ -142,7 +162,19 @@ export default function ScheduleManager({ studentId, teacherId }: Props) {
         schedule.id, teacherId, studentId,
         schedule.day_of_week, schedule.start_time, schedule.end_time, schedule.modalidad, nextMonth
       )
-      setMessage(`✓ ${r.created} clases generadas para ${nextMonth.toLocaleDateString("es-CL", { month: "long", year: "numeric" })}. ${r.skipped} ya existían.`)
+
+      const monthName = nextMonth.toLocaleDateString("es-CL", { month: "long", year: "numeric" })
+
+      if (r.created === 0 && r.skipped === 0) {
+        setMessage(`No hay fechas para generar en ${monthName}.`)
+      } else if (r.created === 0 && r.conflicts && r.conflicts > 0) {
+        setMessage(`⚠️ No se generaron clases para ${monthName}: hay conflictos de horario con otras clases del profesor en esas fechas.`)
+      } else if (r.created === 0) {
+        setMessage(`✓ Las clases de ${monthName} ya estaban generadas (${r.skipped} existentes).`)
+      } else {
+        const extras = r.skipped > 0 ? ` (${r.skipped} ya existían)` : ""
+        setMessage(`✓ ${r.created} clases generadas para ${monthName}.${extras}`)
+      }
     } catch (e: any) {
       setMessage("Error: " + e.message)
     }
