@@ -89,7 +89,8 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
             password: initialPassword,
             name: form.name.trim(),
             phone: form.phone.trim() || null,
-            teacher_id: profile.teacherProfileId
+            teacher_id: profile.teacherProfileId,
+            skipPush: true
           })
         })
 

@@ -124,6 +124,7 @@ export default function AcademyStudentList({ academyId }: Props) {
           phone: newForm.phone.trim() || null,
           teacher_id: newForm.teacherId,
           academy_id: academyId,
+          skipPush: true
         },
       })
 

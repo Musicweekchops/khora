@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { email, password, name, phone, teacher_id, academy_id } = await req.json()
+    const { email, password, name, phone, teacher_id, academy_id, skipPush } = await req.json()
 
     if (!email || !password || !name || !teacher_id) {
       throw new Error("Missing required fields")
@@ -138,6 +138,58 @@ serve(async (req) => {
       }
     }
     */
+
+    // 5.5 Enviar notificación push al Profesor (si no se solicita omitirla)
+    if (!skipPush && teacherUserId) {
+      try {
+        const { data: subs, error: subsErr } = await supabaseAdmin
+          .from("PushSubscription")
+          .select("*")
+          .eq("user_id", teacherUserId)
+
+        if (subsErr) throw subsErr
+
+        if (subs && subs.length > 0) {
+          const webpush = await import("https://esm.sh/web-push@3.6.7")
+          const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY") || Deno.env.get("VITE_VAPID_PUBLIC_KEY") || "BC3N_V7TcV1Wo-u4IdieY9eJYuHfO-zC3ghLAho4Lj2BsLtQf2lgrQURxmq_I0vNigamO5lRB1C_AG-2jLm1Cm4"
+          const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY") || "HTsnrmAK-XWgfOHMO2u2I_t9rbL-4qmaisaF00mcEdI"
+          webpush.setVapidDetails(
+            "mailto:hola@khora.cl",
+            vapidPublicKey,
+            vapidPrivateKey
+          )
+
+          const payload = JSON.stringify({
+            title: "👤 ¡Nueva Alumna Registrada! 🎉",
+            body: `${name.trim()} se ha registrado en tu academia.`,
+            url: "/dashboard/alumnos"
+          })
+
+          console.log(`[Push Notification] Enviando alerta a ${subs.length} dispositivos del profesor ${teacherUserId}`)
+
+          for (const sub of subs) {
+            try {
+              await webpush.sendNotification({
+                endpoint: sub.endpoint,
+                keys: {
+                  p256dh: sub.p256dh,
+                  auth: sub.auth
+                }
+              }, payload)
+            } catch (pushErr: any) {
+              console.error(`Error sending push to teacher subscription ${sub.id}:`, pushErr)
+              if (pushErr.statusCode === 410 || pushErr.statusCode === 404) {
+                await supabaseAdmin.from("PushSubscription").delete().eq("id", sub.id)
+              }
+            }
+          }
+        } else {
+          console.log("El profesor no tiene suscripciones push activas.")
+        }
+      } catch (pushErr) {
+        console.error("Error al enviar notificación push de bienvenida:", pushErr)
+      }
+    }
 
 
 

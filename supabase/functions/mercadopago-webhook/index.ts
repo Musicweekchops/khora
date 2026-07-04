@@ -170,7 +170,8 @@ serve(async (req) => {
                 password: "student123", // Contraseña temporal
                 name: (payerName || "Alumno").trim(),
                 phone: payerPhone,
-                teacher_id: teacherId
+                teacher_id: teacherId,
+                skipPush: true
               })
             })
             
@@ -440,10 +441,12 @@ serve(async (req) => {
 
           if (subs && subs.length > 0) {
             const webpush = await import("https://esm.sh/web-push@3.6.7")
+            const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY") || Deno.env.get("VITE_VAPID_PUBLIC_KEY") || "BC3N_V7TcV1Wo-u4IdieY9eJYuHfO-zC3ghLAho4Lj2BsLtQf2lgrQURxmq_I0vNigamO5lRB1C_AG-2jLm1Cm4"
+            const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY") || "HTsnrmAK-XWgfOHMO2u2I_t9rbL-4qmaisaF00mcEdI"
             webpush.setVapidDetails(
               "mailto:hola@khora.cl",
-              "BC3N_V7TcV1Wo-u4IdieY9eJYuHfO-zC3ghLAho4Lj2BsLtQf2lgrQURxmq_I0vNigamO5lRB1C_AG-2jLm1Cm4",
-              "HTsnrmAK-XWgfOHMO2u2I_t9rbL-4qmaisaF00mcEdI"
+              vapidPublicKey,
+              vapidPrivateKey
             )
 
             let pushTitle = "💰 ¡Pago Recibido Exitosamente!"
