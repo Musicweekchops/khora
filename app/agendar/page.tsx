@@ -14,6 +14,7 @@ import {
   UserCheck, 
   AlertTriangle, 
   ChevronRight, 
+  ChevronLeft,
   ArrowLeft,
   Video,
   MapPin,
@@ -41,7 +42,7 @@ interface Teacher {
   user_id: string
   slug: string
   instrumento: string | null
-  User: { name: string; email?: string }
+  User: { name: string; email?: string; phone?: string }
 }
 
 interface Academy {
@@ -126,6 +127,22 @@ function PublicBookingPage() {
   // Alternative recommendations
   const [alternativeDateMsg, setAlternativeDateMsg] = useState<string | null>(null)
   const [alternativeDateStr, setAlternativeDateStr] = useState<string | null>(null)
+
+  const currentStepNum = useMemo(() => {
+    if (success) return 4
+    if (flowType === null) return 1
+    if (flowType === "nuevo") {
+      if (newClassCategory === null) return 2
+      if (!selectedClass) return 3
+      return 4
+    }
+    if (flowType === "regular") {
+      if (!profile) return 1 // regular student needs login first
+      if (regularAction === null) return 2
+      return 3
+    }
+    return 1
+  }, [flowType, newClassCategory, selectedClass, regularAction, success, profile])
 
   // Preferred Day Helper Maps
   const dayMap: Record<string, number> = {
@@ -246,14 +263,22 @@ function PublicBookingPage() {
     }
   }, [profile, regularAction])
 
-  // Fetch weekly slots summary when teacher/class are set
-  async function loadWeeklyAvailability(teacherId: string, duration: number) {
+  const [calendarStartOffset, setCalendarStartOffset] = useState(0)
+
+  // Reset offset when changing selected teacher or class
+  useEffect(() => {
+    setCalendarStartOffset(0)
+  }, [selectedTeacher, selectedClass])
+
+  // Fetch weekly slots summary when teacher/class are set or offset changes
+  async function loadWeeklyAvailability(teacherId: string, duration: number, offset: number) {
     setLoadingWeekly(true)
     const availabilityMap: Record<string, number> = {}
-    const today = new Date()
+    const baseDate = new Date()
+    baseDate.setDate(baseDate.getDate() + offset)
     const promises = Array.from({ length: 7 }).map(async (_, idx) => {
-      const d = new Date()
-      d.setDate(today.getDate() + idx)
+      const d = new Date(baseDate)
+      d.setDate(baseDate.getDate() + idx)
       const dateStr = d.toLocaleDateString("sv-SE")
       try {
         const slots = await getAvailableSlots(dateStr, teacherId, duration)
@@ -271,9 +296,9 @@ function PublicBookingPage() {
     const teacherId = selectedTeacher?.id
     const duration = selectedClass?.duration || classToReschedule?.ClassType?.duration
     if (teacherId && duration) {
-      loadWeeklyAvailability(teacherId, duration)
+      loadWeeklyAvailability(teacherId, duration, calendarStartOffset)
     }
-  }, [selectedTeacher, selectedClass, classToReschedule])
+  }, [selectedTeacher, selectedClass, classToReschedule, calendarStartOffset])
 
   async function loadStudentLimits() {
     if (!profile?.studentProfileId) return
@@ -1003,7 +1028,7 @@ function PublicBookingPage() {
       }
 
       // Insert booking request
-      const { error: insertErr } = await supabase.from("Booking").insert({
+      const { data: newBooking, error: insertErr } = await supabase.from("Booking").insert({
         teacher_id: selectedTeacher.id,
         academy_id: academy?.id || null,
         class_type_id: selectedClass.id,
@@ -1016,7 +1041,7 @@ function PublicBookingPage() {
         end_time: endTime,
         total_price: selectedClass.price,
         status: "PENDING",
-      })
+      }).select("id").single()
 
       if (insertErr) throw insertErr
 
@@ -1069,8 +1094,9 @@ function PublicBookingPage() {
             customParams: {
               teacherUserId: selectedTeacher.user_id,
               studentName: formData.name,
-              date: friendlyDate,
-              time: friendlyTime
+              date: formData.date, // Send raw date: YYYY-MM-DD
+              time: friendlyTime,
+              classId: newBooking?.id
             }
           }
         }).catch(err => console.error("Error sending push notification to teacher:", err))
@@ -1158,6 +1184,33 @@ function PublicBookingPage() {
             </>
           )}
         </div>
+
+        {/* Stepper Progress Indicator */}
+        {!success && (
+          <div className="max-w-md mx-auto animate-in fade-in duration-300">
+            <div className="flex items-center justify-between text-[10px] font-black text-neutral-450 uppercase tracking-widest mb-2.5 px-1">
+              <span>Paso {currentStepNum} de 4</span>
+              <span className="text-violet-600 font-black">
+                {currentStepNum === 1 && "Identificación"}
+                {currentStepNum === 2 && "Selección de flujo"}
+                {currentStepNum === 3 && "Elegir servicio"}
+                {currentStepNum === 4 && "Fecha y Hora"}
+              </span>
+            </div>
+            <div className="h-1.5 w-full bg-neutral-200/50 rounded-full overflow-hidden flex gap-1 p-0.5 border border-neutral-200/20">
+              {[1, 2, 3, 4].map(s => (
+                <div 
+                  key={s} 
+                  className={`h-full flex-1 rounded-full transition-all duration-500 ${
+                    s <= currentStepNum 
+                      ? "bg-gradient-to-r from-violet-500 to-violet-600 shadow-[0_1px_3px_rgba(139,92,246,0.3)]" 
+                      : "bg-neutral-205/60"
+                  }`} 
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Global Error Banner */}
         <AnimatePresence>
@@ -1575,6 +1628,8 @@ function PublicBookingPage() {
                                 loadingWeekly={loadingWeekly} 
                                 selectedDate={rescheduleDate}
                                 onSelectDate={setRescheduleDate}
+                                calendarStartOffset={calendarStartOffset}
+                                setCalendarStartOffset={setCalendarStartOffset}
                               />
 
                               {/* Date select field */}
@@ -1888,6 +1943,8 @@ function PublicBookingPage() {
                               loadingWeekly={loadingWeekly} 
                               selectedDate={formData.date}
                               onSelectDate={d => setFormData(p => ({ ...p, date: d }))}
+                              calendarStartOffset={calendarStartOffset}
+                              setCalendarStartOffset={setCalendarStartOffset}
                             />
 
                             {/* Date select field */}
@@ -2104,27 +2161,24 @@ function WeeklyAvailabilityView({
   weeklyAvailability,
   loadingWeekly,
   selectedDate,
-  onSelectDate
+  onSelectDate,
+  calendarStartOffset,
+  setCalendarStartOffset
 }: {
   weeklyAvailability: Record<string, number>
   loadingWeekly: boolean
   selectedDate: string
   onSelectDate: (date: string) => void
+  calendarStartOffset: number
+  setCalendarStartOffset: React.Dispatch<React.SetStateAction<number>>
 }) {
-  if (loadingWeekly) {
-    return (
-      <div className="flex gap-2 justify-center py-4">
-        {Array.from({ length: 7 }).map((_, idx) => (
-          <div key={idx} className="w-12 h-14 bg-neutral-200 rounded-xl animate-pulse" />
-        ))}
-      </div>
-    )
-  }
-
   const today = new Date()
+  const baseDate = new Date()
+  baseDate.setDate(today.getDate() + calendarStartOffset)
+
   const days = Array.from({ length: 7 }).map((_, idx) => {
-    const d = new Date()
-    d.setDate(today.getDate() + idx)
+    const d = new Date(baseDate)
+    d.setDate(baseDate.getDate() + idx)
     const dateStr = d.toLocaleDateString("sv-SE")
     return {
       dateStr,
@@ -2134,48 +2188,83 @@ function WeeklyAvailabilityView({
     }
   })
 
+  // Format month name for the current view
+  const monthName = baseDate.toLocaleDateString("es-CL", { month: "long", year: "numeric" })
+  const capitalizedMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1)
+
   return (
-    <div className="space-y-2">
-      <label className="kh-label block text-[10px] text-neutral-400 uppercase tracking-widest pl-1">
-        Disponibilidad de la Semana
-      </label>
-      <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
-        {days.map(d => {
-          const isSelected = selectedDate === d.dateStr
-          const hasSlots = d.slotsCount > 0
-          return (
-            <button
-              key={d.dateStr}
-              type="button"
-              onClick={() => {
-                if (hasSlots) {
-                  onSelectDate(d.dateStr)
-                }
-              }}
-              disabled={!hasSlots}
-              className={`p-1.5 sm:p-2 rounded-xl flex flex-col items-center justify-center border transition-all ${
-                isSelected
-                  ? "bg-violet-600 text-white border-violet-500 shadow-md shadow-violet-950/40"
-                  : hasSlots
-                  ? "bg-white hover:bg-neutral-50 text-neutral-900 border-neutral-200 hover:border-neutral-300"
-                  : "bg-neutral-100/50 text-neutral-400 border-neutral-200/50 cursor-not-allowed opacity-50"
-              }`}
-            >
-              <span className="text-[8px] font-black uppercase tracking-wider leading-none mb-1">{d.label}</span>
-              <span className="text-sm font-black leading-none">{d.num}</span>
-              <span className={`text-[7px] font-bold mt-1 px-1 rounded-sm ${
-                isSelected 
-                  ? "bg-violet-500 text-white" 
-                  : hasSlots 
-                  ? "bg-violet-50 text-violet-600" 
-                  : "bg-neutral-100 text-neutral-400"
-              }`}>
-                {hasSlots ? `${d.slotsCount}h` : "Full"}
-              </span>
-            </button>
-          )
-        })}
+    <div className="space-y-3 bg-neutral-50/50 border border-neutral-200/50 rounded-2xl p-4">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-black text-neutral-450 uppercase tracking-widest pl-1">
+          📅 {capitalizedMonth}
+        </span>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            disabled={calendarStartOffset <= 0 || loadingWeekly}
+            onClick={() => setCalendarStartOffset(prev => Math.max(0, prev - 7))}
+            className="p-1.5 text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 disabled:opacity-40 disabled:hover:bg-transparent rounded-lg transition-all"
+            title="Semana anterior"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            disabled={loadingWeekly}
+            onClick={() => setCalendarStartOffset(prev => prev + 7)}
+            className="p-1.5 text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 disabled:opacity-40 rounded-lg transition-all"
+            title="Siguiente semana"
+          >
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
+      
+      {loadingWeekly ? (
+        <div className="flex gap-2 justify-center py-4">
+          {Array.from({ length: 7 }).map((_, idx) => (
+            <div key={idx} className="w-10 h-14 bg-neutral-250/60 rounded-xl animate-pulse" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+          {days.map(d => {
+            const isSelected = selectedDate === d.dateStr
+            const hasSlots = d.slotsCount > 0
+            return (
+              <button
+                key={d.dateStr}
+                type="button"
+                onClick={() => {
+                  if (hasSlots) {
+                    onSelectDate(d.dateStr)
+                  }
+                }}
+                disabled={!hasSlots}
+                className={`p-1.5 sm:p-2 rounded-xl flex flex-col items-center justify-center border transition-all ${
+                  isSelected
+                    ? "bg-violet-600 text-white border-violet-500 shadow-md shadow-violet-950/40 animate-in zoom-in-95 duration-150"
+                    : hasSlots
+                    ? "bg-white hover:bg-neutral-50 text-neutral-900 border-neutral-200 hover:border-neutral-300 shadow-sm"
+                    : "bg-neutral-100/50 text-neutral-400 border-neutral-200/50 cursor-not-allowed opacity-50"
+                }`}
+              >
+                <span className="text-[8px] font-black uppercase tracking-wider leading-none mb-1">{d.label}</span>
+                <span className="text-sm font-black leading-none">{d.num}</span>
+                <span className={`text-[7px] font-bold mt-1 px-1 rounded-sm ${
+                  isSelected 
+                    ? "bg-violet-500 text-white" 
+                    : hasSlots 
+                    ? "bg-violet-50 text-violet-650 font-bold" 
+                    : "bg-neutral-150 text-neutral-400"
+                }`}>
+                  {hasSlots ? `${d.slotsCount}h` : "Full"}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

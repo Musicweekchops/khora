@@ -79,8 +79,11 @@ export async function getAvailableSlots(date: string, teacherId: string, duratio
 
       // Avanzar al siguiente slot (por ahora avanzamos de a 30 min para dar flexibilidad, 
       // o podríamos avanzar por la duración de la clase si quisiéramos slots continuos)
-      current = addMinutes(slotStart, 30) 
-      if (current >= end) break
+      const nextCurrent = addMinutes(slotStart, 30) 
+      if (nextCurrent <= slotStart || nextCurrent >= end) {
+        break
+      }
+      current = nextCurrent
     }
   }
 

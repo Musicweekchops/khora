@@ -104,14 +104,39 @@ export default function AgendaPage() {
     return days
   }, [currentMonthDate])
 
+  const [hasAutoOpened, setHasAutoOpened] = useState(false)
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search)
       if (params.get("setup") === "true") {
         setShowAvailModal(true)
       }
+      const dateParam = params.get("date")
+      if (dateParam) {
+        const parsedDate = new Date(dateParam + "T12:00:00")
+        if (!isNaN(parsedDate.getTime())) {
+          setWeekStart(getMonday(parsedDate))
+          setMobileSelectedDate(parsedDate)
+          setCurrentMonthDate(parsedDate)
+        }
+      }
     }
   }, [])
+
+  useEffect(() => {
+    if (classes.length > 0 && !hasAutoOpened && typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search)
+      const bookingId = params.get("bookingId")
+      if (bookingId) {
+        const found = classes.find(c => c.id === bookingId && c.is_booking)
+        if (found) {
+          handleBookingClick(found)
+          setHasAutoOpened(true)
+        }
+      }
+    }
+  }, [classes, hasAutoOpened])
 
   useEffect(() => {
     console.log("[Agenda] Profile state:", {
@@ -227,9 +252,16 @@ export default function AgendaPage() {
 
   function handleBookingClick(cls: any) {
     setBookingError(null)
-    const matched = students.find(s => s.email.toLowerCase() === cls.booking_email.toLowerCase())
+    const normalizedBookingEmail = (cls.booking_email || "").trim().toLowerCase()
+    const normalizedBookingName = (cls.student_name || "").replace("SOLICITUD: ", "").trim().toLowerCase()
+
+    const matched = students.find(s => 
+      (s.email && s.email.trim().toLowerCase() === normalizedBookingEmail) || 
+      (s.name && s.name.trim().toLowerCase() === normalizedBookingName)
+    )
+
     setBookingStudentId(matched ? matched.id : "")
-    setBookingModalidad("online")
+    setBookingModalidad(cls.booking_message?.toLowerCase()?.includes("presencial") ? "presencial" : "online")
     setSelectedBooking(cls)
     setShowBookingModal(true)
   }
@@ -285,7 +317,7 @@ export default function AgendaPage() {
           start_time: selectedBooking.start_time,
           end_time: selectedBooking.end_time,
           modalidad: bookingModalidad,
-          status: "CONFIRMED",
+          status: "SCHEDULED",
         })
         .select()
         .single()
@@ -1141,102 +1173,160 @@ export default function AgendaPage() {
         >
           <div
             onClick={e => e.stopPropagation()}
-            className="bg-white w-full md:max-w-md rounded-t-[40px] md:rounded-[32px] p-6 md:p-8 shadow-2xl flex flex-col max-h-[90vh] md:max-h-[95vh] overflow-y-auto animate-in slide-in-from-bottom md:slide-in-from-bottom-0 duration-300"
+            className="bg-white w-full md:max-w-md rounded-t-[40px] md:rounded-[32px] p-6 md:p-8 shadow-2xl flex flex-col max-h-[90vh] md:max-h-[95vh] overflow-y-auto animate-in slide-in-from-bottom md:slide-in-from-bottom-0 duration-300 border border-neutral-100"
           >
             <div className="w-12 h-1.5 bg-neutral-200 rounded-full mx-auto mb-4 md:hidden flex-shrink-0" />
 
-            <div className="flex items-center justify-between mb-5 flex-shrink-0">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6 flex-shrink-0">
               <div>
-                <h3 className="text-xl md:text-2xl font-black text-neutral-900 tracking-tight">Solicitud de Reserva</h3>
-                <p className="text-xs text-neutral-400 font-medium mt-0.5">Revisa y responde a la solicitud de clase</p>
+                <span className="text-[9px] font-black bg-amber-50 text-amber-700 border border-amber-200/60 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  Reserva Pendiente
+                </span>
+                <h3 className="text-xl md:text-2xl font-black text-neutral-900 tracking-tight mt-1.5">Aprobación de Clase</h3>
               </div>
               <button
                 onClick={() => setShowBookingModal(false)}
-                className="w-9 h-9 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-500 hover:text-neutral-900 transition-colors"
+                className="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-500 hover:text-neutral-900 transition-colors font-bold text-xs"
               >
                 ✕
               </button>
             </div>
 
-            <div className="space-y-4">
-              {/* Event details */}
-              <div className="bg-neutral-50 border border-neutral-200/60 rounded-2xl p-4 space-y-2.5">
-                <div className="flex justify-between text-xs">
-                  <span className="text-neutral-400 font-bold">Fecha:</span>
-                  <span className="text-neutral-800 font-black">{new Date(selectedBooking.date + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-neutral-400 font-bold">Horario:</span>
-                  <span className="text-neutral-800 font-black">{formatTime(selectedBooking.start_time)} - {formatTime(selectedBooking.end_time)} hs</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-neutral-400 font-bold">Servicio:</span>
-                  <span className="text-neutral-800 font-black">{selectedBooking.class_type_name}</span>
+            <div className="space-y-5">
+              {/* PASO 1: Datos de la Solicitud */}
+              <div className="space-y-2">
+                <span className="text-[9px] font-black text-neutral-400 uppercase tracking-widest pl-1">
+                  1. Detalles de la Solicitud
+                </span>
+                <div className="bg-neutral-50 border border-neutral-200/50 rounded-2xl p-4 space-y-3">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-neutral-400 font-bold">Fecha Solicitada</span>
+                    <span className="text-neutral-900 font-black capitalize">
+                      {new Date(selectedBooking.date + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-neutral-400 font-bold">Horario</span>
+                    <span className="text-neutral-900 font-black">
+                      {formatTime(selectedBooking.start_time)} - {formatTime(selectedBooking.end_time)} hs
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-neutral-400 font-bold">Servicio</span>
+                    <span className="text-neutral-950 font-black bg-neutral-200/50 px-2 py-0.5 rounded-md text-[10px]">
+                      {selectedBooking.class_type_name}
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              {/* Student info */}
-              <div className="space-y-2">
-                <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-widest ml-1">Datos de Contacto</label>
-                <div className="bg-neutral-50 border border-neutral-200/60 rounded-2xl p-4 space-y-1.5">
-                  <p className="text-sm font-black text-neutral-900">{selectedBooking.student_name.replace("SOLICITUD: ", "")}</p>
-                  <p className="text-xs text-neutral-500 font-medium">{selectedBooking.booking_email} {selectedBooking.booking_phone ? `· ${selectedBooking.booking_phone}` : ""}</p>
+              {/* PASO 2: Datos de Contacto y Match */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[9px] font-black text-neutral-400 uppercase tracking-widest pl-1">
+                    2. Alumno Solicitante
+                  </span>
+                  {bookingStudentId ? (
+                    <span className="text-[8px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-250/50 px-2 py-0.5 rounded-md animate-in fade-in duration-300">
+                      🟢 Alumno Existente
+                    </span>
+                  ) : (
+                    <span className="text-[8px] font-bold bg-amber-50 text-amber-700 border border-amber-250/50 px-2 py-0.5 rounded-md animate-in fade-in duration-300">
+                      🟡 Alumno No Registrado
+                    </span>
+                  )}
+                </div>
 
+                <div className="bg-neutral-50 border border-neutral-200/50 rounded-2xl p-4 space-y-2">
+                  <p className="text-sm font-black text-neutral-900">
+                    {selectedBooking.student_name.replace("SOLICITUD: ", "")}
+                  </p>
+                  <p className="text-xs text-neutral-500 font-medium">
+                    📧 {selectedBooking.booking_email}
+                  </p>
+                  {selectedBooking.booking_phone && (
+                    <p className="text-xs text-neutral-500 font-medium">
+                      📞 {selectedBooking.booking_phone}
+                    </p>
+                  )}
                   {selectedBooking.booking_message && (
-                    <div className="mt-3 p-3 bg-neutral-100/50 rounded-xl border-l-4 border-violet-400 italic text-xs text-neutral-600 font-medium">
+                    <div className="mt-2.5 p-3 bg-white rounded-xl border border-neutral-200/60 border-l-4 border-l-violet-400 italic text-[11px] text-neutral-600 font-medium leading-relaxed">
                       "{selectedBooking.booking_message}"
                     </div>
                   )}
                 </div>
+
+                {/* Match dropdown */}
+                <div className="space-y-1.5">
+                  <label className="block text-[9px] font-black text-neutral-400 uppercase tracking-widest pl-1">
+                    Asociar con Alumno en mi Lista
+                  </label>
+                  <select
+                    value={bookingStudentId}
+                    onChange={e => setBookingStudentId(e.target.value)}
+                    className="w-full px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl outline-none focus:border-violet-400 text-sm font-bold text-neutral-700 appearance-none bg-no-repeat bg-[right_1rem_center] transition-all cursor-pointer"
+                    style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundSize: '1.25rem' }}
+                  >
+                    <option value="">Clase puntual (No asociar a un perfil)</option>
+                    {students.map(s => <option key={s.id} value={s.id}>{s.name} ({s.email})</option>)}
+                  </select>
+                  {!bookingStudentId && (
+                    <p className="text-[10px] text-neutral-450 italic pl-1 leading-normal">
+                      Si este alumno no coincide con tu lista, puedes dejarlo como "Clase puntual". Se creará el registro de clase sin enlazarlo a un perfil recurrente.
+                    </p>
+                  )}
+                </div>
               </div>
 
-              {/* Match Select Dropdown */}
-              <div>
-                <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-2 ml-1">Alumno Asociado</label>
-                <select
-                  value={bookingStudentId}
-                  onChange={e => setBookingStudentId(e.target.value)}
-                  className="w-full px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl outline-none focus:border-violet-400 text-sm font-bold text-neutral-700 appearance-none bg-no-repeat bg-[right_1rem_center]"
-                  style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundSize: '1.25rem' }}
-                >
-                  <option value="">Sin asignar (clase puntual)</option>
-                  {students.map(s => <option key={s.id} value={s.id}>{s.name} ({s.email})</option>)}
-                </select>
+              {/* PASO 3: Configurar Modalidad */}
+              <div className="space-y-2">
+                <span className="text-[9px] font-black text-neutral-400 uppercase tracking-widest pl-1">
+                  3. Configurar Modalidad
+                </span>
+                <div className="grid grid-cols-2 gap-2 p-1 bg-neutral-100/80 border border-neutral-200/30 rounded-2xl">
+                  {(["online", "presencial"] as const).map(m => (
+                    <button key={m} type="button" onClick={() => setBookingModalidad(m)}
+                      className={`py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${bookingModalidad === m ? "bg-white text-violet-650 shadow-sm border border-neutral-200/10" : "text-neutral-400 hover:text-neutral-700"}`}>
+                      {m === "online" ? "📹 Virtual" : "🏠 Presencial"}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              {/* Modality selector */}
-              <div className="grid grid-cols-2 gap-2 p-1.5 bg-neutral-100 rounded-2xl">
-                {(["online", "presencial"] as const).map(m => (
-                  <button key={m} type="button" onClick={() => setBookingModalidad(m)}
-                    className={`py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${bookingModalidad === m ? "bg-white text-violet-600 shadow-sm" : "text-neutral-400"}`}>
-                    {m === "online" ? "📹 Virtual" : "🏠 Presencial"}
-                  </button>
-                ))}
-              </div>
-
-              {/* Error dentro del modal (visible siempre, no se oculta detrás) */}
+              {/* Error box */}
               {bookingError && (
-                <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-2xl">
-                  <span className="text-red-500 text-base flex-shrink-0">⚠️</span>
-                  <p className="text-sm font-bold text-red-700 leading-snug">{bookingError}</p>
+                <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-2xl animate-in shake duration-300">
+                  <span className="text-red-500 text-sm flex-shrink-0 mt-0.5">⚠️</span>
+                  <div>
+                    <h4 className="text-xs font-black text-red-800 uppercase tracking-wider">Conflicto en Agenda</h4>
+                    <p className="text-xs font-bold text-red-750 leading-relaxed mt-0.5">{bookingError}</p>
+                  </div>
                 </div>
               )}
 
               {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row gap-2.5 pt-3">
+              <div className="flex flex-col sm:flex-row gap-2.5 pt-2 border-t border-neutral-100 flex-shrink-0">
                 <button
                   onClick={handleRejectBooking}
                   disabled={processingBooking}
-                  className="flex-1 py-3.5 border border-red-200 text-red-500 hover:bg-red-50 rounded-full text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50"
+                  className="flex-1 py-3.5 border border-red-200 hover:bg-red-55 rounded-2xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50 text-red-500"
                 >
                   Rechazar Solicitud
                 </button>
                 <button
                   onClick={handleAcceptBooking}
                   disabled={processingBooking}
-                  className="flex-1 py-3.5 bg-neutral-900 hover:bg-emerald-600 text-white rounded-full text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50 shadow-md shadow-neutral-900/10"
+                  className="flex-1 py-3.5 bg-neutral-900 hover:bg-violet-650 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50 shadow-md shadow-neutral-950/10 flex items-center justify-center gap-1.5"
                 >
-                  {processingBooking ? "Procesando..." : "Confirmar Reserva"}
+                  {processingBooking ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                      <span>Confirmando...</span>
+                    </>
+                  ) : (
+                    <span>Confirmar Clase</span>
+                  )}
                 </button>
               </div>
             </div>

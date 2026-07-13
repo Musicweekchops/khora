@@ -165,7 +165,9 @@ serve(async (req) => {
     } else if (type === "BOOKING_CREATED") {
       payloadTitle = "🔔 Nueva Solicitud de Reserva"
       payloadBody = `${studentName} ha solicitado reservar una clase el ${formatFriendlyDate(date)} a las ${formattedTime} hs.`
-      payloadUrl = "/dashboard/agenda"
+      payloadUrl = finalClassId 
+        ? `/dashboard/agenda?date=${date}&bookingId=${finalClassId}` 
+        : `/dashboard/agenda?date=${date}`
     }
 
     const payload = JSON.stringify({

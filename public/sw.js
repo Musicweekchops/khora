@@ -29,16 +29,24 @@ self.addEventListener('notificationclick', function(event) {
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
-      // Intentar enfocar una pestaña existente con la misma URL
+      const absoluteTargetUrl = new URL(targetUrl, self.location.origin).href;
+
+      // Buscar si el usuario ya tiene abierta alguna pestaña de nuestra app (mismo origen/dominio)
       for (let i = 0; i < clientList.length; i++) {
         const client = clientList[i];
-        if (client.url.includes(targetUrl) && 'focus' in client) {
+        const clientUrl = new URL(client.url);
+        
+        if (clientUrl.origin === self.location.origin && 'focus' in client) {
+          if ('navigate' in client) {
+            return client.navigate(absoluteTargetUrl).then(c => c ? c.focus() : null);
+          }
           return client.focus();
         }
       }
-      // O abrir una nueva ventana
+
+      // Si no hay pestañas abiertas del sitio, abrir una nueva
       if (clients.openWindow) {
-        return clients.openWindow(targetUrl);
+        return clients.openWindow(absoluteTargetUrl);
       }
     })
   );

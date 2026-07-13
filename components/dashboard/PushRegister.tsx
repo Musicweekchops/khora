@@ -30,12 +30,14 @@ export default function PushRegister() {
     const dismissed = localStorage.getItem("khora-push-dismissed")
     if (dismissed === "true") return
 
-    // 1. Detectar si el usuario está corriendo la app en "Pantalla de Inicio" (modo standalone)
+    // 1. Detectar si es iOS y si está corriendo en modo standalone (instalado como PWA)
+    const isIOS = typeof navigator !== "undefined" && /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream
     const isStandalone = window.matchMedia("(display-mode: standalone)").matches || 
                          (window.navigator as any).standalone === true
 
-    // Solo mostramos el banner de invitación en teléfonos agregados a la pantalla de inicio (PWA)
-    if (!isStandalone) return
+    // En iOS, el OS exige instalar la PWA para poder usar Web Push. 
+    // En computadoras de escritorio y Android, se puede usar directamente en el navegador.
+    if (isIOS && !isStandalone) return
 
     // 2. Verificar permisos actuales de notificación
     if ("Notification" in window) {

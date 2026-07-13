@@ -233,7 +233,7 @@ serve(async (req) => {
             console.error("[Webhook] Error al insertar booking:", bookingInsertErr)
           }
 
-          // 3. Crear la sesión de clase física real directamente confirmada en la agenda (Class table)
+          // 3. Crear la sesión de clase física real en la agenda (Class table) en estado SCHEDULED
           if (targetStudentId && newBooking) {
             console.log(`[Webhook] Insertando clase física en la agenda para la reserva aprobada: ${selectedDate} a las ${selectedSlot}`)
             const { error: classInsertErr } = await supabaseAdmin
@@ -247,7 +247,7 @@ serve(async (req) => {
                 end_time: endTimeStr,
                 duration: 60,
                 modalidad: modalidad,
-                status: "CONFIRMED",
+                status: "SCHEDULED",
                 is_recurring: false
               })
 
