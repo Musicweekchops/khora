@@ -66,7 +66,7 @@ function generateIcs(params: any): string {
   const dtEnd = formatIcsDateTime(targetDate, cleanEndTime)
   const dtStamp = new Date().toISOString().replace(/[-:]/g, "").split(".")[0] + "Z"
 
-  const isCancelled = status === "CANCELLED" || status === "STUDENT_CLASS_CANCELLED" || status === "STUDENT_CLASS_DELETED"
+  const isCancelled = status === "CANCELLED" || status === "STUDENT_CLASS_CANCELLED" || status === "STUDENT_CLASS_DELETED" || status === "TEACHER_CLASS_CANCELLED"
   let eventStatus = "CONFIRMED"
   if (isCancelled) {
     eventStatus = "CANCELLED"
@@ -148,6 +148,7 @@ serve(async (req) => {
       STUDENT_CLASS_RESCHEDULED: "🔄 Tu clase de música ha sido reprogramada",
       STUDENT_BOOKING_REQUEST: "Solicitud de reserva recibida ⏳",
       STUDENT_CLASS_DELETED: "Tu clase de música ha sido eliminada",
+      TEACHER_CLASS_CANCELLED: "✕ Clase cancelada por tu alumno",
     }
 
     const finalSubject = subject || defaultSubjects[type as EmailType] || "Notificación de Khora"
@@ -161,7 +162,7 @@ serve(async (req) => {
     }
 
     // Si params tiene información de la clase, generar y adjuntar el archivo .ics
-    const isClassNotification = ['STUDENT_CLASS_CONFIRMED', 'TEACHER_CLASS_RESCHEDULED', 'STUDENT_CLASS_CANCELLED', 'STUDENT_CLASS_RESCHEDULED', 'CLASS_CONFIRMATION', 'STUDENT_BOOKING_REQUEST', 'STUDENT_CLASS_DELETED'].includes(type)
+    const isClassNotification = ['STUDENT_CLASS_CONFIRMED', 'TEACHER_CLASS_RESCHEDULED', 'STUDENT_CLASS_CANCELLED', 'STUDENT_CLASS_RESCHEDULED', 'CLASS_CONFIRMATION', 'STUDENT_BOOKING_REQUEST', 'STUDENT_CLASS_DELETED', 'TEACHER_CLASS_CANCELLED'].includes(type)
     const hasDateAndTime = (params.date || params.rawDate) && (params.time || params.rawStartTime || params.startTime)
 
     if (isClassNotification || hasDateAndTime) {
@@ -191,7 +192,7 @@ serve(async (req) => {
         resendBody.attachments = [
           {
             content: icsBase64,
-            filename: `clase-khora${type === 'STUDENT_CLASS_CANCELLED' || type === 'STUDENT_CLASS_DELETED' ? '-cancelada' : ''}.ics`,
+            filename: `clase-khora${type === 'STUDENT_CLASS_CANCELLED' || type === 'TEACHER_CLASS_CANCELLED' || type === 'STUDENT_CLASS_DELETED' ? '-cancelada' : ''}.ics`,
             content_type: "text/calendar",
           }
         ]

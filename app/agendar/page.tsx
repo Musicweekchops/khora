@@ -731,6 +731,27 @@ function PublicBookingPage() {
         }).catch(err => console.error("Error sending cancellation email:", err))
       }
 
+      // Send cancel email to teacher
+      if (tEmail) {
+        supabase.functions.invoke("send-email", {
+          body: {
+            to: tEmail,
+            type: "TEACHER_CLASS_CANCELLED",
+            params: {
+              studentName: profile?.name || "Un alumno",
+              teacherName: teacherName,
+              date: friendlyDate,
+              time: friendlyTime,
+              status: newStatus,
+              classId: classObj.id,
+              rawDate: classObj.date,
+              rawStartTime: classObj.start_time,
+              endTime: classObj.end_time
+            }
+          }
+        }).catch(err => console.error("Error sending cancellation email to teacher:", err))
+      }
+
       if (tUserId) {
         supabase.functions.invoke("notify-teacher-push", {
           body: {

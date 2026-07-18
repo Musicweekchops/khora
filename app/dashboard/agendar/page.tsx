@@ -753,6 +753,27 @@ export default function StudentBookingDashboardPage() {
         }).catch(err => console.error("Error sending cancellation email:", err))
       }
 
+      // Send cancel email to teacher
+      if (tEmail) {
+        supabase.functions.invoke("send-email", {
+          body: {
+            to: tEmail,
+            type: "TEACHER_CLASS_CANCELLED",
+            params: {
+              studentName: profile?.name || "Un alumno",
+              teacherName: tName,
+              date: friendlyDate,
+              time: friendlyTime,
+              status: newStatus,
+              classId: cancellingClass.id,
+              rawDate: cancellingClass.date,
+              rawStartTime: cancellingClass.start_time,
+              endTime: cancellingClass.end_time
+            }
+          }
+        }).catch(err => console.error("Error sending cancellation email to teacher:", err))
+      }
+
       // 3. Notify Teacher via push / notifications
       if (tUserId) {
         supabase.functions.invoke("notify-teacher-push", {

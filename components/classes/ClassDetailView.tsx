@@ -626,6 +626,27 @@ export default function ClassDetailView({ classId }: { classId: string }) {
           }
         }).catch(err => console.error("Error sending cancellation email to student:", err))
       }
+
+      // Notify Teacher via email
+      if (cls.teacher_email) {
+        supabase.functions.invoke("send-email", {
+          body: {
+            to: cls.teacher_email,
+            type: "TEACHER_CLASS_CANCELLED",
+            params: {
+              studentName: cls.student_name,
+              teacherName: tName,
+              date: friendlyDate,
+              time: friendlyTime,
+              status: newStatus,
+              classId: cls.id,
+              rawDate: cls.date,
+              rawStartTime: cls.start_time,
+              endTime: cls.end_time
+            }
+          }
+        }).catch(err => console.error("Error sending cancellation email to teacher:", err))
+      }
       
       // Notify Teacher via push
       if (cls.teacher_user_id) {

@@ -7,7 +7,13 @@ import { formatCurrency, formatTime, toDateStr } from "@/lib/utils"
 import type { UserProfile } from "@/lib/context/AuthContext"
 import { toast } from "sonner"
 
-interface Stats { activeStudents: number; classesToday: number; pendingBookings: number; monthlyRevenue: number }
+interface Stats { 
+  activeStudents: number 
+  classesToday: number 
+  pendingBookings: number 
+  monthlyRevenue: number 
+  firstPendingBooking?: { id: string; date: string } | null 
+}
 interface TodayClass { id: string; start_time: string; end_time: string; student_name: string; status: string; modalidad: string }
 
 export default function TeacherDashboard({ profile }: { profile: UserProfile }) {
@@ -39,7 +45,7 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
       const [students, todayCl, bookings, payments, availCheck, classTypesCheck, teacherProf] = await Promise.all([
         supabase.from("StudentProfile").select("id", { count: "exact", head: true }).eq("teacher_id", teacherId),
         supabase.from("Class").select("id, start_time, end_time, status, modalidad, StudentProfile ( User ( name ) )").eq("teacher_id", teacherId).eq("date", today).neq("status", "CANCELLED").order("start_time"),
-        supabase.from("Booking").select("id", { count: "exact", head: true }).eq("teacher_id", teacherId).eq("status", "PENDING"),
+        supabase.from("Booking").select("id, date").eq("teacher_id", teacherId).eq("status", "PENDING").order("date", { ascending: true }),
         supabase.from("Payment").select("amount").eq("teacher_id", teacherId).gte("date", startOfMonth),
         supabase.from("Availability").select("id", { count: "exact", head: true }).eq("teacher_id", teacherId),
         supabase.from("ClassType").select("id", { count: "exact", head: true }).eq("teacher_id", teacherId),
@@ -49,8 +55,9 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
       setStats({
         activeStudents: students.count ?? 0,
         classesToday: todayCl.data?.length ?? 0,
-        pendingBookings: bookings.count ?? 0,
+        pendingBookings: bookings.data?.length ?? 0,
         monthlyRevenue: payments.data?.reduce((s, p) => s + (p.amount || 0), 0) ?? 0,
+        firstPendingBooking: bookings.data?.[0] || null,
       })
 
       if (todayCl.data) {
@@ -219,7 +226,7 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
 
       {/* URGENT: Pending Bookings Alert */}
       {!loading && stats && stats.pendingBookings > 0 && (
-        <Link href="/dashboard/agenda">
+        <Link href={stats.firstPendingBooking ? `/dashboard/agenda?date=${stats.firstPendingBooking.date}&bookingId=${stats.firstPendingBooking.id}` : "/dashboard/agenda"}>
           <div className="flex items-center gap-4 p-5 bg-amber-500 text-white rounded-3xl shadow-xl shadow-amber-500/30 hover:bg-amber-600 transition-all cursor-pointer animate-in fade-in duration-300">
             <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center flex-shrink-0 animate-pulse">
               <span className="text-2xl">🔔</span>
@@ -246,7 +253,7 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
           : cards.map(card => (
               <Link
                 key={card.title}
-                href={card.title === "Reservas Pendientes" ? "/dashboard/agenda" : "#"}
+                href={card.title === "Reservas Pendientes" && stats?.firstPendingBooking ? `/dashboard/agenda?date=${stats.firstPendingBooking.date}&bookingId=${stats.firstPendingBooking.id}` : card.title === "Reservas Pendientes" ? "/dashboard/agenda" : "#"}
                 className={card.title === "Reservas Pendientes" ? "cursor-pointer" : "cursor-default pointer-events-none"}
               >
                 <div className={`bg-gradient-to-br ${card.color} rounded-2xl p-4 md:p-6 border transition-all hover:shadow-md flex flex-col justify-between ${
