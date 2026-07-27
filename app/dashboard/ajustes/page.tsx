@@ -138,11 +138,58 @@ export default function AjustesPage() {
   const [loadingBilling, setLoadingBilling] = useState(false)
   const [savingBilling, setSavingBilling] = useState(false)
 
+  const [reminderMinutes, setReminderMinutes] = useState(60)
+  const [firstClassOnly, setFirstClassOnly] = useState(false)
+  const [savingReminderConfig, setSavingReminderConfig] = useState(false)
+
   useEffect(() => {
     if (isTeacher && profile?.teacherProfileId) {
       loadBillingConfig()
+      loadTeacherReminderConfig()
     }
   }, [profile])
+
+  async function loadTeacherReminderConfig() {
+    try {
+      const { data } = await supabase
+        .from("TeacherProfile")
+        .select("teacher_reminder_minutes, teacher_reminder_first_class_only")
+        .eq("id", profile?.teacherProfileId)
+        .maybeSingle()
+
+      if (data) {
+        setReminderMinutes(data.teacher_reminder_minutes ?? 60)
+        setFirstClassOnly(data.teacher_reminder_first_class_only ?? false)
+      }
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  async function handleUpdateReminderConfig(e: React.FormEvent) {
+    e.preventDefault()
+    if (!profile?.teacherProfileId) return
+    setSavingReminderConfig(true)
+    try {
+      const { error } = await supabase
+        .from("TeacherProfile")
+        .update({
+          teacher_reminder_minutes: Number(reminderMinutes),
+          teacher_reminder_first_class_only: firstClassOnly
+        })
+        .eq("id", profile.teacherProfileId)
+
+      if (error) {
+        toast.error("Error al guardar ajustes de recordatorio: " + error.message)
+      } else {
+        toast.success("Ajustes de recordatorios de clase guardados")
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Error al guardar")
+    } finally {
+      setSavingReminderConfig(false)
+    }
+  }
 
   async function loadBillingConfig() {
     setLoadingBilling(true)
