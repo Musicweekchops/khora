@@ -501,7 +501,7 @@ export default function AjustesPage() {
             </section>
           )}
 
-          {/* Push Notifications Section */}
+            {/* Push Notifications Section */}
           <section className="bg-white rounded-[40px] border border-neutral-100 p-10 shadow-sm space-y-6">
             <h3 className="text-xl font-black text-neutral-900 flex items-center gap-3">
               <Bell className="w-5 h-5 text-violet-500" />
@@ -528,7 +528,7 @@ export default function AjustesPage() {
                 </p>
                 <p className="text-xs text-neutral-400 font-medium mt-1 leading-relaxed">
                   {hasPushSub
-                    ? "Recibirás alertas al instante cuando un alumno agende, cancele o reprograme."
+                    ? "Recibirás alertas al instante cuando un alumno agende, cancele o reprograme, y tu recordatorio previo de clase."
                     : "Actívalas para recibir alertas al instante en tu pantalla de bloqueo."}
                 </p>
                 {pushPermission === "denied" && (
@@ -549,7 +549,7 @@ export default function AjustesPage() {
                   {loadingPush
                     ? <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
                     : <Bell className="w-4 h-4" />}
-                  Activar Alertas
+                  Activar Alertas Push
                 </button>
               ) : (
                 <button
@@ -564,6 +564,58 @@ export default function AjustesPage() {
                 </button>
               )}
             </div>
+
+            {/* Configuración de Recordatorios de Agenda del Profesor */}
+            {isTeacher && hasPushSub && (
+              <div className="mt-8 pt-8 border-t border-neutral-100 space-y-6">
+                <h4 className="text-sm font-black text-neutral-900 flex items-center gap-2">
+                  <span>⏰</span> Recordatorio Previo a la Clase
+                </h4>
+
+                <form onSubmit={handleUpdateReminderConfig} className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest block mb-2 px-1">Anticipación de Alerta</label>
+                      <select
+                        value={reminderMinutes}
+                        onChange={e => setReminderMinutes(Number(e.target.value))}
+                        className="w-full bg-neutral-50 border border-neutral-100 rounded-2xl px-4 py-3 text-xs font-bold outline-none focus:bg-white focus:border-violet-300 transition-all"
+                      >
+                        <option value={30}>30 Minutos Antes</option>
+                        <option value={60}>1 Hora Antes (Recomendado)</option>
+                        <option value={90}>1 Hora y 30 Minutos Antes</option>
+                        <option value={120}>2 Horas Antes</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest block mb-2 px-1">Filtro de Clases</label>
+                      <select
+                        value={firstClassOnly ? "true" : "false"}
+                        onChange={e => setFirstClassOnly(e.target.value === "true")}
+                        className="w-full bg-neutral-50 border border-neutral-100 rounded-2xl px-4 py-3 text-xs font-bold outline-none focus:bg-white focus:border-violet-300 transition-all"
+                      >
+                        <option value="false">Recordar Todas las Clases</option>
+                        <option value="true">Solo la 1ª Clase de la Jornada</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-neutral-400 font-medium leading-relaxed">
+                    Te notificará vía Push a tu teléfono antes de iniciar tu jornada para asegurarte de salir hacia el estudio a tiempo.
+                  </p>
+
+                  <button
+                    type="submit"
+                    disabled={savingReminderConfig}
+                    className="px-6 py-3 bg-neutral-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-violet-600 transition-all disabled:opacity-30 flex items-center gap-2"
+                  >
+                    {savingReminderConfig ? <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                    Guardar Preferencias de Alerta
+                  </button>
+                </form>
+              </div>
+            )}
           </section>
 
           {/* Security Section */}
