@@ -84,7 +84,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
         preferred_day: sp.preferred_day ?? "", preferred_time: sp.preferred_time ?? "",
         emergency_contact: sp.emergency_contact ?? "", emergency_phone: sp.emergency_phone ?? "",
         lifetime_value: sp.lifetime_value ?? 0, created_at: sp.created_at,
-        collection_active: sp.collection_active ?? true, monthly_fee: sp.monthly_fee ?? 0,
+        collection_active: sp.collection_active ?? false, monthly_fee: sp.monthly_fee ?? 0,
         last_seen_at: sp.User?.last_sign_in_at ?? null,
         user: { name: sp.User?.name ?? "—", email: sp.User?.email ?? "—", phone: sp.User?.phone ?? "" },
       })

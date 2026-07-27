@@ -43,6 +43,7 @@ interface ClassData {
   student_user_id?: string | null
   teacher_user_id?: string | null
   preferred_day?: string | null
+  is_recovery_pending?: boolean
 }
 interface Note { 
   id: string; content: string; created_at: string; content_id?: string | null; playlist_id?: string | null;
@@ -258,7 +259,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
     try {
       const { data: c } = await supabase
         .from("Class")
-        .select("id, date, start_time, end_time, status, modalidad, duration, student_id, teacher_id, schedule_id, is_recurring, StudentProfile ( id, preferred_day, user_id, User ( name, email ) ), TeacherProfile ( user_id, User ( name, email ) )")
+        .select("id, date, start_time, end_time, status, modalidad, duration, student_id, teacher_id, schedule_id, is_recurring, is_recovery_pending, StudentProfile ( id, preferred_day, user_id, User ( name, email ) ), TeacherProfile ( user_id, User ( name, email ) )")
         .eq("id", classId).maybeSingle()
 
       if (c) {
@@ -274,6 +275,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
           student_user_id: (c as any).StudentProfile?.user_id,
           teacher_user_id: (c as any).TeacherProfile?.user_id,
           preferred_day: (c as any).StudentProfile?.preferred_day ?? null,
+          is_recovery_pending: (c as any).is_recovery_pending ?? false,
         }
         setCls(classData)
         setEditForm({
@@ -1601,6 +1603,30 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                       </button>
                     )}
                   </>
+                )}
+
+                {profile?.role === "TEACHER" && (
+                  <button
+                    onClick={async () => {
+                      if (!cls) return
+                      const nextState = !cls.is_recovery_pending
+                      const { error } = await supabase.from("Class").update({ is_recovery_pending: nextState }).eq("id", cls.id)
+                      if (error) {
+                        toast("Error al actualizar recuperación: " + error.message, "error")
+                      } else {
+                        setCls(prev => prev ? { ...prev, is_recovery_pending: nextState } : null)
+                        toast(nextState ? "Clase marcada como pendiente por recuperar" : "Marcado de recuperación removido", "success")
+                      }
+                    }}
+                    className={`px-3 py-2 md:px-4 md:py-2.5 rounded-xl md:rounded-2xl text-[9px] md:text-xs font-black uppercase tracking-wider border transition-all ${
+                      cls.is_recovery_pending
+                        ? "bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200"
+                        : "bg-neutral-100 text-neutral-600 border-neutral-200 hover:bg-neutral-200"
+                    }`}
+                    title="Marcar si esta clase debe incluirse en el correo de cobro como pendiente por recuperar"
+                  >
+                    {cls.is_recovery_pending ? "🔄 Pendiente por Recuperar" : "➕ Marcar p/ Recuperar"}
+                  </button>
                 )}
 
                 {(profile?.role === "TEACHER" || profile?.role === "STUDENT") && (
