@@ -65,7 +65,7 @@ export default function ScheduleManager({ studentId, teacherId }: Props) {
     setMessage("")
     setFormError("")
 
-    // Verificar duplicado antes de insertar
+    // Buscar si ya existe un horario registrado para este alumno, profesor, día y hora de inicio
     const { data: existing } = await supabase
       .from("Schedule")
       .select("id")
@@ -75,48 +75,76 @@ export default function ScheduleManager({ studentId, teacherId }: Props) {
       .eq("start_time", form.start_time)
       .maybeSingle()
 
+    let scheduleId: string
+
     if (existing) {
-      const dayName = DAY_NAMES[form.day_of_week]
-      setFormError(`Ya existe un horario los ${dayName} a las ${form.start_time}. Eliminá el anterior o elegí otro horario.`)
-      setSaving(false)
-      return
-    }
+      // Si ya existía un horario (por ejemplo de fechas pasadas o inactivado), lo actualizamos y reactivamos
+      const { error: updateErr } = await supabase
+        .from("Schedule")
+        .update({
+          end_time: form.end_time,
+          modalidad: form.modalidad,
+          start_date: form.start_date,
+          is_active: true,
+        })
+        .eq("id", existing.id)
 
-    const { data, error } = await supabase
-      .from("Schedule")
-      .insert({
-        student_id: studentId,
-        teacher_id: teacherId,
-        day_of_week: form.day_of_week,
-        start_time: form.start_time,
-        end_time: form.end_time,
-        modalidad: form.modalidad,
-        start_date: form.start_date,
-      })
-      .select()
-      .maybeSingle()
-
-    if (error) {
-      if (error.code === "23505") {
-        const dayName = DAY_NAMES[form.day_of_week]
-        setFormError(`Ya existe un horario los ${dayName} a las ${form.start_time}.`)
-      } else {
-        setFormError("Error al crear horario: " + error.message)
+      if (updateErr) {
+        setFormError("Error al actualizar horario existente: " + updateErr.message)
+        setSaving(false)
+        return
       }
-      setSaving(false)
-      return
+
+      scheduleId = existing.id
+
+      // Eliminar clases futuras pendientes (SCHEDULED) de este horario a partir de la nueva fecha de inicio
+      await supabase
+        .from("Class")
+        .delete()
+        .eq("schedule_id", scheduleId)
+        .eq("status", "SCHEDULED")
+        .gte("date", form.start_date)
+
+    } else {
+      // Crear nuevo horario si no existía uno previo
+      const { data, error } = await supabase
+        .from("Schedule")
+        .insert({
+          student_id: studentId,
+          teacher_id: teacherId,
+          day_of_week: form.day_of_week,
+          start_time: form.start_time,
+          end_time: form.end_time,
+          modalidad: form.modalidad,
+          start_date: form.start_date,
+        })
+        .select()
+        .maybeSingle()
+
+      if (error) {
+        if (error.code === "23505") {
+          const dayName = DAY_NAMES[form.day_of_week]
+          setFormError(`Ya existe un horario los ${dayName} a las ${form.start_time}.`)
+        } else {
+          setFormError("Error al crear horario: " + error.message)
+        }
+        setSaving(false)
+        return
+      }
+
+      scheduleId = data.id
     }
 
     // Auto-generate classes for target month and next month based on start_date
     try {
       const startD = new Date(form.start_date + "T12:00")
       const r1 = await generateClassesForSchedule(
-        data.id, teacherId, studentId,
+        scheduleId, teacherId, studentId,
         form.day_of_week, form.start_time, form.end_time, form.modalidad, startD
       )
       const nextMonth = new Date(startD.getFullYear(), startD.getMonth() + 1, 15)
       const r2 = await generateClassesForSchedule(
-        data.id, teacherId, studentId,
+        scheduleId, teacherId, studentId,
         form.day_of_week, form.start_time, form.end_time, form.modalidad, nextMonth
       )
 
@@ -124,8 +152,10 @@ export default function ScheduleManager({ studentId, teacherId }: Props) {
       const totalConflicts = (r1.conflicts ?? 0) + (r2.conflicts ?? 0)
 
       if (totalCreated === 0) {
-        // Rollback: borrar el Schedule para no dejar un fantasma en la DB
-        await supabase.from("Schedule").delete().eq("id", data.id)
+        // Rollback solo si era un horario nuevo recién insertado
+        if (!existing) {
+          await supabase.from("Schedule").delete().eq("id", scheduleId)
+        }
         if (totalConflicts > 0) {
           setFormError(`No se pudo crear el horario: el profesor tiene conflictos en todas las fechas de ese día y hora. Verificá que no tenga otra clase agendada a las ${form.start_time}.`)
         } else {
@@ -135,11 +165,12 @@ export default function ScheduleManager({ studentId, teacherId }: Props) {
         return
       }
 
-      setMessage(`✓ Horario creado. ${totalCreated} clases generadas a partir del inicio establecido.`)
+      setMessage(`✓ Horario guardado. ${totalCreated} clases generadas a partir del inicio establecido.`)
     } catch (e: any) {
-      // Rollback: borrar el Schedule para no dejar un fantasma
-      await supabase.from("Schedule").delete().eq("id", data.id)
-      setFormError("Error al generar clases. El horario fue descartado: " + e.message)
+      if (!existing) {
+        await supabase.from("Schedule").delete().eq("id", scheduleId)
+      }
+      setFormError("Error al generar clases: " + e.message)
       setSaving(false)
       return
     }
