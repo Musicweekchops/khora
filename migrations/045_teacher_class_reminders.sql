@@ -21,8 +21,8 @@ SELECT cron.schedule(
   '*/15 * * * *',
   $$
     SELECT net.http_post(
-        url:='https://[TU-PROJECT-REF].supabase.co/functions/v1/send-teacher-class-reminders',
-        headers:='{"Authorization": "Bearer [TU-SERVICE-ROLE-KEY]", "Content-Type": "application/json"}'::jsonb
+        url:='https://ljazboprejtdrfsisfxu.supabase.co/functions/v1/send-teacher-class-reminders',
+        headers:='{"Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxqYXpib3ByZWp0ZHJmc2lzZnh1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjE5NzUxMCwiZXhwIjoyMDkxNzczNTEwfQ.wTGF8ZIlHrX8agKTj4_hL_KX_xudcqDzmiGFjvONITQ", "Content-Type": "application/json"}'::jsonb
     );
   $$
 );
