@@ -14,7 +14,7 @@ interface Stats {
   monthlyRevenue: number 
   firstPendingBooking?: { id: string; date: string } | null 
 }
-interface TodayClass { id: string; start_time: string; end_time: string; student_name: string; status: string; modalidad: string }
+interface TodayClass { id: string; start_time: string; end_time: string; student_name: string; status: string; modalidad: string; is_recovery_pending?: boolean }
 
 export default function TeacherDashboard({ profile }: { profile: UserProfile }) {
   const [stats, setStats] = useState<Stats | null>(null)
@@ -44,7 +44,7 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
 
       const [students, todayCl, bookings, payments, availCheck, classTypesCheck, teacherProf] = await Promise.all([
         supabase.from("StudentProfile").select("id", { count: "exact", head: true }).eq("teacher_id", teacherId),
-        supabase.from("Class").select("id, start_time, end_time, status, modalidad, StudentProfile ( User ( name ) )").eq("teacher_id", teacherId).eq("date", today).neq("status", "CANCELLED").order("start_time"),
+        supabase.from("Class").select("id, start_time, end_time, status, modalidad, is_recovery_pending, StudentProfile ( User ( name ) )").eq("teacher_id", teacherId).eq("date", today).neq("status", "CANCELLED").order("start_time"),
         supabase.from("Booking").select("id, date").eq("teacher_id", teacherId).eq("status", "PENDING").order("date", { ascending: true }),
         supabase.from("Payment").select("amount").eq("teacher_id", teacherId).gte("date", startOfMonth),
         supabase.from("Availability").select("id", { count: "exact", head: true }).eq("teacher_id", teacherId),
@@ -65,6 +65,7 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
           id: c.id, start_time: c.start_time, end_time: c.end_time,
           student_name: c.StudentProfile?.User?.name ?? "Sin asignar",
           status: c.status, modalidad: c.modalidad,
+          is_recovery_pending: !!c.is_recovery_pending,
         })))
       }
 
@@ -290,12 +291,19 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
           <div className="divide-y divide-neutral-50">
             {todayClasses.map(c => (
               <Link key={c.id} href={`/dashboard/clases/detalles?id=${c.id}`}>
-                <div className="p-5 flex items-center gap-4 hover:bg-violet-50/30 transition-colors group cursor-pointer">
-                  <div className="w-12 h-12 rounded-2xl bg-sky-50 flex items-center justify-center">
-                    <span className="text-sm font-black text-sky-600">{formatTime(c.start_time)}</span>
+                <div className={`p-5 flex items-center gap-4 transition-colors group cursor-pointer ${c.is_recovery_pending ? "bg-amber-50/60 hover:bg-amber-100/60" : "hover:bg-violet-50/30"}`}>
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${c.is_recovery_pending ? "bg-amber-100 text-amber-900" : "bg-sky-50"}`}>
+                    <span className={`text-sm font-black ${c.is_recovery_pending ? "text-amber-800" : "text-sky-600"}`}>{formatTime(c.start_time)}</span>
                   </div>
                   <div className="flex-1">
-                    <p className="font-bold text-neutral-900 group-hover:text-violet-600 transition-colors">{c.student_name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-bold text-neutral-900 group-hover:text-violet-600 transition-colors">{c.student_name}</p>
+                      {c.is_recovery_pending && (
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300">
+                          🔄 Recuperación
+                        </span>
+                      )}
+                    </div>
                     <p className="text-sm text-neutral-500">{formatTime(c.start_time)} – {formatTime(c.end_time)} · {c.modalidad === "online" ? "📹 Virtual" : "🏠 Presencial"}</p>
                   </div>
                   <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${

@@ -14,6 +14,7 @@ interface ClassRow {
   status: string
   modalidad: string
   student_name: string
+  is_recovery_pending?: boolean
 }
 
 export default function ClasesPage() {
@@ -33,7 +34,7 @@ export default function ClasesPage() {
     setLoading(true)
     const { data, error } = await supabase
       .from("Class")
-      .select(`id, date, start_time, end_time, status, modalidad, StudentProfile(User(name))`)
+      .select(`id, date, start_time, end_time, status, modalidad, is_recovery_pending, StudentProfile(User(name))`)
       .eq("teacher_id", teacherId)
       .order("date", { ascending: true }) // CRONOLÓGICO
       .limit(50)
@@ -52,6 +53,7 @@ export default function ClasesPage() {
           status: c.status ?? "SCHEDULED",
           modalidad: c.modalidad ?? "online",
           student_name: studentName ?? "Sin asignar",
+          is_recovery_pending: !!c.is_recovery_pending
         }
       }))
     }
@@ -62,7 +64,7 @@ export default function ClasesPage() {
     setLoading(true)
     const { data, error } = await supabase
       .from("Class")
-      .select(`id, date, start_time, end_time, status, modalidad, TeacherProfile(User(name))`)
+      .select(`id, date, start_time, end_time, status, modalidad, is_recovery_pending, TeacherProfile(User(name))`)
       .eq("student_id", studentId)
       .order("date", { ascending: true }) // CRONOLÓGICO: de la más próxima hacia adelante
       .limit(50)
@@ -81,6 +83,7 @@ export default function ClasesPage() {
           status: c.status ?? "SCHEDULED",
           modalidad: c.modalidad ?? "online",
           student_name: teacherName ? `Prof. ${teacherName}` : "Prof. Desconocido",
+          is_recovery_pending: !!c.is_recovery_pending
         }
       }))
     }
@@ -140,13 +143,30 @@ export default function ClasesPage() {
               <div className="grid gap-3">
                 {monthClasses.map(c => (
                   <Link key={c.id} href={`/dashboard/clases/detalles?id=${c.id}`}>
-                    <div className="bg-white rounded-2xl border border-neutral-100 p-4 md:p-5 flex items-center gap-4 md:gap-5 hover:shadow-md hover:border-violet-200 transition-all group cursor-pointer">
-                      <div className="w-14 h-14 md:w-16 md:h-16 rounded-xl md:rounded-2xl bg-gradient-to-br from-violet-50 to-violet-100 flex flex-col items-center justify-center border border-violet-100/50 flex-shrink-0">
-                        <span className="text-[9px] font-black text-violet-600 uppercase tracking-widest">{new Date(c.date + "T12:00").toLocaleDateString("es-CL", { weekday: "short" })}</span>
-                        <span className="text-lg md:text-xl font-black text-violet-900 leading-none mt-0.5">{new Date(c.date + "T12:00").getDate()}</span>
+                    <div className={`rounded-2xl border p-4 md:p-5 flex items-center gap-4 md:gap-5 hover:shadow-md transition-all group cursor-pointer ${
+                      c.is_recovery_pending
+                        ? "bg-amber-50/70 border-amber-200 hover:border-amber-400"
+                        : "bg-white border-neutral-100 hover:border-violet-200"
+                    }`}>
+                      <div className={`w-14 h-14 md:w-16 md:h-16 rounded-xl md:rounded-2xl flex flex-col items-center justify-center border flex-shrink-0 ${
+                        c.is_recovery_pending
+                          ? "bg-gradient-to-br from-amber-100 to-amber-200 border-amber-300 text-amber-950"
+                          : "bg-gradient-to-br from-violet-50 to-violet-100 border-violet-100/50 text-violet-900"
+                      }`}>
+                        <span className={`text-[9px] font-black uppercase tracking-widest ${c.is_recovery_pending ? "text-amber-800" : "text-violet-600"}`}>
+                          {new Date(c.date + "T12:00").toLocaleDateString("es-CL", { weekday: "short" })}
+                        </span>
+                        <span className="text-lg md:text-xl font-black leading-none mt-0.5">{new Date(c.date + "T12:00").getDate()}</span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-bold text-neutral-900 group-hover:text-violet-600 transition-colors text-base md:text-lg truncate">{c.student_name}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-neutral-900 group-hover:text-violet-600 transition-colors text-base md:text-lg truncate">{c.student_name}</p>
+                          {c.is_recovery_pending && (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300 flex-shrink-0">
+                              🔄 Recuperación
+                            </span>
+                          )}
+                        </div>
                         <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mt-1">
                           <span className="text-xs text-neutral-500 font-medium flex items-center gap-1 opacity-70">🕒 {formatTime(c.start_time)} – {formatTime(c.end_time)}</span>
                           <span className="hidden sm:block w-1 h-1 rounded-full bg-neutral-300" />

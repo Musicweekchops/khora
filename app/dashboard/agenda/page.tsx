@@ -12,7 +12,7 @@ import { toast } from "sonner"
 interface CalendarClass {
   id: string; date: string; start_time: string; end_time: string
   status: string; modalidad: string; student_name: string
-  is_booking?: boolean; is_recurring?: boolean; is_trial?: boolean;
+  is_booking?: boolean; is_recurring?: boolean; is_trial?: boolean; is_recovery_pending?: boolean;
 }
 
 const HOURS = Array.from({ length: 14 }, (_, i) => i + 7) // 7am to 20pm
@@ -162,7 +162,7 @@ export default function AgendaPage() {
       // Load actual classes
       const { data: classData, error: classErr } = await supabase
         .from("Class")
-        .select("id, date, start_time, end_time, status, modalidad, is_recurring, booking_id, StudentProfile ( status, User ( name ) )")
+        .select("id, date, start_time, end_time, status, modalidad, is_recurring, booking_id, is_recovery_pending, StudentProfile ( status, User ( name ) )")
         .eq("teacher_id", profile!.teacherProfileId!)
         .gte("date", start)
         .lte("date", end)
@@ -188,6 +188,7 @@ export default function AgendaPage() {
       const formattedClasses = (classData || []).map((c: any) => ({
         id: c.id, date: c.date, start_time: c.start_time, end_time: c.end_time,
         status: c.status, modalidad: c.modalidad, is_recurring: !!c.is_recurring,
+        is_recovery_pending: !!c.is_recovery_pending,
         student_name: c.StudentProfile?.User?.name ?? "Sin asignar",
         is_booking: false,
         is_trial: !!c.booking_id || c.StudentProfile?.status === "TRIAL"
@@ -690,16 +691,21 @@ export default function AgendaPage() {
                               className="block w-full h-full"
                             >
                               <div
-                                className={`h-full rounded-md p-1.5 text-xs hover:shadow-lg hover:z-20 transition-all cursor-pointer overflow-hidden flex flex-col shadow-sm border ${cls.status === "COMPLETED"
-                                    ? "bg-emerald-50/95 border-emerald-200 border-l-4 border-l-emerald-400 text-emerald-700"
-                                    : cls.is_trial
-                                      ? "bg-orange-50/95 border-orange-200 border-l-4 border-l-orange-400 text-orange-700"
-                                      : "bg-violet-50/95 border-violet-200 border-l-4 border-l-violet-400 text-violet-700"
+                                className={`h-full rounded-md p-1.5 text-xs hover:shadow-lg hover:z-20 transition-all cursor-pointer overflow-hidden flex flex-col shadow-sm border ${cls.is_recovery_pending
+                                    ? "bg-amber-100/90 border-amber-300 border-l-4 border-l-amber-500 text-amber-900 font-medium"
+                                    : cls.status === "COMPLETED"
+                                      ? "bg-emerald-50/95 border-emerald-200 border-l-4 border-l-emerald-400 text-emerald-700"
+                                      : cls.is_trial
+                                        ? "bg-orange-50/95 border-orange-200 border-l-4 border-l-orange-400 text-orange-700"
+                                        : "bg-violet-50/95 border-violet-200 border-l-4 border-l-violet-400 text-violet-700"
                                   }`}
                               >
                                 <div className="flex items-start justify-between gap-1 leading-tight">
                                   <p className="font-black truncate pr-4">{cls.student_name}</p>
-                                  {cls.is_recurring && <span className="text-[9px] opacity-70 flex-shrink-0" title="Clase recurrente">↻</span>}
+                                  <div className="flex items-center gap-0.5 flex-shrink-0">
+                                    {cls.is_recovery_pending && <span className="text-[9px]" title="Clase marcada como recuperación pendiente">🔄</span>}
+                                    {cls.is_recurring && <span className="text-[9px] opacity-70" title="Clase recurrente">↻</span>}
+                                  </div>
                                 </div>
                                 <p className="opacity-70 text-[9px] font-medium mt-auto truncate">{formatTime(cls.start_time)} - {formatTime(cls.end_time)}</p>
                               </div>
@@ -877,7 +883,10 @@ export default function AgendaPage() {
             filteredClassesForDay.map((cls) => {
               let cardBg = "bg-violet-50/90 border-violet-100 hover:border-violet-200 text-violet-900 animate-in fade-in zoom-in duration-200"
               let bulletColor = "bg-violet-500"
-              if (cls.status === "COMPLETED") {
+              if (cls.is_recovery_pending) {
+                cardBg = "bg-amber-100/90 border-amber-300 hover:border-amber-400 text-amber-950 font-medium animate-in fade-in zoom-in duration-200"
+                bulletColor = "bg-amber-500"
+              } else if (cls.status === "COMPLETED") {
                 cardBg = "bg-emerald-50/90 border-emerald-100 hover:border-emerald-200 text-emerald-900 animate-in fade-in zoom-in duration-200"
                 bulletColor = "bg-emerald-500"
               } else if (cls.is_booking) {
@@ -926,7 +935,10 @@ export default function AgendaPage() {
                       >
                         <div className={`rounded-[24px] border p-4 shadow-sm transition-all flex items-center justify-between gap-4 cursor-pointer hover:shadow-md ${cardBg}`}>
                           <div className="min-w-0 flex-1">
-                            <h4 className="font-black text-sm md:text-base truncate">{cls.student_name}</h4>
+                            <h4 className="font-black text-sm md:text-base truncate flex items-center gap-1">
+                              <span>{cls.student_name}</span>
+                              {cls.is_recovery_pending && <span className="text-xs" title="Recuperación pendiente">🔄</span>}
+                            </h4>
                             <p className="text-[10px] font-bold opacity-75 uppercase tracking-wider mt-1 flex items-center gap-1.5">
                               <span>🕒 {formatTime(cls.start_time)} - {formatTime(cls.end_time)}</span>
                               <span>•</span>

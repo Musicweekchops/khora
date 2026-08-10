@@ -18,7 +18,7 @@ interface StudentData {
   user: { name: string; email: string; phone: string }
 }
 
-interface ClassRow { id: string; date: string; start_time: string; end_time: string; status: string; modalidad: string }
+interface ClassRow { id: string; date: string; start_time: string; end_time: string; status: string; modalidad: string; is_recovery_pending?: boolean }
 interface TaskRow { id: string; title: string; completed: boolean; created_at: string; class_date: string }
 interface PaymentRow { id: string; amount: number; method: string; date: string; created_at: string; notes?: string }
 interface NoteRow { id: string; content: string; created_at: string; class_date: string }
@@ -93,7 +93,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
     // Classes
     const { data: cl } = await supabase
       .from("Class")
-      .select("id, date, start_time, end_time, status, modalidad")
+      .select("id, date, start_time, end_time, status, modalidad, is_recovery_pending")
       .eq("student_id", studentId)
       .order("date", { ascending: false })
 
@@ -295,6 +295,28 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
     }
   }
 
+  async function handleSendWhatsAppPaymentMessage() {
+    if (!student?.user?.phone) {
+      toast.error("El alumno no tiene número de teléfono registrado.")
+      return
+    }
+    const firstName = student.user.name.split(" ")[0] || student.user.name
+    const currentMonthName = new Date().toLocaleDateString("es-CL", { month: "long" })
+    let feeText = ""
+    if (student.monthly_fee && student.monthly_fee > 0) {
+      feeText = ` (Monto: $${student.monthly_fee.toLocaleString("es-CL")})`
+    }
+    const message = `Hola ${firstName}! ¿Cómo estás? Espero que todo bien! 🎵\n\nPasaba a recordar el pago de las clases de este mes de ${currentMonthName}${feeText}.\n\n¡Saludos!`
+
+    let cleanPhone = student.user.phone.replace(/[^0-9]/g, "")
+    if (cleanPhone.length === 9 && cleanPhone.startsWith("9")) {
+      cleanPhone = "56" + cleanPhone
+    }
+
+    const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`
+    window.open(whatsappUrl, "_blank")
+  }
+
   if (loading) return <div className="animate-pulse space-y-4">{[1,2,3].map(i => <div key={i} className="h-24 bg-white rounded-2xl" />)}</div>
   if (!student) return <p className="text-neutral-500">Alumno no encontrado</p>
 
@@ -399,6 +421,18 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
               ))}
             </select>
             <div className="flex items-center gap-1.5">
+              <button
+                onClick={handleSendWhatsAppPaymentMessage}
+                title={student.user.phone ? "Enviar mensaje de cobro por WhatsApp" : "El alumno no tiene teléfono registrado"}
+                className={`px-3 py-2 md:px-4 md:py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all flex items-center gap-2 ${
+                  student.user.phone
+                    ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-900/10"
+                    : "bg-neutral-100 text-neutral-400 cursor-not-allowed"
+                }`}
+              >
+                <span className="text-base leading-none">💬</span>
+                <span className="hidden sm:inline">Cobrar por WhatsApp</span>
+              </button>
               <button 
                 onClick={handleResetPassword}
                 title="Restablecer Contraseña"
@@ -468,7 +502,10 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
                 <h4 className="font-bold text-neutral-900 text-sm mb-3">Últimas Clases</h4>
                 {classes.slice(0, 3).map(c => (
                   <Link key={c.id} href={`/dashboard/clases/detalles?id=${c.id}`} className="flex items-center justify-between py-2 text-sm hover:bg-violet-50 -mx-2 px-2 rounded-lg transition-colors group">
-                    <span className="text-neutral-600 group-hover:text-violet-600 font-medium transition-colors">{new Date(c.date + "T12:00").toLocaleDateString("es-CL")}</span>
+                    <span className="text-neutral-600 group-hover:text-violet-600 font-medium transition-colors flex items-center gap-1.5">
+                      <span>{new Date(c.date + "T12:00").toLocaleDateString("es-CL")}</span>
+                      {c.is_recovery_pending && <span className="text-xs" title="Recuperación pendiente">🔄</span>}
+                    </span>
                     <span className={`text-xs font-bold uppercase ${c.status === "COMPLETED" ? "text-emerald-600" : "text-sky-600"}`}>{c.status === "COMPLETED" ? "Completada" : "Programada"}</span>
                   </Link>
                 ))}
@@ -499,8 +536,15 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
                 </tr></thead>
                 <tbody>
                   {classes.map(c => (
-                    <tr key={c.id} className="border-b border-neutral-50 hover:bg-violet-50/30 cursor-pointer transition-colors" onClick={() => window.location.href = `/dashboard/clases/detalles?id=${c.id}`}>
-                      <td className="px-6 py-4 font-bold text-neutral-900">{new Date(c.date + "T12:00").toLocaleDateString("es-CL", { weekday: "short", day: "numeric", month: "short" })}</td>
+                    <tr key={c.id} className={`border-b border-neutral-50 cursor-pointer transition-colors ${c.is_recovery_pending ? "bg-amber-50/60 hover:bg-amber-100/60" : "hover:bg-violet-50/30"}`} onClick={() => window.location.href = `/dashboard/clases/detalles?id=${c.id}`}>
+                      <td className="px-6 py-4 font-bold text-neutral-900 flex items-center gap-2">
+                        <span>{new Date(c.date + "T12:00").toLocaleDateString("es-CL", { weekday: "short", day: "numeric", month: "short" })}</span>
+                        {c.is_recovery_pending && (
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300">
+                            🔄 Recuperación
+                          </span>
+                        )}
+                      </td>
                       <td className="px-6 py-4 text-neutral-600">{formatTime(c.start_time)} – {formatTime(c.end_time)}</td>
                       <td className="px-6 py-4 text-neutral-500">{c.modalidad === "online" ? "📹 Virtual" : "🏠 Presencial"}</td>
                       <td className="px-6 py-4">
