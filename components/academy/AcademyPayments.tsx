@@ -85,7 +85,7 @@ export default function AcademyPayments({ academyId }: Props) {
       setStudents(stOpts)
 
       // Cargar pagos
-      const { data: payData, error } = await supabase
+      let { data: payData, error } = await supabase
         .from("Payment")
         .select(`
           id, amount, method, date, notes, payment_type, created_at, receipt_url, transfer_id,
@@ -96,7 +96,20 @@ export default function AcademyPayments({ academyId }: Props) {
         .eq("academy_id", academyId)
         .order("date", { ascending: false })
 
-      if (error) throw error
+      if (error) {
+        console.warn("[AcademyPayments] Fallback query:", error.message)
+        const fallback = await supabase
+          .from("Payment")
+          .select(`
+            id, amount, method, date, notes, payment_type, created_at,
+            StudentProfile (
+              User ( name )
+            )
+          `)
+          .eq("academy_id", academyId)
+          .order("date", { ascending: false })
+        payData = fallback.data
+      }
 
       const rows: PaymentRow[] = (payData ?? []).map((p: any) => {
         const sp = p.StudentProfile

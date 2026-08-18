@@ -55,12 +55,23 @@ export default function FinancieroPage() {
     const now = new Date()
     const startOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`
 
-    const [{ data: py }, { data: sp }, { data: activeStudents }] = await Promise.all([
-      supabase
+    let { data: py, error: pyErr } = await supabase
+      .from("Payment")
+      .select("id, amount, date, method, notes, created_at, receipt_url, transfer_id, student_id, StudentProfile ( User ( name ) )")
+      .eq("teacher_id", teacherId)
+      .order("date", { ascending: false })
+
+    if (pyErr) {
+      console.warn("[Financiero] Fallback Payment query:", pyErr.message)
+      const fallback = await supabase
         .from("Payment")
-        .select("id, amount, date, method, notes, created_at, receipt_url, transfer_id, student_id, StudentProfile ( User ( name ) )")
+        .select("id, amount, date, method, notes, created_at, student_id, StudentProfile ( User ( name ) )")
         .eq("teacher_id", teacherId)
-        .order("date", { ascending: false }),
+        .order("date", { ascending: false })
+      py = fallback.data
+    }
+
+    const [{ data: sp }, { data: activeStudents }] = await Promise.all([
       supabase.from("StudentProfile").select("id, status, lifetime_value, created_at, lead_source, User ( name )").eq("teacher_id", teacherId),
       supabase.from("StudentProfile")
         .select("id, modalidad, User ( name, email )")

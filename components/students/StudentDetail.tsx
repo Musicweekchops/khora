@@ -147,11 +147,21 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
     })))
 
     // Payments
-    const { data: py } = await supabase
+    let { data: py, error: pyErr } = await supabase
       .from("Payment")
       .select("id, amount, method, date, created_at, notes, receipt_url, transfer_id")
       .eq("student_id", studentId)
       .order("date", { ascending: false })
+
+    if (pyErr) {
+      console.warn("[StudentDetail] Fallback Payment query:", pyErr.message)
+      const fallback = await supabase
+        .from("Payment")
+        .select("id, amount, method, date, created_at, notes")
+        .eq("student_id", studentId)
+        .order("date", { ascending: false })
+      py = fallback.data
+    }
 
     if (py) setPayments(py)
 
