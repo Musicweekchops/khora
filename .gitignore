@@ -12,6 +12,9 @@ out/
 
 # production
 build
+dist/
+dist
+scratch/
 
 # misc
 .DS_Store
@@ -25,6 +28,7 @@ yarn-error.log*
 # local env files
 .env*.local
 .env
+.env.local
 
 # vercel
 .vercel

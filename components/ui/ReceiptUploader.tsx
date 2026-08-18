@@ -277,11 +277,10 @@ Reglas:
           </button>
         </div>
       ) : (
-        <label className={`relative border-2 border-dashed rounded-2xl p-4 flex flex-col items-center justify-center text-center cursor-pointer transition-all ${
-          loading
+        <label className={`relative border-2 border-dashed rounded-2xl p-4 flex flex-col items-center justify-center text-center cursor-pointer transition-all ${loading
             ? "border-violet-300 bg-violet-50/50"
             : "border-neutral-200 hover:border-violet-400 hover:bg-neutral-50/50"
-        }`}>
+          }`}>
           <input
             type="file"
             accept="image/*,application/pdf"
