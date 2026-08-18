@@ -18,6 +18,19 @@ interface Props {
   currentReceiptUrl?: string | null
 }
 
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result as string
+      const base64 = result.includes(",") ? result.split(",")[1] : result
+      resolve(base64)
+    }
+    reader.onerror = err => reject(err)
+    reader.readAsDataURL(file)
+  })
+}
+
 export default function ReceiptUploader({ onParsedData, currentReceiptUrl }: Props) {
   const [loading, setLoading] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(currentReceiptUrl || null)
@@ -51,7 +64,7 @@ export default function ReceiptUploader({ onParsedData, currentReceiptUrl }: Pro
 
       setPreviewUrl(publicUrl)
 
-      // 2. Call AI Vision (try server route /api/parse-receipt first, or client-side direct Gemini fetch for static sites like Render)
+      // 2. Call AI Vision (try server route /api/parse-receipt first, or browser-native Gemini fetch for static sites like Render)
       let parsedData: ParsedReceiptData | null = null
 
       try {
@@ -65,7 +78,7 @@ export default function ReceiptUploader({ onParsedData, currentReceiptUrl }: Pro
 
         if (res.ok) {
           const result = await res.json()
-          if (result.success) {
+          if (result.success && (result.amount || result.date)) {
             let notesText = ""
             if (result.bank || result.transfer_id) {
               notesText = `Transferencia ${result.bank || ""} ${result.transfer_id ? `#${result.transfer_id}` : ""}`.trim()
@@ -85,106 +98,119 @@ export default function ReceiptUploader({ onParsedData, currentReceiptUrl }: Pro
           }
         }
       } catch (e) {
-        console.warn("[ReceiptUploader] Server route failed, trying client fallback:", e)
+        console.warn("[ReceiptUploader] Server route unavailable, trying browser fallback:", e)
       }
 
-      // Client-side direct fallback if server API is unavailable (Render static site)
+      // Browser-native client fallback (works on Render static site export)
       if (!parsedData || (!parsedData.amount && !parsedData.date)) {
-        const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY || ""
+        const apiKey =
+          process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
+          process.env.GEMINI_API_KEY ||
+          "AQ.Ab8RN6JHV-mhUeDKh6-xV9T02wlz4rsfqb8bR4jQICD43NDCSg"
+
         if (apiKey) {
           try {
-            const arrayBuffer = await file.arrayBuffer()
-            const base64Data = Buffer.from(arrayBuffer).toString("base64")
+            const base64Data = await fileToBase64(file)
             const mimeType = file.type || "image/jpeg"
 
             const promptText = `
-Analiza la imagen o PDF de este comprobante de transferencia bancaria en Chile (BancoEstado, Banco de Chile, Santander, BCI, Itaú, Mercado Pago, Banco Falabella, etc.).
+Analiza la imagen o PDF de este comprobante de transferencia bancaria en Chile (BancoEstado, Banco de Chile, Santander, BCI, Itaú, Mercado Pago, Banco Falabella, Mach, Tenpo, etc.).
 
-Extrae y responde ÚNICAMENTE un JSON con:
+Extrae y responde ÚNICAMENTE un objeto JSON válido con los siguientes campos:
 {
-  "amount": <monto numérico entero sin puntos ni símbolos, ej: 90000>,
-  "date": <fecha YYYY-MM-DD, ej: "2026-08-17">,
-  "bank": <banco emisor o receptor en texto simple>,
-  "transfer_id": <código de transacción o número de comprobante>
+  "amount": 90000,
+  "date": "2026-08-17",
+  "bank": "BancoEstado",
+  "transfer_id": "19482752"
 }
+
+Reglas:
+- "amount": Número entero sin puntos ni signos de moneda (ej: 90000). Busca la cifra principal transferida ($90.000, $ 90.000).
+- "date": Fecha de la transferencia en formato YYYY-MM-DD (ej: "2026-08-17").
+- "bank": Nombre del banco o app.
+- "transfer_id": Folio, comprobante o N° de operación.
 `
 
             const candidateModels = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-1.5-flash"]
             for (const model of candidateModels) {
-              const apiRes = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-                {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    contents: [
-                      {
-                        parts: [
-                          { inline_data: { mime_type: mimeType, data: base64Data } },
-                          { text: promptText },
-                        ],
-                      },
-                    ],
-                    generationConfig: { response_mime_type: "application/json" },
-                  }),
-                }
-              )
+              try {
+                const apiRes = await fetch(
+                  `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+                  {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      contents: [
+                        {
+                          parts: [
+                            { inline_data: { mime_type: mimeType, data: base64Data } },
+                            { text: promptText },
+                          ],
+                        },
+                      ],
+                      generationConfig: { response_mime_type: "application/json" },
+                    }),
+                  }
+                )
 
-              if (apiRes.ok) {
-                const data = await apiRes.json()
-                const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ""
-                const cleanedText = rawText.replace(/```json/g, "").replace(/```/g, "").trim()
-                const parsedJson = JSON.parse(cleanedText)
+                if (apiRes.ok) {
+                  const data = await apiRes.json()
+                  const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ""
+                  const cleanedText = rawText.replace(/```json/g, "").replace(/```/g, "").trim()
+                  const parsedJson = JSON.parse(cleanedText)
 
-                let finalAmount: number | null = null
-                if (typeof parsedJson.amount === "number" && !isNaN(parsedJson.amount)) {
-                  finalAmount = parsedJson.amount
-                } else if (parsedJson.amount) {
-                  const cleanedAmount = String(parsedJson.amount).replace(/\D/g, "")
-                  if (cleanedAmount) finalAmount = parseInt(cleanedAmount, 10)
-                }
+                  let finalAmount: number | null = null
+                  if (typeof parsedJson.amount === "number" && !isNaN(parsedJson.amount)) {
+                    finalAmount = parsedJson.amount
+                  } else if (parsedJson.amount) {
+                    const cleanedAmount = String(parsedJson.amount).replace(/\D/g, "")
+                    if (cleanedAmount) finalAmount = parseInt(cleanedAmount, 10)
+                  }
 
-                let finalDate: string | null = null
-                if (typeof parsedJson.date === "string" && parsedJson.date.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                  finalDate = parsedJson.date
-                }
+                  let finalDate: string | null = null
+                  if (typeof parsedJson.date === "string" && parsedJson.date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                    finalDate = parsedJson.date
+                  }
 
-                let notesText = ""
-                if (parsedJson.bank || parsedJson.transfer_id) {
-                  notesText = `Transferencia ${parsedJson.bank || ""} ${parsedJson.transfer_id ? `#${parsedJson.transfer_id}` : ""}`.trim()
-                }
+                  let notesText = ""
+                  if (parsedJson.bank || parsedJson.transfer_id) {
+                    notesText = `Transferencia ${parsedJson.bank || ""} ${parsedJson.transfer_id ? `#${parsedJson.transfer_id}` : ""}`.trim()
+                  }
 
-                parsedData = {
-                  amount: finalAmount,
-                  date: finalDate,
-                  notes: notesText || null,
-                  receiptUrl: publicUrl,
-                  transferId: parsedJson.transfer_id ? String(parsedJson.transfer_id) : null,
+                  parsedData = {
+                    amount: finalAmount,
+                    date: finalDate,
+                    notes: notesText || null,
+                    receiptUrl: publicUrl,
+                    transferId: parsedJson.transfer_id ? String(parsedJson.transfer_id) : null,
+                  }
+                  setDetectedData({
+                    amount: finalAmount,
+                    date: finalDate,
+                    bank: parsedJson.bank || null,
+                  })
+                  break
                 }
-                setDetectedData({
-                  amount: finalAmount,
-                  date: finalDate,
-                  bank: parsedJson.bank || null,
-                })
-                break
+              } catch (modelErr) {
+                console.warn(`[ReceiptUploader] Model ${model} fetch failed:`, modelErr)
               }
             }
           } catch (err) {
-            console.error("[ReceiptUploader] Client-side Gemini error:", err)
+            console.error("[ReceiptUploader] Browser Gemini OCR error:", err)
           }
         }
       }
 
       if (parsedData && (parsedData.amount || parsedData.date)) {
         onParsedData(parsedData)
-        toast.success("✨ ¡Comprobante analizado con éxito con IA!")
+        toast.success("✨ ¡Comprobante analizado con éxito!")
       } else {
         onParsedData({ receiptUrl: publicUrl })
-        toast.info("Comprobante adjuntado. Puedes ingresar los datos si es necesario.")
+        toast.info("Comprobante adjuntado. Puedes ingresar los datos manualmente si lo deseas.")
       }
     } catch (err: any) {
       console.error("[ReceiptUploader] Error processing receipt:", err)
-      toast.error("Error al leer el archivo. Puedes ingresar los datos manualmente.")
+      toast.error("Error al procesar la imagen.")
       if (publicUrl) onParsedData({ receiptUrl: publicUrl })
     } finally {
       setLoading(false)
@@ -268,24 +294,24 @@ Extrae y responde ÚNICAMENTE un JSON con:
           />
 
           {loading ? (
-            <div className="py-2 flex flex-col items-center gap-2 text-violet-600 animate-in fade-in duration-200">
-              <Loader2 className="w-6 h-6 animate-spin" />
-              <span className="text-xs font-bold flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5" /> Escaneando comprobante con IA…
+            <div className="py-2 flex flex-col items-center gap-2">
+              <Loader2 className="w-6 h-6 text-violet-600 animate-spin" />
+              <span className="text-xs font-bold text-violet-700 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5" />
+                Escaneando comprobante con IA...
               </span>
             </div>
           ) : (
-            <div className="py-1 flex items-center gap-3 text-neutral-500">
-              <div className="w-9 h-9 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center">
+            <div className="py-2 flex flex-col items-center gap-1.5">
+              <div className="w-9 h-9 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center mb-1">
                 <Upload className="w-5 h-5" />
               </div>
-              <div className="text-left">
-                <p className="text-xs font-bold text-neutral-900 flex items-center gap-1">
-                  <span>Cargar comprobante</span>
-                  <span className="bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded uppercase">IA Scan</span>
-                </p>
-                <p className="text-[11px] text-neutral-400 font-medium">Foto o PDF (BancoEstado, BCh, Santander, etc.)</p>
-              </div>
+              <p className="text-xs font-bold text-neutral-700">
+                Arrastra o selecciona el comprobante
+              </p>
+              <p className="text-[11px] text-neutral-400 font-medium">
+                Sube la foto de la transferencia para autocompletar el pago con IA
+              </p>
             </div>
           )}
         </label>
