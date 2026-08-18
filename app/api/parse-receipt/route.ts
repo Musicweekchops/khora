@@ -34,41 +34,55 @@ Debes extraer y responder ÚNICAMENTE un objeto JSON válido con los siguientes 
   "sender_name": <nombre de la persona que realiza la transferencia si aparece, o null>
 }
 
-Reglas strictly:
+Reglas estrictas:
 - Si el monto dice "$90.000" o "$ 90000 CLP", devuélvelo como número 90000.
 - Si la fecha dice "17 de Agosto de 2026" o "17/08/2026", conviértela siempre a "2026-08-17".
 - Si no logras determinar un valor con certeza, usa null en ese campo.
 `
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  inline_data: {
-                    mime_type: mimeType,
-                    data: base64Data,
-                  },
-                },
-                {
-                  text: promptText,
-                },
-              ],
-            },
-          ],
-        }),
-      }
-    )
+    // Lista de modelos a intentar en orden de preferencia
+    const candidateModels = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-1.5-flash"]
+    let response: Response | null = null
+    let usedModel = ""
 
-    if (!response.ok) {
-      const errText = await response.text()
-      console.error("[parse-receipt] Gemini API error:", errText)
-      return NextResponse.json({ error: "Error al procesar con Gemini API." }, { status: 500 })
+    for (const model of candidateModels) {
+      const apiRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    inline_data: {
+                      mime_type: mimeType,
+                      data: base64Data,
+                    },
+                  },
+                  {
+                    text: promptText,
+                  },
+                ],
+              },
+            ],
+          }),
+        }
+      )
+
+      if (apiRes.ok) {
+        response = apiRes
+        usedModel = model
+        break
+      } else {
+        const errText = await apiRes.text()
+        console.warn(`[parse-receipt] Model ${model} returned ${apiRes.status}:`, errText)
+      }
+    }
+
+    if (!response || !response.ok) {
+      return NextResponse.json({ error: "Error al comunicarse con el modelo de visión de Gemini API." }, { status: 500 })
     }
 
     const data = await response.json()
@@ -86,7 +100,8 @@ Reglas strictly:
 
     return NextResponse.json({
       success: true,
-      amount: typeof parsedJson.amount === "number" ? parsedJson.amount : null,
+      modelUsed: usedModel,
+      amount: typeof parsedJson.amount === "number" ? parsedJson.amount : (parsedJson.amount ? parseInt(String(parsedJson.amount).replace(/\D/g, ""), 10) : null),
       date: typeof parsedJson.date === "string" ? parsedJson.date : null,
       bank: parsedJson.bank || null,
       transfer_id: parsedJson.transfer_id ? String(parsedJson.transfer_id) : null,
