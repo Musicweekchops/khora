@@ -51,48 +51,136 @@ export default function ReceiptUploader({ onParsedData, currentReceiptUrl }: Pro
 
       setPreviewUrl(publicUrl)
 
-      // 2. Call AI Vision Endpoint /api/parse-receipt
-      const formData = new FormData()
-      formData.append("file", file)
+      // 2. Call AI Vision (try server route /api/parse-receipt first, or client-side direct Gemini fetch for static sites like Render)
+      let parsedData: ParsedReceiptData | null = null
 
-      const res = await fetch("/api/parse-receipt", {
-        method: "POST",
-        body: formData,
-      })
+      try {
+        const formData = new FormData()
+        formData.append("file", file)
 
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}))
-        console.warn("[ReceiptUploader] AI parse response not ok:", errJson)
-        toast.info("Comprobante adjuntado. Ingresa el monto manualmente si es necesario.")
-        onParsedData({ receiptUrl: publicUrl })
-        return
+        const res = await fetch("/api/parse-receipt", {
+          method: "POST",
+          body: formData,
+        })
+
+        if (res.ok) {
+          const result = await res.json()
+          if (result.success) {
+            let notesText = ""
+            if (result.bank || result.transfer_id) {
+              notesText = `Transferencia ${result.bank || ""} ${result.transfer_id ? `#${result.transfer_id}` : ""}`.trim()
+            }
+            parsedData = {
+              amount: result.amount,
+              date: result.date,
+              notes: notesText || null,
+              receiptUrl: publicUrl,
+              transferId: result.transfer_id,
+            }
+            setDetectedData({
+              amount: result.amount,
+              date: result.date,
+              bank: result.bank,
+            })
+          }
+        }
+      } catch (e) {
+        console.warn("[ReceiptUploader] Server route failed, trying client fallback:", e)
       }
 
-      const result = await res.json()
+      // Client-side direct fallback if server API is unavailable (Render static site)
+      if (!parsedData || (!parsedData.amount && !parsedData.date)) {
+        const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY || ""
+        if (apiKey) {
+          try {
+            const arrayBuffer = await file.arrayBuffer()
+            const base64Data = Buffer.from(arrayBuffer).toString("base64")
+            const mimeType = file.type || "image/jpeg"
 
-      if (result.success) {
-        setDetectedData({
-          amount: result.amount,
-          date: result.date,
-          bank: result.bank,
-        })
+            const promptText = `
+Analiza la imagen o PDF de este comprobante de transferencia bancaria en Chile (BancoEstado, Banco de Chile, Santander, BCI, Itaú, Mercado Pago, Banco Falabella, etc.).
 
-        let notesText = ""
-        if (result.bank || result.transfer_id) {
-          notesText = `Transferencia ${result.bank || ""} ${result.transfer_id ? `#${result.transfer_id}` : ""}`.trim()
+Extrae y responde ÚNICAMENTE un JSON con:
+{
+  "amount": <monto numérico entero sin puntos ni símbolos, ej: 90000>,
+  "date": <fecha YYYY-MM-DD, ej: "2026-08-17">,
+  "bank": <banco emisor o receptor en texto simple>,
+  "transfer_id": <código de transacción o número de comprobante>
+}
+`
+
+            const candidateModels = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-1.5-flash"]
+            for (const model of candidateModels) {
+              const apiRes = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    contents: [
+                      {
+                        parts: [
+                          { inline_data: { mime_type: mimeType, data: base64Data } },
+                          { text: promptText },
+                        ],
+                      },
+                    ],
+                    generationConfig: { response_mime_type: "application/json" },
+                  }),
+                }
+              )
+
+              if (apiRes.ok) {
+                const data = await apiRes.json()
+                const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ""
+                const cleanedText = rawText.replace(/```json/g, "").replace(/```/g, "").trim()
+                const parsedJson = JSON.parse(cleanedText)
+
+                let finalAmount: number | null = null
+                if (typeof parsedJson.amount === "number" && !isNaN(parsedJson.amount)) {
+                  finalAmount = parsedJson.amount
+                } else if (parsedJson.amount) {
+                  const cleanedAmount = String(parsedJson.amount).replace(/\D/g, "")
+                  if (cleanedAmount) finalAmount = parseInt(cleanedAmount, 10)
+                }
+
+                let finalDate: string | null = null
+                if (typeof parsedJson.date === "string" && parsedJson.date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                  finalDate = parsedJson.date
+                }
+
+                let notesText = ""
+                if (parsedJson.bank || parsedJson.transfer_id) {
+                  notesText = `Transferencia ${parsedJson.bank || ""} ${parsedJson.transfer_id ? `#${parsedJson.transfer_id}` : ""}`.trim()
+                }
+
+                parsedData = {
+                  amount: finalAmount,
+                  date: finalDate,
+                  notes: notesText || null,
+                  receiptUrl: publicUrl,
+                  transferId: parsedJson.transfer_id ? String(parsedJson.transfer_id) : null,
+                }
+                setDetectedData({
+                  amount: finalAmount,
+                  date: finalDate,
+                  bank: parsedJson.bank || null,
+                })
+                break
+              }
+            }
+          } catch (err) {
+            console.error("[ReceiptUploader] Client-side Gemini error:", err)
+          }
         }
+      }
 
-        onParsedData({
-          amount: result.amount,
-          date: result.date,
-          notes: notesText || null,
-          receiptUrl: publicUrl,
-          transferId: result.transfer_id,
-        })
-
-        toast.success("✨ ¡Comprobante analizado con éxito!")
+      if (parsedData && (parsedData.amount || parsedData.date)) {
+        onParsedData(parsedData)
+        toast.success("✨ ¡Comprobante analizado con éxito con IA!")
       } else {
         onParsedData({ receiptUrl: publicUrl })
+        toast.info("Comprobante adjuntado. Puedes ingresar los datos si es necesario.")
       }
     } catch (err: any) {
       console.error("[ReceiptUploader] Error processing receipt:", err)
