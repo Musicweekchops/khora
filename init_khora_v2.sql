@@ -149,6 +149,8 @@ CREATE TABLE public."Payment" (
   method TEXT,
   date DATE NOT NULL,
   notes TEXT,
+  receipt_url TEXT,
+  transfer_id TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 

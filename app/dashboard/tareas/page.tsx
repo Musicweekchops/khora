@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/context/AuthContext"
-import { ClipboardList, CheckCircle2, Circle } from "lucide-react"
+import { ClipboardList, CheckCircle2, Circle, X, ExternalLink } from "lucide-react"
 import { RichText } from "@/components/ui/RichText"
 import { motion, AnimatePresence } from "framer-motion"
 
@@ -32,6 +32,7 @@ interface Task {
 export default function TareasPage() {
   const { profile } = useAuth()
   const [tasks, setTasks] = useState<Task[]>([])
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -75,6 +76,9 @@ export default function TareasPage() {
     const newProgress = newStatus ? 100 : 0
     // Optimistic UI update
     setTasks(tasks.map(t => t.id === task.id ? { ...t, completed: newStatus, progress: newProgress } : t))
+    if (selectedTask?.id === task.id) {
+      setSelectedTask(prev => prev ? { ...prev, completed: newStatus, progress: newProgress } : null)
+    }
     
     await supabase
       .from("Task")
@@ -86,7 +90,10 @@ export default function TareasPage() {
     const isCompleted = value === 100
     // Optimistic UI update
     setTasks(tasks.map(t => t.id === task.id ? { ...t, progress: value, completed: isCompleted } : t))
-    
+    if (selectedTask?.id === task.id) {
+      setSelectedTask(prev => prev ? { ...prev, progress: value, completed: isCompleted } : null)
+    }
+
     await supabase
       .from("Task")
       .update({ progress: value, completed: isCompleted })
@@ -122,7 +129,7 @@ export default function TareasPage() {
           </div>
           Mis Tareas
         </h1>
-        <p className="text-neutral-500 font-medium mt-2">{pending.length} pendientes</p>
+        <p className="text-neutral-500 font-medium mt-2">{pending.length} pendientes (haz clic en una tarea para ver sus detalles)</p>
       </div>
 
       {loading ? (
@@ -157,6 +164,7 @@ export default function TareasPage() {
                         task={task} 
                         onToggle={() => toggleTask(task)} 
                         onUpdateProgress={(val) => updateProgress(task, val)} 
+                        onSelectTask={() => setSelectedTask(task)}
                       />
                     </motion.div>
                   ))}
@@ -187,6 +195,7 @@ export default function TareasPage() {
                         task={task} 
                         onToggle={() => toggleTask(task)} 
                         onUpdateProgress={(val) => updateProgress(task, val)} 
+                        onSelectTask={() => setSelectedTask(task)}
                       />
                     </motion.div>
                   ))}
@@ -196,6 +205,168 @@ export default function TareasPage() {
           )}
         </div>
       )}
+
+      {/* MODAL DETALLES TAREA */}
+      {selectedTask && (
+        <div 
+          className="fixed inset-0 z-[160] flex items-center justify-center p-4 bg-neutral-950/80 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => setSelectedTask(null)}
+        >
+          <div 
+            className="bg-white rounded-3xl md:rounded-[40px] max-w-xl w-full overflow-hidden shadow-2xl relative border border-neutral-100 animate-in zoom-in-95 duration-200 font-sans max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="p-6 md:p-8 border-b border-neutral-100 bg-neutral-50/50 flex items-start justify-between gap-4 flex-shrink-0">
+              <div className="space-y-2 flex-1 min-w-0">
+                <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
+                  selectedTask.completed 
+                    ? "bg-emerald-100 text-emerald-700 border border-emerald-200" 
+                    : "bg-amber-100 text-amber-800 border border-amber-200"
+                }`}>
+                  {selectedTask.completed ? "✓ Completada" : "⏳ Pendiente"}
+                </span>
+
+                <h3 className="text-xl md:text-2xl font-black text-neutral-900 tracking-tight leading-snug">
+                  {selectedTask.title}
+                </h3>
+              </div>
+
+              <button
+                onClick={() => setSelectedTask(null)}
+                className="w-9 h-9 bg-white border border-neutral-200 hover:bg-neutral-100 rounded-full flex items-center justify-center text-neutral-500 hover:text-neutral-900 transition-all flex-shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body Content */}
+            <div className="p-6 md:p-8 overflow-y-auto space-y-6 flex-1 scrollbar-thin">
+              {/* Description */}
+              <div className="space-y-2">
+                <h4 className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">Descripción / Instrucciones</h4>
+                {selectedTask.description ? (
+                  <div className="bg-neutral-50 border border-neutral-100 rounded-2xl p-4 md:p-5">
+                    <RichText text={selectedTask.description} className="text-sm text-neutral-800 font-medium leading-relaxed" />
+                  </div>
+                ) : (
+                  <p className="text-xs text-neutral-400 italic">Sin descripción adicional para esta tarea.</p>
+                )}
+              </div>
+
+              {/* Attached Materials */}
+              {(selectedTask.LibraryContent || selectedTask.LibraryPlaylist) && (
+                <div className="space-y-3 pt-2">
+                  <h4 className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">Material Adjunto para Estudiar</h4>
+                  <div className="space-y-2">
+                    {selectedTask.LibraryContent && (
+                      <div className="bg-violet-50/70 border border-violet-100 rounded-2xl p-4 flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-black text-violet-900 truncate">📖 {selectedTask.LibraryContent.title}</p>
+                          <p className="text-[10px] font-bold text-violet-600 uppercase tracking-wider mt-0.5">
+                            Recurso {selectedTask.LibraryContent.type}
+                          </p>
+                        </div>
+                        {selectedTask.LibraryContent.url && (
+                          <a
+                            href={selectedTask.LibraryContent.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm flex items-center gap-1.5 flex-shrink-0"
+                          >
+                            <span>Abrir</span>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                      </div>
+                    )}
+
+                    {selectedTask.LibraryPlaylist && (
+                      <div className="bg-amber-50/70 border border-amber-100 rounded-2xl p-4 flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-black text-amber-900 truncate">📚 {selectedTask.LibraryPlaylist.title}</p>
+                          <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wider mt-0.5">
+                            Serie de Estudio
+                          </p>
+                        </div>
+                        <Link
+                          href="/dashboard/biblioteca"
+                          className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm flex items-center gap-1.5 flex-shrink-0"
+                        >
+                          <span>Ver Serie</span>
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Progress Bar & Selector */}
+              <div className="space-y-3 pt-4 border-t border-neutral-100">
+                <div className="flex items-center justify-between text-xs font-black">
+                  <span className="text-neutral-400 uppercase tracking-widest text-[10px]">Progreso de la Tarea</span>
+                  <span className={selectedTask.completed || selectedTask.progress === 100 ? "text-emerald-600" : "text-violet-600"}>
+                    {selectedTask.completed ? "100%" : `${selectedTask.progress || 0}%`}
+                  </span>
+                </div>
+
+                <div className="w-full h-2.5 bg-neutral-100 rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      selectedTask.completed || selectedTask.progress === 100 
+                        ? "bg-gradient-to-r from-emerald-400 to-teal-500" 
+                        : "bg-gradient-to-r from-violet-500 to-indigo-500"
+                    }`}
+                    style={{ width: `${selectedTask.completed ? 100 : (selectedTask.progress || 0)}%` }}
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  {[0, 25, 50, 75, 100].map(val => (
+                    <button
+                      type="button"
+                      key={val}
+                      onClick={() => updateProgress(selectedTask, val)}
+                      className={`flex-1 py-2 rounded-xl text-xs font-black transition-all ${
+                        selectedTask.progress === val || (val === 100 && selectedTask.completed)
+                          ? "bg-neutral-900 text-white shadow-sm"
+                          : "bg-neutral-50 text-neutral-600 border border-neutral-200 hover:bg-neutral-100"
+                      }`}
+                    >
+                      {val}%
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Action */}
+            <div className="p-6 border-t border-neutral-100 bg-neutral-50/50 flex gap-3 flex-shrink-0">
+              <button
+                onClick={() => toggleTask(selectedTask)}
+                className={`w-full py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-md flex items-center justify-center gap-2 ${
+                  selectedTask.completed
+                    ? "bg-neutral-200 text-neutral-700 hover:bg-neutral-300"
+                    : "bg-emerald-600 text-white hover:bg-emerald-700"
+                }`}
+              >
+                {selectedTask.completed ? (
+                  <>
+                    <Circle className="w-4 h-4" />
+                    <span>Marcar como Pendiente</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Marcar como Completada (100%)</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -203,36 +374,53 @@ export default function TareasPage() {
 function TaskCard({ 
   task, 
   onToggle, 
-  onUpdateProgress 
+  onUpdateProgress,
+  onSelectTask 
 }: { 
   task: Task, 
   onToggle: () => void, 
-  onUpdateProgress: (val: number) => void 
+  onUpdateProgress: (val: number) => void,
+  onSelectTask: () => void
 }) {
   return (
     <div 
-      onClick={onToggle}
+      onClick={onSelectTask}
       className={`bg-white rounded-3xl p-5 border cursor-pointer transition-all hover:shadow-md flex gap-4 ${
         task.completed ? 'border-neutral-100 bg-neutral-50' : 'border-emerald-100 hover:border-emerald-300'
       }`}
     >
-      <div className="pt-1">
+      <button 
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          onToggle()
+        }}
+        className="pt-1 text-left flex-shrink-0"
+        title={task.completed ? "Desmarcar" : "Marcar como completada"}
+      >
         {task.completed ? (
           <CheckCircle2 className="w-6 h-6 text-emerald-500" />
         ) : (
           <Circle className="w-6 h-6 text-neutral-300 hover:text-emerald-400 transition-colors" />
         )}
-      </div>
-      <div className="flex-1 space-y-4">
+      </button>
+
+      <div className="flex-1 space-y-4 min-w-0">
         <div>
-          <p className={`font-bold text-lg transition-colors ${task.completed ? 'text-neutral-400 line-through' : 'text-neutral-900'}`}>
-            {task.title}
-          </p>
+          <div className="flex items-start justify-between gap-2">
+            <p className={`font-bold text-lg transition-colors group-hover:text-emerald-700 ${task.completed ? 'text-neutral-400 line-through' : 'text-neutral-900'}`}>
+              {task.title}
+            </p>
+            <span className="text-xs font-bold text-violet-600 hover:underline flex-shrink-0">
+              Ver detalles →
+            </span>
+          </div>
+
           {task.description && (
             <div onClick={e => e.stopPropagation()}>
               <RichText 
                 text={task.description} 
-                className={`text-sm mt-1 ${task.completed ? 'text-neutral-400' : 'text-neutral-500'}`} 
+                className={`text-sm mt-1 line-clamp-3 ${task.completed ? 'text-neutral-400' : 'text-neutral-500'}`} 
               />
             </div>
           )}

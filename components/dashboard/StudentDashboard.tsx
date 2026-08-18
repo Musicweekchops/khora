@@ -20,10 +20,12 @@ import {
   FileText,
   ChevronUp,
   ChevronDown,
-  CheckCircle2
+  CheckCircle2,
+  Circle
 } from "lucide-react"
 import Link from "next/link"
 import VideoPlayer from "@/components/ui/VideoPlayer"
+import { RichText } from "@/components/ui/RichText"
 
 interface StudentStats {
   upcomingClasses: number
@@ -34,7 +36,41 @@ interface StudentStats {
 export default function StudentDashboard({ profile }: { profile: UserProfile }) {
   const [stats, setStats] = useState<StudentStats>({ upcomingClasses: 0, pendingTasks: 0, totalMaterials: 0 })
   const [nextClass, setNextClass] = useState<any>(null)
+  const [tasks, setTasks] = useState<any[]>([])
+  const [selectedTask, setSelectedTask] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
+
+  async function toggleTaskStatus(task: any) {
+    const newStatus = !task.completed
+    const newProgress = newStatus ? 100 : 0
+
+    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, completed: newStatus, progress: newProgress } : t))
+    if (selectedTask?.id === task.id) {
+      setSelectedTask((prev: any) => prev ? { ...prev, completed: newStatus, progress: newProgress } : null)
+    }
+    setStats(prev => ({
+      ...prev,
+      pendingTasks: newStatus ? Math.max(0, prev.pendingTasks - 1) : prev.pendingTasks + 1
+    }))
+
+    await supabase
+      .from("Task")
+      .update({ completed: newStatus, progress: newProgress })
+      .eq("id", task.id)
+  }
+
+  async function updateTaskProgressInModal(task: any, val: number) {
+    const isCompleted = val === 100
+    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, progress: val, completed: isCompleted } : t))
+    if (selectedTask?.id === task.id) {
+      setSelectedTask((prev: any) => prev ? { ...prev, progress: val, completed: isCompleted } : null)
+    }
+
+    await supabase
+      .from("Task")
+      .update({ progress: val, completed: isCompleted })
+      .eq("id", task.id)
+  }
 
   // MERCADO PAGO STATE HOOKS
   const [gatewayEnabled, setGatewayEnabled] = useState(false)
@@ -190,11 +226,26 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
       .eq("student_id", profile.studentProfileId!)
       .gte("date", now.split('T')[0])
 
-    const { count: tasks } = await supabase
+    const { data: fullTasks } = await supabase
       .from("Task")
-      .select("*", { count: 'exact', head: true })
+      .select(`
+        id,
+        title,
+        description,
+        completed,
+        created_at,
+        content_id,
+        playlist_id,
+        progress,
+        Class ( date ),
+        LibraryContent ( title, url, type ),
+        LibraryPlaylist ( id, title )
+      `)
       .eq("student_id", profile.studentProfileId!)
-      .eq("completed", false)
+      .order("created_at", { ascending: false })
+
+    if (fullTasks) setTasks(fullTasks)
+    const pendingTasksCount = (fullTasks || []).filter((t: any) => !t.completed).length
 
     // 3. Materials count (explicitly allowed via SLA, Task, or Note)
     const [slaRes, taskRes, noteRes] = await Promise.all([
@@ -216,7 +267,7 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
 
     setStats({
       upcomingClasses: upcoming || 0,
-      pendingTasks: tasks || 0,
+      pendingTasks: pendingTasksCount,
       totalMaterials: allowedItems.size
     })
 
@@ -394,6 +445,116 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
           </div>
         </div>
       )}
+
+      {/* SECCIÓN DE TAREAS EN EL TOP DEL DASHBOARD */}
+      <div className="bg-white rounded-3xl md:rounded-[40px] border border-neutral-100 p-6 md:p-8 shadow-sm space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center font-bold">
+              <ClipboardList className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-xl font-black text-neutral-900 tracking-tight">Mis Tareas</h2>
+              <p className="text-neutral-500 text-xs font-semibold">
+                {tasks.filter(t => !t.completed).length === 0 
+                  ? "¡Excelente! No tienes tareas pendientes" 
+                  : `Tienes ${tasks.filter(t => !t.completed).length} tarea${tasks.filter(t => !t.completed).length === 1 ? '' : 's'} por completar (haz clic para ver detalles)`}
+              </p>
+            </div>
+          </div>
+
+          <Link href="/dashboard/tareas" className="text-xs font-black text-violet-600 hover:text-violet-800 uppercase tracking-wider flex items-center gap-1">
+            Ver Todas ({tasks.length}) <ChevronRight className="w-4 h-4" />
+          </Link>
+        </div>
+
+        {tasks.length === 0 ? (
+          <div className="py-8 text-center bg-neutral-50 rounded-2xl border border-dashed border-neutral-200">
+            <span className="text-3xl opacity-40 block mb-2">🎉</span>
+            <p className="text-xs text-neutral-400 font-bold">Sin tareas asignadas aún</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {tasks.slice(0, 5).map(task => (
+              <div
+                key={task.id}
+                onClick={() => setSelectedTask(task)}
+                className={`p-4 md:p-5 rounded-2xl border transition-all cursor-pointer flex items-start gap-4 group ${
+                  task.completed 
+                    ? "bg-neutral-50/70 border-neutral-100 hover:border-neutral-200 opacity-70" 
+                    : "bg-white border-neutral-100 hover:border-emerald-300 hover:shadow-md"
+                }`}
+              >
+                {/* Checkbox button */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggleTaskStatus(task)
+                  }}
+                  className="pt-0.5 flex-shrink-0"
+                  title={task.completed ? "Desmarcar" : "Marcar como completada"}
+                >
+                  {task.completed ? (
+                    <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+                  ) : (
+                    <Circle className="w-6 h-6 text-neutral-300 hover:text-emerald-500 transition-colors" />
+                  )}
+                </button>
+
+                {/* Task Info */}
+                <div className="flex-1 min-w-0 space-y-1.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <h4 className={`font-black text-sm md:text-base leading-tight group-hover:text-emerald-700 transition-colors truncate ${
+                      task.completed ? "line-through text-neutral-400" : "text-neutral-900"
+                    }`}>
+                      {task.title}
+                    </h4>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider flex-shrink-0 ${
+                      task.completed 
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-100" 
+                        : "bg-amber-50 text-amber-700 border border-amber-100"
+                    }`}>
+                      {task.completed ? "Completada" : "Pendiente"}
+                    </span>
+                  </div>
+
+                  {task.description && (
+                    <p className="text-xs text-neutral-500 font-medium line-clamp-2">
+                      {task.description.replace(/\[(.*?)\]\((.*?)\)/g, "$1")}
+                    </p>
+                  )}
+
+                  {/* Badges / Attachments preview */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1 text-[10px] font-bold text-neutral-400">
+                    {task.Class?.date && (
+                      <span className="bg-neutral-100 text-neutral-600 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                        📅 Clase: {new Date(task.Class.date + "T12:00").toLocaleDateString("es-CL", { day: "numeric", month: "short" })}
+                      </span>
+                    )}
+
+                    {task.LibraryContent && (
+                      <span className="bg-violet-50 text-violet-700 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                        📖 {task.LibraryContent.title}
+                      </span>
+                    )}
+
+                    {task.LibraryPlaylist && (
+                      <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                        📚 Serie: {task.LibraryPlaylist.title}
+                      </span>
+                    )}
+
+                    <span className="ml-auto text-violet-600 group-hover:underline flex items-center gap-0.5">
+                      Ver detalles →
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* SECCIÓN DE PAGOS & CURSOS DE MERCADO PAGO (Pasarela Activa) */}
       {gatewayEnabled && (
@@ -863,6 +1024,175 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
                   Entendido
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* MODAL DE DETALLES DE TAREA ALUMNO */}
+      {selectedTask && (
+        <div 
+          className="fixed inset-0 z-[160] flex items-center justify-center p-4 bg-neutral-950/80 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => setSelectedTask(null)}
+        >
+          <div 
+            className="bg-white rounded-3xl md:rounded-[40px] max-w-xl w-full overflow-hidden shadow-2xl relative border border-neutral-100 animate-in zoom-in-95 duration-200 font-sans max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="p-6 md:p-8 border-b border-neutral-100 bg-neutral-50/50 flex items-start justify-between gap-4 flex-shrink-0">
+              <div className="space-y-2 flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
+                    selectedTask.completed 
+                      ? "bg-emerald-100 text-emerald-700 border border-emerald-200" 
+                      : "bg-amber-100 text-amber-800 border border-amber-200"
+                  }`}>
+                    {selectedTask.completed ? "✓ Completada" : "⏳ Pendiente"}
+                  </span>
+
+                  {selectedTask.Class?.date && (
+                    <span className="bg-neutral-100 text-neutral-600 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">
+                      📅 Clase del {new Date(selectedTask.Class.date + "T12:00").toLocaleDateString("es-CL")}
+                    </span>
+                  )}
+                </div>
+
+                <h3 className="text-xl md:text-2xl font-black text-neutral-900 tracking-tight leading-snug">
+                  {selectedTask.title}
+                </h3>
+              </div>
+
+              <button
+                onClick={() => setSelectedTask(null)}
+                className="w-9 h-9 bg-white border border-neutral-200 hover:bg-neutral-100 rounded-full flex items-center justify-center text-neutral-500 hover:text-neutral-900 transition-all flex-shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body Content */}
+            <div className="p-6 md:p-8 overflow-y-auto space-y-6 flex-1 scrollbar-thin">
+              {/* Description */}
+              <div className="space-y-2">
+                <h4 className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">Descripción / Instrucciones</h4>
+                {selectedTask.description ? (
+                  <div className="bg-neutral-50 border border-neutral-100 rounded-2xl p-4 md:p-5">
+                    <RichText text={selectedTask.description} className="text-sm text-neutral-800 font-medium leading-relaxed" />
+                  </div>
+                ) : (
+                  <p className="text-xs text-neutral-400 italic">Sin descripción adicional para esta tarea.</p>
+                )}
+              </div>
+
+              {/* Attached Materials */}
+              {(selectedTask.LibraryContent || selectedTask.LibraryPlaylist) && (
+                <div className="space-y-3 pt-2">
+                  <h4 className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">Material Adjunto para Estudiar</h4>
+                  <div className="space-y-2">
+                    {selectedTask.LibraryContent && (
+                      <div className="bg-violet-50/70 border border-violet-100 rounded-2xl p-4 flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-black text-violet-900 truncate">📖 {selectedTask.LibraryContent.title}</p>
+                          <p className="text-[10px] font-bold text-violet-600 uppercase tracking-wider mt-0.5">
+                            Recurso {selectedTask.LibraryContent.type}
+                          </p>
+                        </div>
+                        {selectedTask.LibraryContent.url && (
+                          <a
+                            href={selectedTask.LibraryContent.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm flex items-center gap-1.5 flex-shrink-0"
+                          >
+                            <span>Abrir</span>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                      </div>
+                    )}
+
+                    {selectedTask.LibraryPlaylist && (
+                      <div className="bg-amber-50/70 border border-amber-100 rounded-2xl p-4 flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-black text-amber-900 truncate">📚 {selectedTask.LibraryPlaylist.title}</p>
+                          <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wider mt-0.5">
+                            Serie de Estudio
+                          </p>
+                        </div>
+                        <Link
+                          href="/dashboard/biblioteca"
+                          className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm flex items-center gap-1.5 flex-shrink-0"
+                        >
+                          <span>Ver Serie</span>
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Progress Bar & Selector */}
+              <div className="space-y-3 pt-4 border-t border-neutral-100">
+                <div className="flex items-center justify-between text-xs font-black">
+                  <span className="text-neutral-400 uppercase tracking-widest text-[10px]">Progreso de la Tarea</span>
+                  <span className={selectedTask.completed || selectedTask.progress === 100 ? "text-emerald-600" : "text-violet-600"}>
+                    {selectedTask.completed ? "100%" : `${selectedTask.progress || 0}%`}
+                  </span>
+                </div>
+
+                <div className="w-full h-2.5 bg-neutral-100 rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      selectedTask.completed || selectedTask.progress === 100 
+                        ? "bg-gradient-to-r from-emerald-400 to-teal-500" 
+                        : "bg-gradient-to-r from-violet-500 to-indigo-500"
+                    }`}
+                    style={{ width: `${selectedTask.completed ? 100 : (selectedTask.progress || 0)}%` }}
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  {[0, 25, 50, 75, 100].map(val => (
+                    <button
+                      type="button"
+                      key={val}
+                      onClick={() => updateTaskProgressInModal(selectedTask, val)}
+                      className={`flex-1 py-2 rounded-xl text-xs font-black transition-all ${
+                        selectedTask.progress === val || (val === 100 && selectedTask.completed)
+                          ? "bg-neutral-900 text-white shadow-sm"
+                          : "bg-neutral-50 text-neutral-600 border border-neutral-200 hover:bg-neutral-100"
+                      }`}
+                    >
+                      {val}%
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Action */}
+            <div className="p-6 border-t border-neutral-100 bg-neutral-50/50 flex gap-3 flex-shrink-0">
+              <button
+                onClick={() => toggleTaskStatus(selectedTask)}
+                className={`w-full py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-md flex items-center justify-center gap-2 ${
+                  selectedTask.completed
+                    ? "bg-neutral-200 text-neutral-700 hover:bg-neutral-300"
+                    : "bg-emerald-600 text-white hover:bg-emerald-700"
+                }`}
+              >
+                {selectedTask.completed ? (
+                  <>
+                    <Circle className="w-4 h-4" />
+                    <span>Marcar como Pendiente</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Marcar como Completada (100%)</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

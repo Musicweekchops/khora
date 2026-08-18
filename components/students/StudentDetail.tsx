@@ -10,6 +10,7 @@ import { Lock, Save, Trash2, Edit3, BookOpen, ExternalLink, Plus, PlayCircle, Fi
 import LastSeenBadge from "@/components/ui/LastSeenBadge"
 import { RichText } from "@/components/ui/RichText"
 import LibraryPickerModal from "@/components/ui/LibraryPickerModal"
+import ReceiptUploader, { ParsedReceiptData } from "@/components/ui/ReceiptUploader"
 
 interface StudentData {
   id: string; user_id: string; teacher_id: string; status: string; modalidad: string; lead_source: string
@@ -19,8 +20,17 @@ interface StudentData {
 }
 
 interface ClassRow { id: string; date: string; start_time: string; end_time: string; status: string; modalidad: string; is_recovery_pending?: boolean }
-interface TaskRow { id: string; title: string; completed: boolean; created_at: string; class_date: string }
-interface PaymentRow { id: string; amount: number; method: string; date: string; created_at: string; notes?: string }
+interface TaskRow { 
+  id: string; 
+  title: string; 
+  description?: string;
+  completed: boolean; 
+  created_at: string; 
+  class_date: string;
+  LibraryContent?: { title: string; url: string; type: string } | null;
+  LibraryPlaylist?: { title: string } | null;
+}
+interface PaymentRow { id: string; amount: number; method: string; date: string; created_at: string; notes?: string; receipt_url?: string | null; transfer_id?: string | null }
 interface NoteRow { id: string; content: string; created_at: string; class_date: string }
 
 export default function StudentDetail({ studentId }: { studentId: string }) {
@@ -28,6 +38,25 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
   const [classes, setClasses] = useState<ClassRow[]>([])
   const [tasks, setTasks] = useState<TaskRow[]>([])
   const [payments, setPayments] = useState<PaymentRow[]>([])
+  const [selectedPaymentIds, setSelectedPaymentIds] = useState<Set<string>>(new Set())
+  const [confirmDeletePayments, setConfirmDeletePayments] = useState<PaymentRow[] | null>(null)
+  const [deletingPayments, setDeletingPayments] = useState(false)
+  const [showAddPaymentModal, setShowAddPaymentModal] = useState(false)
+  const [newPaymentForm, setNewPaymentForm] = useState<{
+    amount: string
+    method: string
+    date: string
+    notes: string
+    receipt_url?: string | null
+    transfer_id?: string | null
+  }>({
+    amount: "",
+    method: "TRANSFER",
+    date: new Date().toISOString().split("T")[0],
+    notes: "",
+    receipt_url: null,
+    transfer_id: null,
+  })
   const [notes, setNotes] = useState<NoteRow[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<"overview" | "schedule" | "classes" | "tasks" | "payments" | "notes" | "materiales">("overview")
@@ -102,19 +131,25 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
     // Tasks
     const { data: tk } = await supabase
       .from("Task")
-      .select("id, title, completed, created_at, Class ( date )")
+      .select("id, title, description, completed, created_at, Class ( date ), LibraryContent ( title, url, type ), LibraryPlaylist ( title )")
       .eq("student_id", studentId)
       .order("created_at", { ascending: false })
 
     if (tk) setTasks(tk.map((t: any) => ({
-      id: t.id, title: t.title, completed: t.completed,
-      created_at: t.created_at, class_date: t.Class?.date ?? "",
+      id: t.id, 
+      title: t.title, 
+      description: t.description || "",
+      completed: t.completed,
+      created_at: t.created_at, 
+      class_date: t.Class?.date ?? "",
+      LibraryContent: t.LibraryContent,
+      LibraryPlaylist: t.LibraryPlaylist
     })))
 
     // Payments
     const { data: py } = await supabase
       .from("Payment")
-      .select("id, amount, method, date, created_at, notes")
+      .select("id, amount, method, date, created_at, notes, receipt_url, transfer_id")
       .eq("student_id", studentId)
       .order("created_at", { ascending: false })
 
@@ -315,6 +350,75 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
 
     const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`
     window.open(whatsappUrl, "_blank")
+  }
+
+  function toggleSelectPayment(id: string) {
+    setSelectedPaymentIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAllPayments() {
+    if (selectedPaymentIds.size === payments.length) {
+      setSelectedPaymentIds(new Set())
+    } else {
+      setSelectedPaymentIds(new Set(payments.map(p => p.id)))
+    }
+  }
+
+  async function handleDeletePayments(paymentsToDelete: PaymentRow[]) {
+    if (paymentsToDelete.length === 0) return
+    setDeletingPayments(true)
+    try {
+      const ids = paymentsToDelete.map(p => p.id)
+      const { error } = await supabase.from("Payment").delete().in("id", ids)
+      if (error) throw error
+
+      toast.success(ids.length === 1 ? "Cobro eliminado exitosamente" : `${ids.length} cobros eliminados exitosamente`)
+      setPayments(prev => prev.filter(p => !ids.includes(p.id)))
+      setSelectedPaymentIds(new Set())
+      setConfirmDeletePayments(null)
+
+      if (studentId) loadAll(studentId)
+    } catch (err: any) {
+      console.error("Error deleting payment:", err)
+      toast.error("Error al eliminar los cobros.")
+    } finally {
+      setDeletingPayments(false)
+    }
+  }
+
+  async function handleCreatePayment() {
+    if (!studentId || !student?.teacher_id || !newPaymentForm.amount) return
+    try {
+      const { error } = await supabase.from("Payment").insert({
+        student_id: studentId,
+        teacher_id: student.teacher_id,
+        amount: parseFloat(newPaymentForm.amount),
+        method: newPaymentForm.method,
+        date: newPaymentForm.date,
+        notes: newPaymentForm.notes || null,
+        receipt_url: newPaymentForm.receipt_url || null,
+        transfer_id: newPaymentForm.transfer_id || null,
+      })
+      if (error) throw error
+      toast.success("Pago registrado exitosamente")
+      setShowAddPaymentModal(false)
+      setNewPaymentForm({
+        amount: "",
+        method: "TRANSFER",
+        date: new Date().toISOString().split("T")[0],
+        notes: "",
+        receipt_url: null,
+        transfer_id: null,
+      })
+      loadAll(studentId)
+    } catch (err: any) {
+      toast.error("Error al registrar pago: " + err.message)
+    }
   }
 
   if (loading) return <div className="animate-pulse space-y-4">{[1,2,3].map(i => <div key={i} className="h-24 bg-white rounded-2xl" />)}</div>
@@ -567,13 +671,27 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
             {tasks.length === 0 ? (
               <div className="bg-white rounded-3xl border p-12 text-center"><span className="text-4xl opacity-30 block mb-3">📝</span><p className="text-neutral-500 font-bold">Sin tareas asignadas</p></div>
             ) : tasks.map(t => (
-              <div key={t.id} className="bg-white rounded-2xl border border-neutral-100 p-5 flex items-center gap-4 group hover:shadow-sm transition-all">
-                <button onClick={() => toggleTask(t.id, t.completed)} className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center transition-all ${t.completed ? "bg-emerald-500 border-emerald-500 text-white" : "border-neutral-300 hover:border-violet-400"}`}>
+              <div key={t.id} className="bg-white rounded-2xl border border-neutral-100 p-5 flex items-start gap-4 group hover:shadow-sm transition-all">
+                <button onClick={() => toggleTask(t.id, t.completed)} className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center transition-all mt-0.5 flex-shrink-0 ${t.completed ? "bg-emerald-500 border-emerald-500 text-white" : "border-neutral-300 hover:border-violet-400"}`}>
                   {t.completed && "✓"}
                 </button>
-                <div className="flex-1">
-                  <p className={`font-bold ${t.completed ? "line-through text-neutral-400" : "text-neutral-900"}`}>{t.title}</p>
-                  {t.class_date && <p className="text-xs text-neutral-400 mt-0.5">Clase del {new Date(t.class_date + "T12:00").toLocaleDateString("es-CL")}</p>}
+                <div className="flex-1 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className={`font-bold text-base ${t.completed ? "line-through text-neutral-400" : "text-neutral-900"}`}>{t.title}</p>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${t.completed ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                      {t.completed ? "Completada" : "Pendiente"}
+                    </span>
+                  </div>
+
+                  {t.description && (
+                    <RichText text={t.description} className="text-xs text-neutral-600 font-medium" />
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-neutral-400 font-medium">
+                    {t.class_date && <span>📅 Clase: {new Date(t.class_date + "T12:00").toLocaleDateString("es-CL")}</span>}
+                    {t.LibraryContent && <span className="bg-violet-50 text-violet-700 px-2 py-0.5 rounded-md text-[10px] font-bold">📖 {t.LibraryContent.title}</span>}
+                    {t.LibraryPlaylist && <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md text-[10px] font-bold">📚 Serie: {t.LibraryPlaylist.title}</span>}
+                  </div>
                 </div>
               </div>
             ))}
@@ -590,6 +708,13 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
               <div className="flex flex-col items-end">
                 <p className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Automatización</p>
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowAddPaymentModal(true)}
+                    className="px-4 py-2 rounded-xl text-xs font-black transition-all bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Registrar Pago</span>
+                  </button>
                   <button
                     onClick={handleCopyPaymentLink}
                     disabled={generatingLink}
@@ -622,6 +747,106 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
                 </div>
               </div>
             </div>
+
+            {/* ADD PAYMENT MODAL */}
+            {showAddPaymentModal && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-900/50 backdrop-blur-sm">
+                <div className="bg-white rounded-3xl max-w-md w-full p-6 md:p-8 shadow-2xl border border-neutral-100 space-y-6 animate-in zoom-in-95 duration-200">
+                  <div className="flex justify-between items-center pb-2 border-b border-neutral-100">
+                    <div>
+                      <h3 className="font-black text-xl text-neutral-900">Registrar Pago</h3>
+                      <p className="text-xs text-neutral-500 font-medium">Alumno: {student.user.name}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddPaymentModal(false)}
+                      className="w-8 h-8 flex items-center justify-center bg-neutral-100 rounded-full text-neutral-500 hover:bg-neutral-200"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <div className="space-y-4">
+                    <ReceiptUploader
+                      currentReceiptUrl={newPaymentForm.receipt_url}
+                      onParsedData={(data: ParsedReceiptData) => {
+                        setNewPaymentForm(p => ({
+                          ...p,
+                          amount: data.amount ? String(data.amount) : p.amount,
+                          date: data.date ? data.date : p.date,
+                          notes: data.notes ? (p.notes ? `${p.notes} · ${data.notes}` : data.notes) : p.notes,
+                          receipt_url: data.receiptUrl !== undefined ? data.receiptUrl : p.receipt_url,
+                          transfer_id: data.transferId !== undefined ? data.transferId : p.transfer_id,
+                        }))
+                      }}
+                    />
+
+                    <div>
+                      <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest block mb-1">Monto ($) *</label>
+                      <input
+                        type="number"
+                        placeholder="Monto pagado"
+                        value={newPaymentForm.amount}
+                        onChange={e => setNewPaymentForm(p => ({ ...p, amount: e.target.value }))}
+                        className="w-full px-4 py-3 border border-neutral-200 rounded-2xl font-bold text-neutral-900 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-all text-sm"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest block mb-1">Método de Pago</label>
+                      <select
+                        value={newPaymentForm.method}
+                        onChange={e => setNewPaymentForm(p => ({ ...p, method: e.target.value }))}
+                        className="w-full px-4 py-3 border border-neutral-200 rounded-2xl font-bold text-neutral-900 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-all text-sm bg-white"
+                      >
+                        <option value="TRANSFER">💸 Transferencia Bancaria</option>
+                        <option value="CASH">💵 Efectivo</option>
+                        <option value="CARD">💳 Tarjeta</option>
+                        <option value="OTHER">⚙️ Otro</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest block mb-1">Fecha de Pago</label>
+                      <input
+                        type="date"
+                        value={newPaymentForm.date}
+                        onChange={e => setNewPaymentForm(p => ({ ...p, date: e.target.value }))}
+                        className="w-full px-4 py-3 border border-neutral-200 rounded-2xl font-bold text-neutral-900 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-all text-sm"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest block mb-1">Notas / Comentarios</label>
+                      <input
+                        type="text"
+                        placeholder="Ej: Transferencia del mes"
+                        value={newPaymentForm.notes}
+                        onChange={e => setNewPaymentForm(p => ({ ...p, notes: e.target.value }))}
+                        className="w-full px-4 py-3 border border-neutral-200 rounded-2xl font-bold text-neutral-900 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-all text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddPaymentModal(false)}
+                      className="flex-1 py-3 bg-neutral-100 text-neutral-700 rounded-2xl text-xs font-bold hover:bg-neutral-200 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCreatePayment}
+                      className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black transition-all shadow-md"
+                    >
+                      Guardar Pago
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* PREVIEW MODAL */}
             {showPreviewModal && (
@@ -656,45 +881,158 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
                 </div>
               </div>
             )}
+            {selectedPaymentIds.size > 0 && (
+              <div className="bg-red-50 border-b border-red-100 p-4 flex items-center justify-between animate-in fade-in duration-200">
+                <div className="flex items-center gap-2 text-red-900 text-xs font-bold">
+                  <span>⚠️</span>
+                  <span>{selectedPaymentIds.size} cobro{selectedPaymentIds.size > 1 ? "s" : ""} seleccionado{selectedPaymentIds.size > 1 ? "s" : ""}</span>
+                </div>
+                <button
+                  onClick={() => setConfirmDeletePayments(payments.filter(p => selectedPaymentIds.has(p.id)))}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black transition-all shadow-sm flex items-center gap-2"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Eliminar Seleccionado{selectedPaymentIds.size > 1 ? "s" : ""} ({selectedPaymentIds.size})</span>
+                </button>
+              </div>
+            )}
+
             {payments.length === 0 ? (
               <div className="p-12 text-center"><span className="text-4xl opacity-30 block mb-3">💰</span><p className="text-neutral-500 font-bold">Sin pagos registrados</p></div>
             ) : (
               <div className="overflow-x-auto scrollbar-thin">
-                <table className="w-full text-sm min-w-[500px] md:min-w-0">
+                <table className="w-full text-sm min-w-[550px] md:min-w-0">
                   <thead>
                     <tr className="border-b border-neutral-100 bg-neutral-50/50 text-[10px] font-bold text-neutral-400 uppercase tracking-widest text-left">
+                      <th className="px-4 py-3 w-10 text-center">
+                        <input
+                          type="checkbox"
+                          checked={payments.length > 0 && selectedPaymentIds.size === payments.length}
+                          onChange={toggleSelectAllPayments}
+                          className="rounded border-neutral-300 text-violet-600 focus:ring-violet-500 cursor-pointer"
+                        />
+                      </th>
                       <th className="px-6 py-3">Fecha</th>
                       <th className="px-6 py-3">Monto</th>
                       <th className="px-6 py-3">Método</th>
                       <th className="px-6 py-3">Notas / Comentarios</th>
+                      <th className="px-4 py-3 text-right">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {payments.map(p => (
-                      <tr key={p.id} className="border-b border-neutral-50 hover:bg-neutral-50/50 transition-colors">
-                        <td className="px-6 py-4 font-bold text-neutral-900 whitespace-nowrap">
-                          {new Date(p.created_at).toLocaleString("es-CL", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })} hs
-                        </td>
-                        <td className="px-6 py-4 font-black text-emerald-600 whitespace-nowrap">
-                          {formatCurrency(p.amount)}
-                        </td>
-                        <td className="px-6 py-4 text-neutral-500 font-medium whitespace-nowrap">
-                          {p.method === "TRANSFER" ? "💸 Transferencia" : p.method === "CASH" ? "💵 Efectivo" : p.method === "CARD" ? "💳 Tarjeta" : p.method === "MERCADOPAGO" ? "💳 Mercado Pago" : p.method ?? "—"}
-                        </td>
-                        <td className="px-6 py-4 text-neutral-600 text-xs">
-                          {p.notes ? (
-                            <div className="bg-neutral-50 border border-neutral-100 rounded-xl p-2.5 max-w-md font-medium text-neutral-600 leading-relaxed shadow-sm flex items-start gap-2">
-                              <span className="text-sm mt-0.5">💬</span>
-                              <span>{p.notes}</span>
+                    {payments.map(p => {
+                      const isSelected = selectedPaymentIds.has(p.id)
+                      return (
+                        <tr 
+                          key={p.id} 
+                          className={`border-b border-neutral-50 transition-colors ${isSelected ? "bg-red-50/40" : "hover:bg-neutral-50/50"}`}
+                        >
+                          <td className="px-4 py-4 text-center">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleSelectPayment(p.id)}
+                              className="rounded border-neutral-300 text-violet-600 focus:ring-violet-500 cursor-pointer"
+                            />
+                          </td>
+                          <td className="px-6 py-4 font-bold text-neutral-900 whitespace-nowrap">
+                            {new Date(p.created_at).toLocaleString("es-CL", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })} hs
+                          </td>
+                          <td className="px-6 py-4 font-black text-emerald-600 whitespace-nowrap">
+                            {formatCurrency(p.amount)}
+                          </td>
+                          <td className="px-6 py-4 text-neutral-500 font-medium whitespace-nowrap">
+                            {p.method === "TRANSFER" ? "💸 Transferencia" : p.method === "CASH" ? "💵 Efectivo" : p.method === "CARD" ? "💳 Tarjeta" : p.method === "MERCADOPAGO" ? "💳 Mercado Pago" : p.method ?? "—"}
+                          </td>
+                          <td className="px-6 py-4 text-neutral-600 text-xs">
+                            <div className="space-y-1.5">
+                              {p.notes ? (
+                                <div className="bg-neutral-50 border border-neutral-100 rounded-xl p-2.5 max-w-md font-medium text-neutral-600 leading-relaxed shadow-sm flex items-start gap-2">
+                                  <span className="text-sm mt-0.5">💬</span>
+                                  <span>{p.notes}</span>
+                                </div>
+                              ) : (
+                                <span className="text-neutral-300 italic">—</span>
+                              )}
+                              {p.receipt_url && (
+                                <div>
+                                  <a
+                                    href={p.receipt_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-50 text-violet-700 hover:bg-violet-100 border border-violet-100 text-[11px] font-bold transition-all shadow-sm"
+                                  >
+                                    🧾 Ver Comprobante
+                                  </a>
+                                </div>
+                              )}
                             </div>
-                          ) : (
-                            <span className="text-neutral-300 italic">—</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="px-4 py-4 text-right">
+                            <button
+                              onClick={() => setConfirmDeletePayments([p])}
+                              title="Eliminar Cobro"
+                              className="p-2 text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all inline-flex items-center justify-center"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {/* CONFIRMATION DELETE MODAL */}
+            {confirmDeletePayments && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-neutral-950/70 backdrop-blur-md animate-in fade-in duration-200">
+                <div className="bg-white rounded-3xl max-w-md w-full p-6 md:p-8 shadow-2xl border border-neutral-100 space-y-6 relative animate-in zoom-in-95 duration-200">
+                  <div className="w-14 h-14 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center border border-red-100 mx-auto">
+                    <Trash2 className="w-7 h-7" />
+                  </div>
+
+                  <div className="text-center space-y-2">
+                    <h3 className="text-xl font-black text-neutral-900 tracking-tight">
+                      {confirmDeletePayments.length === 1 ? "¿Eliminar este cobro?" : `¿Eliminar ${confirmDeletePayments.length} cobros seleccionados?`}
+                    </h3>
+                    <p className="text-sm text-neutral-500 font-medium leading-relaxed">
+                      Esta acción eliminará el registro financiero de forma permanente.
+                    </p>
+                  </div>
+
+                  <div className="bg-neutral-50 border border-neutral-100 rounded-2xl p-4 space-y-2 text-xs font-semibold text-neutral-700 max-h-40 overflow-y-auto scrollbar-thin">
+                    {confirmDeletePayments.map(p => (
+                      <div key={p.id} className="flex justify-between items-center py-1 border-b border-neutral-100 last:border-0">
+                        <span>{new Date(p.created_at).toLocaleDateString("es-CL")}</span>
+                        <span className="font-black text-emerald-600">{formatCurrency(p.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      onClick={() => setConfirmDeletePayments(null)}
+                      disabled={deletingPayments}
+                      className="flex-1 py-3 bg-neutral-100 text-neutral-700 rounded-2xl text-xs font-bold hover:bg-neutral-200 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={() => handleDeletePayments(confirmDeletePayments)}
+                      disabled={deletingPayments}
+                      className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white rounded-2xl text-xs font-black transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {deletingPayments ? (
+                        <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        <Trash2 className="w-4 h-4" />
+                      )}
+                      <span>{deletingPayments ? "Eliminando..." : "Sí, Eliminar"}</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
