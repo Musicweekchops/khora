@@ -151,7 +151,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
       .from("Payment")
       .select("id, amount, method, date, created_at, notes, receipt_url, transfer_id")
       .eq("student_id", studentId)
-      .order("created_at", { ascending: false })
+      .order("date", { ascending: false })
 
     if (py) setPayments(py)
 
@@ -936,7 +936,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
                             />
                           </td>
                           <td className="px-6 py-4 font-bold text-neutral-900 whitespace-nowrap">
-                            {new Date(p.created_at).toLocaleString("es-CL", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })} hs
+                            {p.created_at ? `${new Date(p.created_at).toLocaleString("es-CL", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })} hs` : p.date}
                           </td>
                           <td className="px-6 py-4 font-black text-emerald-600 whitespace-nowrap">
                             {formatCurrency(p.amount)}
