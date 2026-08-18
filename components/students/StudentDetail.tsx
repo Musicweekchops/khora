@@ -782,7 +782,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
                       onParsedData={(data: ParsedReceiptData) => {
                         setNewPaymentForm(p => ({
                           ...p,
-                          amount: data.amount ? String(data.amount) : p.amount,
+                          amount: data.amount != null ? String(data.amount) : p.amount,
                           date: data.date ? data.date : p.date,
                           notes: data.notes ? (p.notes ? `${p.notes} · ${data.notes}` : data.notes) : p.notes,
                           receipt_url: data.receiptUrl !== undefined ? data.receiptUrl : p.receipt_url,

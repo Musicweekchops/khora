@@ -261,7 +261,8 @@ export default function FinancieroPage() {
                     if (!m) return null
                     return {
                       ...m,
-                      amount: data.amount ? String(data.amount) : m.amount,
+                      amount: data.amount != null ? String(data.amount) : m.amount,
+                      date: data.date ? data.date : m.date,
                       notes: data.notes ? (m.notes ? `${m.notes} · ${data.notes}` : data.notes) : m.notes,
                       receipt_url: data.receiptUrl !== undefined ? data.receiptUrl : m.receipt_url,
                       transfer_id: data.transferId !== undefined ? data.transferId : m.transfer_id,

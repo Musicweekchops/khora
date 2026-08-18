@@ -23,92 +23,128 @@ export async function POST(req: Request) {
     const mimeType = file.type || "image/jpeg"
 
     const promptText = `
-Analiza la imagen o PDF de este comprobante de transferencia bancaria (ej. BancoEstado, Banco de Chile, Santander, BCI, Itaú, Mercado Pago, Banco Falabella, Scotiabank, etc.).
+Eres un experto extractor OCR de comprobantes de pago y transferencias bancarias en Chile (BancoEstado, Banco de Chile, Santander, BCI, Itaú, Mercado Pago, Mach, Tenpo, Banco Falabella, Scotiabank, etc.).
 
-Debes extraer y responder ÚNICAMENTE un objeto JSON válido con los siguientes campos sin formato Markdown ni bloques de código extra:
+Examina minuciosamente la imagen adjunta y extrae la información financiera.
+
+Responde ÚNICAMENTE un objeto JSON válido con este formato exacto:
 {
-  "amount": <monto numérico entero sin puntos ni símbolos de moneda, ej: 90000>,
-  "date": <fecha en formato YYYY-MM-DD, ej: "2026-08-17">,
-  "bank": <nombre del banco emisor o receptor en texto simple, ej: "BancoEstado">,
-  "transfer_id": <código de transacción, número de comprobante o folio si existe, o null si no se lee>,
-  "sender_name": <nombre de la persona que realiza la transferencia si aparece, o null>
+  "amount": 90000,
+  "date": "2026-08-17",
+  "bank": "BancoEstado",
+  "transfer_id": "19482752",
+  "sender_name": "Nombre Remitente"
 }
 
-Reglas estrictas:
-- Si el monto dice "$90.000" o "$ 90000 CLP", devuélvelo como número 90000.
-- Si la fecha dice "17 de Agosto de 2026" o "17/08/2026", conviértela siempre a "2026-08-17".
-- Si no logras determinar un valor con certeza, usa null en ese campo.
+Instrucciones para cada campo:
+1. "amount": Busca la cifra de dinero transferido. Generalmente es el número más grande en pantalla (ej: $90.000, $ 90.000, 90000 CLP, Monto: 90.000). Retórnalo como NÚMERO ENTERO SIN PUNTOS NI SIGNOS DE MONEDA (ej: 90000).
+2. "date": Busca la fecha de la transacción (ej: 17/08/2026, 17-08-2026, 17 de Agosto 2026). Retórnala SIEMPRE en formato ISO "YYYY-MM-DD" (ej: "2026-08-17"). Si solo hay fecha actual u hoy, usa la fecha visible.
+3. "bank": Nombre del banco o institución (ej: BancoEstado, Banco de Chile, Santander, BCI, Mercado Pago, Mach, Tenpo, Banco Falabella).
+4. "transfer_id": N° de comprobante, número de operación, ID de transacción, folio o referencia.
+5. "sender_name": Nombre de quien envía la transferencia si está visible.
+
+Si algún campo no es visible en la imagen, asigna null a dicho campo. No agregues explicaciones fuera del JSON.
 `
 
-    // Lista de modelos a intentar en orden de preferencia
     const candidateModels = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-1.5-flash"]
     let response: Response | null = null
     let usedModel = ""
 
     for (const model of candidateModels) {
-      const apiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  {
-                    inline_data: {
-                      mime_type: mimeType,
-                      data: base64Data,
+      try {
+        const apiRes = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    {
+                      inline_data: {
+                        mime_type: mimeType,
+                        data: base64Data,
+                      },
                     },
-                  },
-                  {
-                    text: promptText,
-                  },
-                ],
+                    {
+                      text: promptText,
+                    },
+                  ],
+                },
+              ],
+              generationConfig: {
+                response_mime_type: "application/json",
               },
-            ],
-          }),
-        }
-      )
+            }),
+          }
+        )
 
-      if (apiRes.ok) {
-        response = apiRes
-        usedModel = model
-        break
-      } else {
-        const errText = await apiRes.text()
-        console.warn(`[parse-receipt] Model ${model} returned ${apiRes.status}:`, errText)
+        if (apiRes.ok) {
+          response = apiRes
+          usedModel = model
+          break
+        } else {
+          const errText = await apiRes.text()
+          console.warn(`[parse-receipt] Model ${model} returned ${apiRes.status}:`, errText)
+        }
+      } catch (e: any) {
+        console.warn(`[parse-receipt] Error fetching model ${model}:`, e.message)
       }
     }
 
     if (!response || !response.ok) {
-      return NextResponse.json({ error: "Error al comunicarse con el modelo de visión de Gemini API." }, { status: 500 })
+      return NextResponse.json({ error: "Error al comunicarse con la API de Gemini." }, { status: 500 })
     }
 
     const data = await response.json()
     const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ""
 
-    // Clean JSON response from Gemini
+    // Clean JSON string
     const cleanedText = rawText.replace(/```json/g, "").replace(/```/g, "").trim()
     let parsedJson: any = {}
 
     try {
       parsedJson = JSON.parse(cleanedText)
     } catch (e) {
-      console.warn("[parse-receipt] Failed to parse JSON from Gemini response:", rawText)
+      console.warn("[parse-receipt] JSON parse failed, raw string:", rawText)
+    }
+
+    // Process amount robustly
+    let finalAmount: number | null = null
+    if (typeof parsedJson.amount === "number" && !isNaN(parsedJson.amount)) {
+      finalAmount = parsedJson.amount
+    } else if (parsedJson.amount) {
+      const cleanedAmount = String(parsedJson.amount).replace(/\D/g, "")
+      if (cleanedAmount) finalAmount = parseInt(cleanedAmount, 10)
+    }
+
+    // Process date robustly (format YYYY-MM-DD)
+    let finalDate: string | null = null
+    if (typeof parsedJson.date === "string" && parsedJson.date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      finalDate = parsedJson.date
+    } else if (typeof parsedJson.date === "string") {
+      // Try to parse DD/MM/YYYY
+      const parts = parsedJson.date.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/)
+      if (parts) {
+        const day = parts[1].padStart(2, "0")
+        const month = parts[2].padStart(2, "0")
+        const year = parts[3]
+        finalDate = `${year}-${month}-${day}`
+      }
     }
 
     return NextResponse.json({
       success: true,
       modelUsed: usedModel,
-      amount: typeof parsedJson.amount === "number" ? parsedJson.amount : (parsedJson.amount ? parseInt(String(parsedJson.amount).replace(/\D/g, ""), 10) : null),
-      date: typeof parsedJson.date === "string" ? parsedJson.date : null,
+      amount: finalAmount,
+      date: finalDate,
       bank: parsedJson.bank || null,
       transfer_id: parsedJson.transfer_id ? String(parsedJson.transfer_id) : null,
       sender_name: parsedJson.sender_name || null,
     })
   } catch (err: any) {
-    console.error("[parse-receipt] Server error:", err)
+    console.error("[parse-receipt] Internal error:", err)
     return NextResponse.json({ error: err.message || "Error interno del servidor" }, { status: 500 })
   }
 }
