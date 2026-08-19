@@ -8,11 +8,15 @@ import { formatTime } from "@/lib/utils"
 import AvailabilitySettings from "@/components/agenda/AvailabilitySettings"
 import { checkTeacherConflict } from "@/lib/availability"
 import { toast } from "sonner"
+import { calculateClassCounters, formatSpanishShortDate } from "@/lib/classCounter"
 
 interface CalendarClass {
   id: string; date: string; start_time: string; end_time: string
   status: string; modalidad: string; student_name: string
+  student_id?: string | null
   is_booking?: boolean; is_recurring?: boolean; is_trial?: boolean; is_recovery_pending?: boolean;
+  is_recovery?: boolean; original_class_date?: string | null;
+  counterLabel?: string; recoveryLabel?: string;
 }
 
 const HOURS = Array.from({ length: 14 }, (_, i) => i + 7) // 7am to 20pm
@@ -162,7 +166,7 @@ export default function AgendaPage() {
       // Load actual classes
       const { data: classData, error: classErr } = await supabase
         .from("Class")
-        .select("id, date, start_time, end_time, status, modalidad, is_recurring, booking_id, is_recovery_pending, StudentProfile ( status, User ( name ) )")
+        .select("id, date, start_time, end_time, status, modalidad, is_recurring, booking_id, is_recovery_pending, is_recovery, original_class_date, student_id, StudentProfile ( status, User ( name ) )")
         .eq("teacher_id", profile!.teacherProfileId!)
         .gte("date", start)
         .lte("date", end)
@@ -170,6 +174,9 @@ export default function AgendaPage() {
         .order("start_time")
 
       if (classErr) console.error("[Agenda] Error classes:", classErr)
+
+      // Calculate class counters for all classes in range
+      const countersMap = calculateClassCounters(classData || [])
 
       // Load pending bookings
       const { data: bookingData, error: bookErr } = await supabase
@@ -185,14 +192,22 @@ export default function AgendaPage() {
 
       if (bookErr) console.error("[Agenda] Error bookings:", bookErr)
 
-      const formattedClasses = (classData || []).map((c: any) => ({
-        id: c.id, date: c.date, start_time: c.start_time, end_time: c.end_time,
-        status: c.status, modalidad: c.modalidad, is_recurring: !!c.is_recurring,
-        is_recovery_pending: !!c.is_recovery_pending,
-        student_name: c.StudentProfile?.User?.name ?? "Sin asignar",
-        is_booking: false,
-        is_trial: !!c.booking_id || c.StudentProfile?.status === "TRIAL"
-      }))
+      const formattedClasses = (classData || []).map((c: any) => {
+        const enriched = countersMap.get(c.id)
+        return {
+          id: c.id, date: c.date, start_time: c.start_time, end_time: c.end_time,
+          status: c.status, modalidad: c.modalidad, is_recurring: !!c.is_recurring,
+          is_recovery_pending: !!c.is_recovery_pending,
+          is_recovery: !!c.is_recovery,
+          original_class_date: c.original_class_date,
+          student_id: c.student_id,
+          student_name: c.StudentProfile?.User?.name ?? "Sin asignar",
+          is_booking: false,
+          is_trial: !!c.booking_id || c.StudentProfile?.status === "TRIAL",
+          counterLabel: enriched?.counterLabel,
+          recoveryLabel: enriched?.recoveryLabel,
+        }
+      })
 
       const formattedBookings = (bookingData || []).map((b: any) => ({
         id: b.id, date: b.date, start_time: b.start_time, end_time: b.end_time,
@@ -701,9 +716,17 @@ export default function AgendaPage() {
                                   }`}
                               >
                                 <div className="flex items-start justify-between gap-1 leading-tight">
-                                  <p className="font-black truncate pr-4">{cls.student_name}</p>
+                                  <p className="font-black truncate pr-1">
+                                    {cls.student_name}
+                                    {cls.counterLabel && (
+                                      <span className="ml-1 text-[8px] bg-violet-200/90 text-violet-900 px-1 py-0.5 rounded font-black">
+                                        {cls.counterLabel}
+                                      </span>
+                                    )}
+                                  </p>
                                   <div className="flex items-center gap-0.5 flex-shrink-0">
-                                    {cls.is_recovery_pending && <span className="text-[9px]" title="Clase marcada como recuperación pendiente">🔄</span>}
+                                    {(cls.is_recovery || cls.original_class_date) && <span className="text-[9px]" title={`Recuperación del día ${cls.original_class_date}`}>🔄</span>}
+                                    {!cls.is_recovery && cls.is_recovery_pending && <span className="text-[9px]" title="Clase marcada como recuperación pendiente">⚠️</span>}
                                     {cls.is_recurring && <span className="text-[9px] opacity-70" title="Clase recurrente">↻</span>}
                                   </div>
                                 </div>
@@ -935,9 +958,21 @@ export default function AgendaPage() {
                       >
                         <div className={`rounded-[24px] border p-4 shadow-sm transition-all flex items-center justify-between gap-4 cursor-pointer hover:shadow-md ${cardBg}`}>
                           <div className="min-w-0 flex-1">
-                            <h4 className="font-black text-sm md:text-base truncate flex items-center gap-1">
+                            <h4 className="font-black text-sm md:text-base truncate flex items-center gap-1.5 flex-wrap">
                               <span>{cls.student_name}</span>
-                              {cls.is_recovery_pending && <span className="text-xs" title="Recuperación pendiente">🔄</span>}
+                              {cls.counterLabel && (
+                                <span className="px-2 py-0.5 rounded-md bg-white/80 text-violet-700 text-[10px] font-black shadow-xs">
+                                  {cls.counterLabel}
+                                </span>
+                              )}
+                              {(cls.is_recovery || cls.original_class_date) && (
+                                <span className="text-[10px] text-amber-800 font-bold bg-amber-200/80 px-1.5 py-0.5 rounded-md">
+                                  🔄 Rec. {formatSpanishShortDate(cls.original_class_date || "")}
+                                </span>
+                              )}
+                              {!cls.is_recovery && cls.is_recovery_pending && (
+                                <span className="text-xs" title="Recuperación pendiente">⚠️</span>
+                              )}
                             </h4>
                             <p className="text-[10px] font-bold opacity-75 uppercase tracking-wider mt-1 flex items-center gap-1.5">
                               <span>🕒 {formatTime(cls.start_time)} - {formatTime(cls.end_time)}</span>

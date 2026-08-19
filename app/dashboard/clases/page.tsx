@@ -5,6 +5,7 @@ import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/context/AuthContext"
 import { formatDate, formatTime } from "@/lib/utils"
+import { calculateClassCounters, formatSpanishShortDate } from "@/lib/classCounter"
 
 interface ClassRow {
   id: string
@@ -14,7 +15,12 @@ interface ClassRow {
   status: string
   modalidad: string
   student_name: string
+  student_id?: string
   is_recovery_pending?: boolean
+  is_recovery?: boolean
+  original_class_date?: string | null
+  counterLabel?: string
+  recoveryLabel?: string
 }
 
 export default function ClasesPage() {
@@ -34,16 +40,20 @@ export default function ClasesPage() {
     setLoading(true)
     const { data, error } = await supabase
       .from("Class")
-      .select(`id, date, start_time, end_time, status, modalidad, is_recovery_pending, StudentProfile(User(name))`)
+      .select(`id, date, start_time, end_time, status, modalidad, is_recovery_pending, is_recovery, original_class_date, student_id, StudentProfile(User(name))`)
       .eq("teacher_id", teacherId)
-      .order("date", { ascending: true }) // CRONOLÓGICO
-      .limit(50)
+      .order("date", { ascending: true })
+      .limit(100)
 
     if (!error && data) {
+      const countersMap = calculateClassCounters(data)
+
       setClasses(data.map((c: any) => {
         const studentName = Array.isArray(c.StudentProfile?.User)
           ? c.StudentProfile?.User[0]?.name
           : c.StudentProfile?.User?.name
+
+        const enriched = countersMap.get(c.id)
 
         return {
           id: c.id,
@@ -53,7 +63,12 @@ export default function ClasesPage() {
           status: c.status ?? "SCHEDULED",
           modalidad: c.modalidad ?? "online",
           student_name: studentName ?? "Sin asignar",
-          is_recovery_pending: !!c.is_recovery_pending
+          student_id: c.student_id,
+          is_recovery_pending: !!c.is_recovery_pending,
+          is_recovery: !!c.is_recovery,
+          original_class_date: c.original_class_date,
+          counterLabel: enriched?.counterLabel,
+          recoveryLabel: enriched?.recoveryLabel
         }
       }))
     }
@@ -64,16 +79,20 @@ export default function ClasesPage() {
     setLoading(true)
     const { data, error } = await supabase
       .from("Class")
-      .select(`id, date, start_time, end_time, status, modalidad, is_recovery_pending, TeacherProfile(User(name))`)
+      .select(`id, date, start_time, end_time, status, modalidad, is_recovery_pending, is_recovery, original_class_date, student_id, TeacherProfile(User(name))`)
       .eq("student_id", studentId)
-      .order("date", { ascending: true }) // CRONOLÓGICO: de la más próxima hacia adelante
-      .limit(50)
+      .order("date", { ascending: true })
+      .limit(100)
 
     if (!error && data) {
+      const countersMap = calculateClassCounters(data)
+
       setClasses(data.map((c: any) => {
         const teacherName = Array.isArray(c.TeacherProfile?.User) 
           ? c.TeacherProfile?.User[0]?.name 
           : c.TeacherProfile?.User?.name
+
+        const enriched = countersMap.get(c.id)
         
         return {
           id: c.id,
@@ -83,7 +102,12 @@ export default function ClasesPage() {
           status: c.status ?? "SCHEDULED",
           modalidad: c.modalidad ?? "online",
           student_name: teacherName ? `Prof. ${teacherName}` : "Prof. Desconocido",
-          is_recovery_pending: !!c.is_recovery_pending
+          student_id: c.student_id,
+          is_recovery_pending: !!c.is_recovery_pending,
+          is_recovery: !!c.is_recovery,
+          original_class_date: c.original_class_date,
+          counterLabel: enriched?.counterLabel,
+          recoveryLabel: enriched?.recoveryLabel
         }
       }))
     }
@@ -99,7 +123,6 @@ export default function ClasesPage() {
 
   // Agrupar clases por mes
   const groupedClasses = classes.reduce((acc, currentClass) => {
-    // Formato de fecha para el título (ej: "Agosto 2026")
     const dateObj = new Date(currentClass.date + "T12:00")
     const monthYear = dateObj.toLocaleDateString("es-CL", { month: "long", year: "numeric" })
     const capitalizedMonth = monthYear.charAt(0).toUpperCase() + monthYear.slice(1)
@@ -144,26 +167,36 @@ export default function ClasesPage() {
                 {monthClasses.map(c => (
                   <Link key={c.id} href={`/dashboard/clases/detalles?id=${c.id}`}>
                     <div className={`rounded-2xl border p-4 md:p-5 flex items-center gap-4 md:gap-5 hover:shadow-md transition-all group cursor-pointer ${
-                      c.is_recovery_pending
+                      c.is_recovery_pending || c.is_recovery
                         ? "bg-amber-50/70 border-amber-200 hover:border-amber-400"
                         : "bg-white border-neutral-100 hover:border-violet-200"
                     }`}>
                       <div className={`w-14 h-14 md:w-16 md:h-16 rounded-xl md:rounded-2xl flex flex-col items-center justify-center border flex-shrink-0 ${
-                        c.is_recovery_pending
+                        c.is_recovery_pending || c.is_recovery
                           ? "bg-gradient-to-br from-amber-100 to-amber-200 border-amber-300 text-amber-950"
                           : "bg-gradient-to-br from-violet-50 to-violet-100 border-violet-100/50 text-violet-900"
                       }`}>
-                        <span className={`text-[9px] font-black uppercase tracking-widest ${c.is_recovery_pending ? "text-amber-800" : "text-violet-600"}`}>
+                        <span className={`text-[9px] font-black uppercase tracking-widest ${c.is_recovery_pending || c.is_recovery ? "text-amber-800" : "text-violet-600"}`}>
                           {new Date(c.date + "T12:00").toLocaleDateString("es-CL", { weekday: "short" })}
                         </span>
                         <span className="text-lg md:text-xl font-black leading-none mt-0.5">{new Date(c.date + "T12:00").getDate()}</span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-bold text-neutral-900 group-hover:text-violet-600 transition-colors text-base md:text-lg truncate">{c.student_name}</p>
-                          {c.is_recovery_pending && (
+                          {c.counterLabel && (
+                            <span className="px-2 py-0.5 rounded-lg bg-violet-100 text-violet-800 text-[10px] font-black">
+                              {c.counterLabel}
+                            </span>
+                          )}
+                          {(c.is_recovery || c.original_class_date) && (
                             <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300 flex-shrink-0">
-                              🔄 Recuperación
+                              🔄 Rec. del día {formatSpanishShortDate(c.original_class_date || "")}
+                            </span>
+                          )}
+                          {!c.is_recovery && c.is_recovery_pending && (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300 flex-shrink-0">
+                              ⚠️ Pendiente Recuperación
                             </span>
                           )}
                         </div>

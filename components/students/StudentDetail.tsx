@@ -12,6 +12,9 @@ import { RichText } from "@/components/ui/RichText"
 import LibraryPickerModal from "@/components/ui/LibraryPickerModal"
 import ReceiptUploader, { ParsedReceiptData } from "@/components/ui/ReceiptUploader"
 
+import StudentClassReportModal from "@/components/students/StudentClassReportModal"
+import { calculateClassCounters, formatSpanishShortDate } from "@/lib/classCounter"
+
 interface StudentData {
   id: string; user_id: string; teacher_id: string; status: string; modalidad: string; lead_source: string
   preferred_day: string; preferred_time: string; emergency_contact: string; emergency_phone: string
@@ -19,7 +22,17 @@ interface StudentData {
   user: { name: string; email: string; phone: string }
 }
 
-interface ClassRow { id: string; date: string; start_time: string; end_time: string; status: string; modalidad: string; is_recovery_pending?: boolean }
+interface ClassRow { 
+  id: string; 
+  date: string; 
+  start_time: string; 
+  end_time: string; 
+  status: string; 
+  modalidad: string; 
+  is_recovery_pending?: boolean;
+  is_recovery?: boolean;
+  original_class_date?: string | null;
+}
 interface TaskRow { 
   id: string; 
   title: string; 
@@ -57,6 +70,8 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
     receipt_url: null,
     transfer_id: null,
   })
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [enrichedMap, setEnrichedMap] = useState<Map<string, any>>(new Map())
   const [notes, setNotes] = useState<NoteRow[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<"overview" | "schedule" | "classes" | "tasks" | "payments" | "notes" | "materiales">("overview")
@@ -122,11 +137,15 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
     // Classes
     const { data: cl } = await supabase
       .from("Class")
-      .select("id, date, start_time, end_time, status, modalidad, is_recovery_pending")
+      .select("id, date, start_time, end_time, status, modalidad, is_recovery_pending, is_recovery, original_class_date")
       .eq("student_id", studentId)
       .order("date", { ascending: false })
 
-    if (cl) setClasses(cl)
+    if (cl) {
+      setClasses(cl)
+      const counters = calculateClassCounters(cl)
+      setEnrichedMap(counters)
+    }
 
     // Tasks
     const { data: tk } = await supabase
@@ -160,7 +179,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
         .select("id, amount, method, date, created_at, notes")
         .eq("student_id", studentId)
         .order("date", { ascending: false })
-      py = fallback.data
+      py = (fallback.data || []).map((p: any) => ({ ...p, receipt_url: null, transfer_id: null }))
     }
 
     if (py) setPayments(py)
@@ -392,7 +411,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
       setSelectedPaymentIds(new Set())
       setConfirmDeletePayments(null)
 
-      if (studentId) loadAll(studentId)
+      if (studentId) loadAll()
     } catch (err: any) {
       console.error("Error deleting payment:", err)
       toast.error("Error al eliminar los cobros.")
@@ -425,7 +444,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
         receipt_url: null,
         transfer_id: null,
       })
-      loadAll(studentId)
+      loadAll()
     } catch (err: any) {
       toast.error("Error al registrar pago: " + err.message)
     }
@@ -547,6 +566,14 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
                 <span className="text-base leading-none">💬</span>
                 <span className="hidden sm:inline">Cobrar por WhatsApp</span>
               </button>
+              <button
+                onClick={() => setShowReportModal(true)}
+                className="px-3 py-2 md:px-4 md:py-2.5 rounded-xl text-xs md:text-sm font-bold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-md shadow-purple-900/10 transition-all flex items-center gap-2"
+                title="Ver y exportar reporte completo de Clases vs. Pagos"
+              >
+                <FileText className="w-4 h-4" />
+                <span className="hidden sm:inline">Reporte Clases vs. Pagos</span>
+              </button>
               <button 
                 onClick={handleResetPassword}
                 title="Restablecer Contraseña"
@@ -643,32 +670,49 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
               <div className="overflow-x-auto scrollbar-thin">
                 <table className="w-full text-sm min-w-[600px] md:min-w-0">
                 <thead><tr className="border-b border-neutral-100 bg-neutral-50/50">
+                  <th className="text-left px-6 py-4 text-xs font-bold text-neutral-400 uppercase tracking-widest">N° Clase</th>
                   <th className="text-left px-6 py-4 text-xs font-bold text-neutral-400 uppercase tracking-widest">Fecha</th>
                   <th className="text-left px-6 py-4 text-xs font-bold text-neutral-400 uppercase tracking-widest">Horario</th>
                   <th className="text-left px-6 py-4 text-xs font-bold text-neutral-400 uppercase tracking-widest">Modalidad</th>
                   <th className="text-left px-6 py-4 text-xs font-bold text-neutral-400 uppercase tracking-widest">Estado</th>
                 </tr></thead>
                 <tbody>
-                  {classes.map(c => (
-                    <tr key={c.id} className={`border-b border-neutral-50 cursor-pointer transition-colors ${c.is_recovery_pending ? "bg-amber-50/60 hover:bg-amber-100/60" : "hover:bg-violet-50/30"}`} onClick={() => window.location.href = `/dashboard/clases/detalles?id=${c.id}`}>
-                      <td className="px-6 py-4 font-bold text-neutral-900 flex items-center gap-2">
-                        <span>{new Date(c.date + "T12:00").toLocaleDateString("es-CL", { weekday: "short", day: "numeric", month: "short" })}</span>
-                        {c.is_recovery_pending && (
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300">
-                            🔄 Recuperación
+                  {classes.map(c => {
+                    const enriched = enrichedMap.get(c.id)
+                    const counter = enriched?.counterLabel || "Clase"
+                    const isRecovery = c.is_recovery || Boolean(c.original_class_date)
+
+                    return (
+                      <tr key={c.id} className={`border-b border-neutral-50 cursor-pointer transition-colors ${c.is_recovery_pending ? "bg-amber-50/60 hover:bg-amber-100/60" : "hover:bg-violet-50/30"}`} onClick={() => window.location.href = `/dashboard/clases/detalles?id=${c.id}`}>
+                        <td className="px-6 py-4 font-black text-violet-600">
+                          <span className="px-2.5 py-1 rounded-xl bg-violet-50 border border-violet-100 text-xs font-black">
+                            {counter}
                           </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-neutral-600">{formatTime(c.start_time)} – {formatTime(c.end_time)}</td>
-                      <td className="px-6 py-4 text-neutral-500">{c.modalidad === "online" ? "📹 Virtual" : "🏠 Presencial"}</td>
-                      <td className="px-6 py-4">
-                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${
-                          c.status === "COMPLETED" ? "bg-emerald-100 text-emerald-700" : c.status === "CANCELLED" ? "bg-red-100 text-red-600" : "bg-sky-100 text-sky-700"
-                        }`}>{c.status === "COMPLETED" ? "Completada" : c.status === "CANCELLED" ? "Cancelada" : "Programada"}</span>
-                      </td>
-                      <td className="px-2 text-neutral-300">→</td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="px-6 py-4 font-bold text-neutral-900 flex flex-col justify-center">
+                          <span>{new Date(c.date + "T12:00").toLocaleDateString("es-CL", { weekday: "short", day: "numeric", month: "short" })}</span>
+                          {isRecovery && (
+                            <span className="text-[10px] text-amber-700 font-bold mt-0.5">
+                              🔄 Rec. del día {formatSpanishShortDate(c.original_class_date || "")}
+                            </span>
+                          )}
+                          {!isRecovery && c.is_recovery_pending && (
+                            <span className="text-[10px] text-amber-700 font-bold mt-0.5">
+                              ⚠️ Pendiente por recuperar
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-neutral-600">{formatTime(c.start_time)} – {formatTime(c.end_time)}</td>
+                        <td className="px-6 py-4 text-neutral-500">{c.modalidad === "online" ? "📹 Virtual" : "🏠 Presencial"}</td>
+                        <td className="px-6 py-4">
+                          <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${
+                            c.status === "COMPLETED" ? "bg-emerald-100 text-emerald-700" : c.status === "CANCELLED" ? "bg-red-100 text-red-600" : "bg-sky-100 text-sky-700"
+                          }`}>{c.status === "COMPLETED" ? "Completada" : c.status === "CANCELLED" ? "Cancelada" : "Programada"}</span>
+                        </td>
+                        <td className="px-2 text-neutral-300">→</td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1318,6 +1362,13 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
           </div>
         </div>
       )}
+
+      {/* Modal Reporte Clases vs Pagos */}
+      <StudentClassReportModal
+        studentId={studentId}
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+      />
     </div>
   )
 }
