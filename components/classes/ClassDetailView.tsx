@@ -33,6 +33,7 @@ import VideoPlayer from "@/components/ui/VideoPlayer"
 import { useToast } from "@/components/ui/Toast"
 import LibraryPickerModal from "@/components/ui/LibraryPickerModal"
 import { checkTeacherConflict, getAvailableSlots, addMinutes } from "@/lib/availability"
+import { logClassEvent } from "@/lib/classLogger"
 
 interface ClassData {
   id: string; date: string; start_time: string; end_time: string
@@ -826,35 +827,18 @@ export default function ClassDetailView({ classId }: { classId: string }) {
         )
         toast(`¡Reprogramación exitosa! Se actualizaron ${res.created} clases futuras.`, "success")
 
-        // Notify teacher if student rescheduled
-        if (profile?.role === "STUDENT") {
-          supabase.functions.invoke("notify-teacher-push", {
-            body: {
-              classId,
-              type: "RESCHEDULED",
-              originalDate,
-              originalStartTime,
-              newDate: editForm.date,
-              newStartTime: editForm.start_time
-            }
-          }).catch(err => console.error("Error sending push notification:", err))
-
-          if (cls.teacher_email) {
-            supabase.functions.invoke("send-email", {
-              body: {
-                to: cls.teacher_email,
-                type: "TEACHER_CLASS_RESCHEDULED",
-                params: {
-                  studentName: cls.student_name,
-                  teacherName: cls.teacher_name || "Profesor",
-                  originalDate: new Date(originalDate + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" }),
-                  originalTime: originalStartTime,
-                  newDate: new Date(editForm.date + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" }),
-                  newTime: editForm.start_time,
-                  modalidad: editForm.modalidad === "online" ? "Virtual (📹)" : "Presencial (🏠) (Esta y todas las futuras clases)",
-                }
-              }
-            }).catch(err => console.error("Error sending reschedule email to teacher:", err))
+        // Notify student & teacher of recurring reschedule
+        if (cls) {
+          notifyReschedule(cls, originalDate, originalStartTime, editForm.date, editForm.start_time, editForm.modalidad)
+          if (cls.student_id) {
+            logClassEvent({
+              student_id: cls.student_id,
+              class_id: cls.id,
+              teacher_id: cls.teacher_id,
+              action_type: "RESCHEDULED",
+              description: `Horario recurrente reprogramado del ${originalDate} ${originalStartTime.slice(0, 5)} al ${editForm.date} ${editForm.start_time.slice(0, 5)}`,
+              metadata: { originalDate, originalStartTime, newDate: editForm.date, newStartTime: editForm.start_time, is_recurring: true }
+            })
           }
         }
       } catch (err: any) {
@@ -876,41 +860,35 @@ export default function ClassDetailView({ classId }: { classId: string }) {
       } else {
         toast("Clase guardada exitosamente", "success")
 
-        // If status changed to CANCELLED, notify student and teacher
+        // 1. Notificar cancelación si cambió el estado a CANCELLED
         const statusChangedToCancelled = editForm.status === "CANCELLED" && cls.status !== "CANCELLED"
-        if (statusChangedToCancelled) {
-          notifyCancellation({ ...cls, date: editForm.date, start_time: editForm.start_time })
+        if (statusChangedToCancelled && cls) {
+          notifyCancellation({ ...cls, date: editForm.date, start_time: editForm.start_time, status: "CANCELLED" })
+          if (cls.student_id) {
+            logClassEvent({
+              student_id: cls.student_id,
+              class_id: cls.id,
+              teacher_id: cls.teacher_id,
+              action_type: "STATUS_CHANGED",
+              description: `Clase marcada como cancelada para el ${editForm.date}`,
+              metadata: { status: "CANCELLED", date: editForm.date }
+            })
+          }
         }
 
-        // Notify teacher if student rescheduled
-        if (profile?.role === "STUDENT") {
-          supabase.functions.invoke("notify-teacher-push", {
-            body: {
-              classId,
-              type: "RESCHEDULED",
-              originalDate,
-              originalStartTime,
-              newDate: editForm.date,
-              newStartTime: editForm.start_time
-            }
-          }).catch(err => console.error("Error sending push notification:", err))
-
-          if (cls.teacher_email) {
-            supabase.functions.invoke("send-email", {
-              body: {
-                to: cls.teacher_email,
-                type: "TEACHER_CLASS_RESCHEDULED",
-                params: {
-                  studentName: cls.student_name,
-                  teacherName: cls.teacher_name || "Profesor",
-                  originalDate: new Date(originalDate + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" }),
-                  originalTime: originalStartTime,
-                  newDate: new Date(editForm.date + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" }),
-                  newTime: editForm.start_time,
-                  modalidad: editForm.modalidad === "online" ? "Virtual (📹)" : "Presencial (🏠)",
-                }
-              }
-            }).catch(err => console.error("Error sending reschedule email to teacher:", err))
+        // 2. Notificar reprogramación si cambió fecha u hora
+        const isRescheduled = editForm.date !== originalDate || editForm.start_time !== originalStartTime
+        if (isRescheduled && cls) {
+          notifyReschedule(cls, originalDate, originalStartTime, editForm.date, editForm.start_time, editForm.modalidad)
+          if (cls.student_id) {
+            logClassEvent({
+              student_id: cls.student_id,
+              class_id: cls.id,
+              teacher_id: cls.teacher_id,
+              action_type: "RESCHEDULED",
+              description: `Clase reprogramada del ${originalDate} ${originalStartTime.slice(0, 5)} al ${editForm.date} ${editForm.start_time.slice(0, 5)}`,
+              metadata: { originalDate, originalStartTime, newDate: editForm.date, newStartTime: editForm.start_time }
+            })
           }
         }
       }
@@ -922,16 +900,113 @@ export default function ClassDetailView({ classId }: { classId: string }) {
     await loadAll()
   }
 
+  async function notifyReschedule(
+    classData: ClassData, 
+    originalDate: string, 
+    originalTime: string, 
+    newDate: string, 
+    newTime: string,
+    modalidad: string
+  ) {
+    if (!classData.student_id) return
+
+    const friendlyOrigDate = new Date(originalDate + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
+    const friendlyNewDate = new Date(newDate + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
+    const teacherName = classData.teacher_name || profile?.name || "Tu profesor"
+    const studentName = classData.student_name || "Alumno"
+    const modalLabel = modalidad === "online" ? "Virtual (📹)" : "Presencial (🏠)"
+
+    const promises = []
+
+    // 1. Correo al ALUMNO
+    if (classData.student_email) {
+      promises.push(
+        supabase.functions.invoke("send-email", {
+          body: {
+            to: classData.student_email,
+            type: "STUDENT_CLASS_RESCHEDULED",
+            params: {
+              studentName: studentName,
+              teacherName: teacherName,
+              date: friendlyNewDate,
+              time: newTime.slice(0, 5),
+              modalidad: modalLabel,
+              classId: classData.id
+            }
+          }
+        }).catch(err => console.error("Error sending reschedule email to student:", err))
+      )
+    }
+
+    // 2. Correo al PROFESOR
+    if (classData.teacher_email) {
+      promises.push(
+        supabase.functions.invoke("send-email", {
+          body: {
+            to: classData.teacher_email,
+            type: "TEACHER_CLASS_RESCHEDULED",
+            params: {
+              studentName: studentName,
+              teacherName: teacherName,
+              originalDate: friendlyOrigDate,
+              originalTime: originalTime.slice(0, 5),
+              newDate: friendlyNewDate,
+              newTime: newTime.slice(0, 5),
+              modalidad: modalLabel
+            }
+          }
+        }).catch(err => console.error("Error sending reschedule email to teacher:", err))
+      )
+    }
+
+    // 3. Push a Alumno
+    if (classData.student_user_id) {
+      promises.push(
+        supabase.functions.invoke("notify-student-push", {
+          body: {
+            type: "RESCHEDULED",
+            customParams: {
+              studentUserId: classData.student_user_id,
+              teacherName: teacherName,
+              date: friendlyNewDate,
+              time: newTime.slice(0, 5),
+              classId: classData.id
+            }
+          }
+        }).catch(err => console.error("Error sending push notification to student:", err))
+      )
+    }
+
+    // 4. Push a Profesor
+    if (classData.teacher_user_id) {
+      promises.push(
+        supabase.functions.invoke("notify-teacher-push", {
+          body: {
+            classId: classData.id,
+            type: "RESCHEDULED",
+            originalDate,
+            originalStartTime: originalTime,
+            newDate,
+            newStartTime: newTime
+          }
+        }).catch(err => console.error("Error sending push notification to teacher:", err))
+      )
+    }
+
+    await Promise.all(promises)
+  }
+
   async function notifyCancellation(classData: ClassData) {
     if (!classData.student_id) return
 
     const friendlyDate = new Date(classData.date + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
     const friendlyTime = classData.start_time.slice(0, 5)
     const teacherName = classData.teacher_name || profile?.name || "Tu profesor"
+    const studentName = classData.student_name || "Alumno"
 
     const promises = []
 
-    // 1. Enviar Correo al estudiante
+    // 1. Enviar Correo al ESTUDIANTE
     if (classData.student_email) {
       promises.push(
         supabase.functions.invoke("send-email", {
@@ -939,7 +1014,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
             to: classData.student_email,
             type: "STUDENT_CLASS_CANCELLED",
             params: {
-              studentName: classData.student_name,
+              studentName: studentName,
               teacherName: teacherName,
               date: friendlyDate,
               time: friendlyTime
@@ -949,7 +1024,26 @@ export default function ClassDetailView({ classId }: { classId: string }) {
       )
     }
 
-    // 2. Enviar Notificación Push al estudiante
+    // 2. Enviar Correo al PROFESOR
+    if (classData.teacher_email) {
+      promises.push(
+        supabase.functions.invoke("send-email", {
+          body: {
+            to: classData.teacher_email,
+            type: "TEACHER_CLASS_CANCELLED",
+            params: {
+              teacherName: teacherName,
+              studentName: studentName,
+              date: friendlyDate,
+              time: friendlyTime,
+              status: classData.status
+            }
+          }
+        }).catch(err => console.error("Error sending class cancellation email to teacher:", err))
+      )
+    }
+
+    // 3. Enviar Notificación Push al estudiante
     if (classData.student_user_id) {
       promises.push(
         supabase.functions.invoke("notify-student-push", {
@@ -965,18 +1059,9 @@ export default function ClassDetailView({ classId }: { classId: string }) {
           }
         }).catch(err => console.error("Error sending push notification to student:", err))
       )
-    } else {
-      promises.push(
-        supabase.functions.invoke("notify-student-push", {
-          body: {
-            classId: classData.id,
-            type: "CANCELLED"
-          }
-        }).catch(err => console.error("Error sending push notification to student:", err))
-      )
     }
 
-    // 3. Enviar Notificación Push al profesor
+    // 4. Enviar Notificación Push al profesor
     if (classData.teacher_user_id) {
       promises.push(
         supabase.functions.invoke("notify-teacher-push", {
@@ -984,20 +1069,11 @@ export default function ClassDetailView({ classId }: { classId: string }) {
             type: "CANCELLED",
             customParams: {
               teacherUserId: classData.teacher_user_id,
-              studentName: classData.student_name,
+              studentName: studentName,
               date: friendlyDate,
               time: friendlyTime,
               classId: classData.id
             }
-          }
-        }).catch(err => console.error("Error sending push notification to teacher:", err))
-      )
-    } else {
-      promises.push(
-        supabase.functions.invoke("notify-teacher-push", {
-          body: {
-            classId: classData.id,
-            type: "CANCELLED"
           }
         }).catch(err => console.error("Error sending push notification to teacher:", err))
       )
@@ -1012,10 +1088,11 @@ export default function ClassDetailView({ classId }: { classId: string }) {
     const friendlyDate = new Date(classData.date + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
     const friendlyTime = classData.start_time.slice(0, 5)
     const teacherName = classData.teacher_name || profile?.name || "Tu profesor"
+    const studentName = classData.student_name || "Alumno"
 
     const promises = []
 
-    // 1. Enviar Correo al estudiante
+    // 1. Enviar Correo al ESTUDIANTE
     if (classData.student_email) {
       promises.push(
         supabase.functions.invoke("send-email", {
@@ -1023,7 +1100,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
             to: classData.student_email,
             type: "STUDENT_CLASS_DELETED",
             params: {
-              studentName: classData.student_name,
+              studentName: studentName,
               teacherName: teacherName,
               date: friendlyDate,
               time: friendlyTime,
@@ -1037,7 +1114,26 @@ export default function ClassDetailView({ classId }: { classId: string }) {
       )
     }
 
-    // 2. Enviar Notificación Push al estudiante
+    // 2. Enviar Correo al PROFESOR
+    if (classData.teacher_email) {
+      promises.push(
+        supabase.functions.invoke("send-email", {
+          body: {
+            to: classData.teacher_email,
+            type: "TEACHER_CLASS_CANCELLED",
+            params: {
+              teacherName: teacherName,
+              studentName: `${studentName} (Clase Eliminada)`,
+              date: friendlyDate,
+              time: friendlyTime,
+              status: "DELETED"
+            }
+          }
+        }).catch(err => console.error("Error sending class deletion email to teacher:", err))
+      )
+    }
+
+    // 3. Enviar Notificación Push al estudiante
     if (classData.student_user_id) {
       promises.push(
         supabase.functions.invoke("notify-student-push", {
@@ -1055,7 +1151,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
       )
     }
 
-    // 3. Enviar Notificación Push al profesor
+    // 4. Enviar Notificación Push al profesor
     if (classData.teacher_user_id) {
       promises.push(
         supabase.functions.invoke("notify-teacher-push", {
@@ -1063,7 +1159,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
             type: "CANCELLED",
             customParams: {
               teacherUserId: classData.teacher_user_id,
-              studentName: classData.student_name,
+              studentName: `${studentName} (Eliminada)`,
               date: friendlyDate,
               time: friendlyTime,
               classId: classData.id
@@ -1080,6 +1176,16 @@ export default function ClassDetailView({ classId }: { classId: string }) {
     if (!confirm("¿Seguro que deseas eliminar esta clase y todas sus notas y tareas?")) return
     if (cls) {
       await notifyDeletion(cls)
+      if (cls.student_id) {
+        logClassEvent({
+          student_id: cls.student_id,
+          class_id: cls.id,
+          teacher_id: cls.teacher_id,
+          action_type: "CLASS_DELETED",
+          description: `Clase eliminada del sistema (fecha ${cls.date} ${cls.start_time.slice(0, 5)})`,
+          metadata: { date: cls.date, start_time: cls.start_time }
+        })
+      }
     }
     await supabase.from("Class").delete().eq("id", classId)
     router.push("/dashboard/clases")

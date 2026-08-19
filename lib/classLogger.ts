@@ -13,6 +13,7 @@ export interface LogClassEventParams {
     | "NOTE_ADDED" 
     | "TASK_ADDED"
     | "PAYMENT_REGISTERED"
+    | "CLASS_DELETED"
   description: string
   metadata?: Record<string, any>
   created_by?: string | null
