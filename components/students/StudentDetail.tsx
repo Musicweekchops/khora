@@ -423,10 +423,15 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
   async function handleCreatePayment() {
     if (!studentId || !student?.teacher_id || !newPaymentForm.amount) return
     try {
+      const amt = parseFloat(newPaymentForm.amount)
+      const monthlyFee = student.monthly_fee && student.monthly_fee > 0 ? student.monthly_fee : 90000
+      const classesIncluded = amt >= monthlyFee * 0.7 ? 4 : 1
+
       const { error } = await supabase.from("Payment").insert({
         student_id: studentId,
         teacher_id: student.teacher_id,
-        amount: parseFloat(newPaymentForm.amount),
+        amount: amt,
+        classes_included: classesIncluded,
         method: newPaymentForm.method,
         date: newPaymentForm.date,
         notes: newPaymentForm.notes || null,

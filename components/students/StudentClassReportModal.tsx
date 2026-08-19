@@ -89,9 +89,19 @@ export default function StudentClassReportModal({
 
   if (!isOpen) return null
 
+  // Helper para determinar cuántas clases incluye un pago (si es mensualidad >= 70% de cuota o mayor a $40k, cuenta 4 clases)
+  const getPaymentClassesCount = (p: any) => {
+    if (p.classes_included && p.classes_included > 1) return Number(p.classes_included)
+    const monthlyFee = student?.monthly_fee && student.monthly_fee > 0 ? Number(student.monthly_fee) : 90000
+    if (Number(p.amount) >= monthlyFee * 0.7 || (p.notes && p.notes.toLowerCase().includes("mensual"))) {
+      return 4
+    }
+    return Number(p.classes_included || 1)
+  }
+
   // Métricas financieras y de clases
   const totalPaidAmount = payments.reduce((acc, p) => acc + Number(p.amount || 0), 0)
-  const totalClassesPaid = payments.reduce((acc, p) => acc + Number(p.classes_included || 1), 0)
+  const totalClassesPaid = payments.reduce((acc, p) => acc + getPaymentClassesCount(p), 0)
   
   const completedClasses = classes.filter(c => c.status === "COMPLETED")
   const scheduledClasses = classes.filter(c => c.status === "SCHEDULED" || c.status === "CONFIRMED")
@@ -102,8 +112,8 @@ export default function StudentClassReportModal({
   const balanceClasses = totalClassesPaid - classesUsedCount
 
   const getBalanceStatus = () => {
-    if (balanceClasses > 0) return { label: `${balanceClasses} clase(s) a favor`, color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30" }
-    if (balanceClasses === 0) return { label: "Al día (0 clases pendientes)", color: "text-purple-400 bg-purple-500/10 border-purple-500/30" }
+    if (balanceClasses > 0) return { label: `+${balanceClasses} clase(s) a favor`, color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30" }
+    if (balanceClasses === 0) return { label: "Al día (0 clases pendientes)", color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30" }
     return { label: `Deuda de ${Math.abs(balanceClasses)} clase(s)`, color: "text-amber-400 bg-amber-500/10 border-amber-500/30" }
   }
 
@@ -119,7 +129,7 @@ export default function StudentClassReportModal({
 
     text += `💵 *RESUMEN DE ESTADO:*
 • Total Abonado: ${formatCurrency(totalPaidAmount)} CLP
-• Clases Contratadas/Pagadas: ${totalClassesPaid}
+• Clases Pagadas/Cubiertas: ${totalClassesPaid} clases
 • Clases Realizadas: ${completedClasses.length}
 • Clases Programadas: ${scheduledClasses.length}
 • Clases Pendientes por Recuperar: ${recoveryPendingClasses.length}
@@ -131,7 +141,8 @@ export default function StudentClassReportModal({
     } else {
       payments.forEach((p, idx) => {
         const pDate = formatSpanishShortDate(p.date)
-        text += `${idx + 1}. ${pDate} — ${formatCurrency(Number(p.amount))} (${p.classes_included || 1} clase/s) [${p.method || 'Transferencia'}]\n`
+        const count = getPaymentClassesCount(p)
+        text += `${idx + 1}. ${pDate} — ${formatCurrency(Number(p.amount))} (${count} clases) [${p.method || 'Transferencia'}]\n`
       })
     }
     text += `\n`
@@ -140,7 +151,6 @@ export default function StudentClassReportModal({
     if (classes.length === 0) {
       text += `• Sin clases registradas.\n`
     } else {
-      // Ordenar cronológicamente para el reporte
       const sortedClasses = [...classes].sort((a, b) => a.date.localeCompare(b.date))
       sortedClasses.forEach((c) => {
         const enriched = enrichedClassesMap.get(c.id)
@@ -319,7 +329,7 @@ export default function StudentClassReportModal({
                           </span>
                         </td>
                         <td className="p-3 font-bold text-white print:text-black">{formatCurrency(Number(p.amount))}</td>
-                        <td className="p-3">{p.classes_included || 1} clase(s)</td>
+                        <td className="p-3 font-semibold text-purple-300 print:text-black">{getPaymentClassesCount(p)} clase(s)</td>
                         <td className="p-3 text-zinc-400 print:text-gray-600 truncate max-w-[200px]">{p.notes || p.transfer_id || '—'}</td>
                       </tr>
                     ))
