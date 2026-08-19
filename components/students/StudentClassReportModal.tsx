@@ -37,6 +37,8 @@ export default function StudentClassReportModal({
   const [notes, setNotes] = useState<any[]>([])
   const [enrichedClassesMap, setEnrichedClassesMap] = useState<Map<string, any>>(new Map())
 
+  const [selectedMonth, setSelectedMonth] = useState<string>("ALL")
+
   useEffect(() => {
     if (isOpen && studentId) {
       loadReportData()
@@ -89,7 +91,47 @@ export default function StudentClassReportModal({
 
   if (!isOpen) return null
 
-  // Helper para determinar cuántas clases incluye un pago (si es mensualidad >= 70% de cuota o mayor a $40k, cuenta 4 clases)
+  // Obtener lista de meses disponibles (YYYY-MM) a partir de pagos y clases
+  const availableMonthsMap = new Map<string, string>()
+  classes.forEach(c => {
+    if (c.date && c.date.length >= 7) {
+      const monthKey = c.date.slice(0, 7)
+      if (!availableMonthsMap.has(monthKey)) {
+        const [yr, mo] = monthKey.split("-")
+        const dateObj = new Date(Number(yr), Number(mo) - 1, 1)
+        const label = dateObj.toLocaleDateString("es-CL", { month: "long", year: "numeric" })
+        const capitalized = label.charAt(0).toUpperCase() + label.slice(1)
+        availableMonthsMap.set(monthKey, capitalized)
+      }
+    }
+  })
+  payments.forEach(p => {
+    if (p.date && p.date.length >= 7) {
+      const monthKey = p.date.slice(0, 7)
+      if (!availableMonthsMap.has(monthKey)) {
+        const [yr, mo] = monthKey.split("-")
+        const dateObj = new Date(Number(yr), Number(mo) - 1, 1)
+        const label = dateObj.toLocaleDateString("es-CL", { month: "long", year: "numeric" })
+        const capitalized = label.charAt(0).toUpperCase() + label.slice(1)
+        availableMonthsMap.set(monthKey, capitalized)
+      }
+    }
+  })
+
+  const availableMonthsList = Array.from(availableMonthsMap.entries())
+    .map(([key, label]) => ({ key, label }))
+    .sort((a, b) => b.key.localeCompare(a.key))
+
+  // Filtrar pagos y clases según el mes seleccionado
+  const filteredPayments = selectedMonth === "ALL" 
+    ? payments 
+    : payments.filter(p => p.date && p.date.startsWith(selectedMonth))
+
+  const filteredClasses = selectedMonth === "ALL" 
+    ? classes 
+    : classes.filter(c => c.date && c.date.startsWith(selectedMonth))
+
+  // Helper para determinar cuántas clases incluye un pago
   const getPaymentClassesCount = (p: any) => {
     if (p.classes_included && p.classes_included > 1) return Number(p.classes_included)
     const monthlyFee = student?.monthly_fee && student.monthly_fee > 0 ? Number(student.monthly_fee) : 90000
@@ -99,14 +141,14 @@ export default function StudentClassReportModal({
     return Number(p.classes_included || 1)
   }
 
-  // Métricas financieras y de clases
-  const totalPaidAmount = payments.reduce((acc, p) => acc + Number(p.amount || 0), 0)
-  const totalClassesPaid = payments.reduce((acc, p) => acc + getPaymentClassesCount(p), 0)
+  // Métricas financieras y de clases calculadas sobre los datos filtrados
+  const totalPaidAmount = filteredPayments.reduce((acc, p) => acc + Number(p.amount || 0), 0)
+  const totalClassesPaid = filteredPayments.reduce((acc, p) => acc + getPaymentClassesCount(p), 0)
   
-  const completedClasses = classes.filter(c => c.status === "COMPLETED")
-  const scheduledClasses = classes.filter(c => c.status === "SCHEDULED" || c.status === "CONFIRMED")
-  const recoveryPendingClasses = classes.filter(c => c.is_recovery_pending)
-  const recoveryTakenClasses = classes.filter(c => c.is_recovery || c.original_class_date)
+  const completedClasses = filteredClasses.filter(c => c.status === "COMPLETED")
+  const scheduledClasses = filteredClasses.filter(c => c.status === "SCHEDULED" || c.status === "CONFIRMED")
+  const recoveryPendingClasses = filteredClasses.filter(c => c.is_recovery_pending)
+  const recoveryTakenClasses = filteredClasses.filter(c => c.is_recovery || c.original_class_date)
 
   const classesUsedCount = completedClasses.length + scheduledClasses.length
   const balanceClasses = totalClassesPaid - classesUsedCount
@@ -119,15 +161,20 @@ export default function StudentClassReportModal({
 
   const balanceBadge = getBalanceStatus()
 
+  // Nombre del período seleccionado para mostrar en encabezados y reportes
+  const selectedPeriodLabel = selectedMonth === "ALL" 
+    ? "Histórico Completo" 
+    : availableMonthsMap.get(selectedMonth) || selectedMonth
+
   // Generar texto para WhatsApp
   const handleCopyWhatsApp = () => {
     const today = new Date().toLocaleDateString("es-CL", { day: "2-digit", month: "2-digit", year: "numeric" })
     
     let text = `📊 *REPORTE DE CLASES Y PAGOS — KHORA ACADEMY*\n`
     text += `👤 *Alumno/a:* ${student?.User?.name || "Alumno"}\n`
-    text += `📅 *Fecha:* ${today}\n\n`
+    text += `📅 *Período:* ${selectedPeriodLabel} (Emitido ${today})\n\n`
 
-    text += `💵 *RESUMEN DE ESTADO:*
+    text += `💵 *RESUMEN DEL PERÍODO:*
 • Total Abonado: ${formatCurrency(totalPaidAmount)} CLP
 • Clases Pagadas/Cubiertas: ${totalClassesPaid} clases
 • Clases Realizadas: ${completedClasses.length}
@@ -135,11 +182,11 @@ export default function StudentClassReportModal({
 • Clases Pendientes por Recuperar: ${recoveryPendingClasses.length}
 📌 *BALANCE:* ${balanceBadge.label}\n\n`
 
-    text += `💳 *DETALLE DE PAGOS (${payments.length}):*\n`
-    if (payments.length === 0) {
-      text += `• Sin pagos registrados a la fecha.\n`
+    text += `💳 *DETALLE DE PAGOS (${filteredPayments.length}):*\n`
+    if (filteredPayments.length === 0) {
+      text += `• Sin pagos registrados en este período.\n`
     } else {
-      payments.forEach((p, idx) => {
+      filteredPayments.forEach((p, idx) => {
         const pDate = formatSpanishShortDate(p.date)
         const count = getPaymentClassesCount(p)
         text += `${idx + 1}. ${pDate} — ${formatCurrency(Number(p.amount))} (${count} clases) [${p.method || 'Transferencia'}]\n`
@@ -147,11 +194,11 @@ export default function StudentClassReportModal({
     }
     text += `\n`
 
-    text += `🎵 *DETALLE DE CLASES:* \n`
-    if (classes.length === 0) {
-      text += `• Sin clases registradas.\n`
+    text += `🎵 *DETALLE DE CLASES (${filteredClasses.length}):* \n`
+    if (filteredClasses.length === 0) {
+      text += `• Sin clases registradas en este período.\n`
     } else {
-      const sortedClasses = [...classes].sort((a, b) => a.date.localeCompare(b.date))
+      const sortedClasses = [...filteredClasses].sort((a, b) => a.date.localeCompare(b.date))
       sortedClasses.forEach((c) => {
         const enriched = enrichedClassesMap.get(c.id)
         const counter = enriched?.counterLabel || "Clase"
@@ -173,7 +220,7 @@ export default function StudentClassReportModal({
     text += `\n¡Cualquier duda sobre las fechas o el estado nos escribes directamente por aquí! 🎶`
 
     navigator.clipboard.writeText(text)
-    toast.success("¡Reporte copiado al portapapeles para WhatsApp!")
+    toast.success(`¡Reporte de ${selectedPeriodLabel} copiado para WhatsApp!`)
   }
 
   const handlePrint = () => {
@@ -240,7 +287,7 @@ export default function StudentClassReportModal({
             </div>
           </div>
 
-          {/* Ficha Alumno */}
+          {/* Ficha Alumno & Filtro de Mes */}
           <div className="bg-zinc-800/40 print:bg-gray-50 border border-zinc-800 print:border-gray-300 rounded-xl p-4 flex flex-wrap justify-between items-center gap-4">
             <div>
               <span className="text-xs text-zinc-400 print:text-gray-500 uppercase tracking-wider font-semibold">Alumno/a</span>
@@ -248,7 +295,27 @@ export default function StudentClassReportModal({
               <p className="text-xs text-zinc-400 print:text-gray-600">{student?.User?.email} {student?.User?.phone ? `• ${student.User.phone}` : ""}</p>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Selector de Mes/Período */}
+              <div className="flex items-center gap-2 bg-zinc-950 print:bg-transparent px-3 py-2 rounded-xl border border-zinc-800 print:border-none">
+                <span className="text-xs font-bold text-zinc-400 print:text-gray-600 flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-purple-400 print:text-black" />
+                  Período:
+                </span>
+                <select
+                  value={selectedMonth}
+                  onChange={e => setSelectedMonth(e.target.value)}
+                  className="bg-zinc-800 print:bg-white text-white print:text-black border border-zinc-700 print:border-gray-300 rounded-lg text-xs font-bold px-2.5 py-1 focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
+                >
+                  <option value="ALL">📜 Histórico Completo</option>
+                  {availableMonthsList.map(m => (
+                    <option key={m.key} value={m.key}>
+                      📅 {m.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className={`px-4 py-2 rounded-xl border text-sm font-semibold ${balanceBadge.color} print:border-gray-400 print:text-black`}>
                 {balanceBadge.label}
               </div>
@@ -315,12 +382,12 @@ export default function StudentClassReportModal({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60 print:divide-gray-200 text-zinc-300 print:text-black">
-                  {payments.length === 0 ? (
+                  {filteredPayments.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="p-4 text-center text-zinc-500">No hay pagos registrados.</td>
+                      <td colSpan={5} className="p-4 text-center text-zinc-500">No hay pagos registrados en este período.</td>
                     </tr>
                   ) : (
-                    payments.map((p) => (
+                    filteredPayments.map((p) => (
                       <tr key={p.id} className="hover:bg-zinc-800/30 print:hover:bg-transparent">
                         <td className="p-3 font-medium">{formatSpanishShortDate(p.date)}</td>
                         <td className="p-3">
@@ -358,12 +425,12 @@ export default function StudentClassReportModal({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60 print:divide-gray-200 text-zinc-300 print:text-black">
-                  {classes.length === 0 ? (
+                  {filteredClasses.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="p-4 text-center text-zinc-500">No hay clases registradas.</td>
+                      <td colSpan={5} className="p-4 text-center text-zinc-500">No hay clases registradas en este período.</td>
                     </tr>
                   ) : (
-                    classes.map((c) => {
+                    filteredClasses.map((c) => {
                       const enriched = enrichedClassesMap.get(c.id)
                       const counter = enriched?.counterLabel || "Clase"
                       const isRecovery = c.is_recovery || Boolean(c.original_class_date)
