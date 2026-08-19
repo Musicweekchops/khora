@@ -108,7 +108,7 @@ export default function AcademyPayments({ academyId }: Props) {
           `)
           .eq("academy_id", academyId)
           .order("date", { ascending: false })
-        payData = fallback.data
+        payData = (fallback.data || []).map((p: any) => ({ ...p, receipt_url: null, transfer_id: null }))
       }
 
       const rows: PaymentRow[] = (payData ?? []).map((p: any) => {

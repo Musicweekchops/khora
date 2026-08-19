@@ -29,6 +29,7 @@ interface PaymentModal {
   studentName: string
   amount: string
   method: string
+  date?: string
   notes: string
   receipt_url?: string | null
   transfer_id?: string | null
@@ -47,11 +48,14 @@ export default function FinancieroPage() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState("")
 
+  const teacherId = profile?.teacherProfileId
+
   useEffect(() => {
-    if (profile?.teacherProfileId) loadAll(profile.teacherProfileId)
-  }, [profile?.teacherProfileId])
+    if (teacherId) loadAll(teacherId)
+  }, [teacherId])
 
   async function loadAll(teacherId: string) {
+    setLoading(true)
     const now = new Date()
     const startOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`
 
@@ -68,7 +72,7 @@ export default function FinancieroPage() {
         .select("id, amount, date, method, notes, created_at, student_id, StudentProfile ( User ( name ) )")
         .eq("teacher_id", teacherId)
         .order("date", { ascending: false })
-      py = fallback.data
+      py = (fallback.data || []).map((p: any) => ({ ...p, receipt_url: null, transfer_id: null }))
     }
 
     const [{ data: sp }, { data: activeStudents }] = await Promise.all([
