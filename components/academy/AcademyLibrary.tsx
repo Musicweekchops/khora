@@ -119,11 +119,11 @@ export default function AcademyLibrary({ academyId }: Props) {
     try {
       if (file) {
         const fileExt = file.name.split('.').pop()
-        const fileName = `${Math.random()}.${fileExt}`
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`
         const path = `academy/${academyId}/${fileName}`
 
         const { error: uploadError } = await supabase.storage.from('materials').upload(path, file)
-        if (uploadError) throw uploadError
+        if (uploadError) throw new Error("Fallo al subir a Storage: " + uploadError.message)
 
         filePath = path
         const { data: { publicUrl } } = supabase.storage.from('materials').getPublicUrl(path)
@@ -149,9 +149,9 @@ export default function AcademyLibrary({ academyId }: Props) {
       } else {
         alert("Error al guardar el recurso: " + error.message)
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Upload error:", err)
-      alert("Error al subir el archivo o recurso.")
+      alert("Error al subir el archivo o recurso: " + (err.message || err))
     } finally {
       setSaving(false)
     }

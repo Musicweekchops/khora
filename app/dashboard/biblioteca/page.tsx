@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/context/AuthContext"
+import { toast } from "sonner"
 import { 
   Plus, 
   Search, 
@@ -342,71 +343,84 @@ export default function BibliotecaPage() {
 
   async function loadLibraryStudent(studentId: string) {
     setLoading(true)
-    const { data: student } = await supabase
-      .from("StudentProfile")
-      .select("teacher_id, TeacherProfile ( instrumento )")
-      .eq("id", studentId)
-      .maybeSingle()
+    try {
+      const { data: student } = await supabase
+        .from("StudentProfile")
+        .select("teacher_id, TeacherProfile ( instrumento )")
+        .eq("id", studentId)
+        .maybeSingle()
 
-    if (student?.teacher_id) {
-      const tProfile = Array.isArray(student.TeacherProfile) 
-        ? student.TeacherProfile[0] 
-        : student.TeacherProfile;
-        
-      setInstrumento(tProfile?.instrumento ?? null)
+      if (student?.teacher_id) {
+        const tProfile = Array.isArray(student.TeacherProfile) 
+          ? student.TeacherProfile[0] 
+          : student.TeacherProfile;
+          
+        setInstrumento(tProfile?.instrumento ?? null)
 
-      // Get accesses via SLA, Tasks, Notes
-      const [slaRes, taskRes, noteRes] = await Promise.all([
-        supabase.from("StudentLibraryAccess").select("content_id, playlist_id").eq("student_id", studentId),
-        supabase.from("Task").select("content_id, playlist_id").eq("student_id", studentId),
-        supabase.from("ClassNote").select("content_id, playlist_id, Class!inner(student_id)").eq("Class.student_id", studentId)
-      ])
+        // Get accesses via SLA, Tasks, Notes safely
+        const [slaRes, taskRes, noteRes] = await Promise.all([
+          supabase.from("StudentLibraryAccess").select("content_id, playlist_id").eq("student_id", studentId),
+          supabase.from("Task").select("content_id, playlist_id").eq("student_id", studentId),
+          supabase.from("ClassNote").select("content_id, playlist_id, Class!inner(student_id)").eq("Class.student_id", studentId)
+        ])
 
-      const allowedPlaylistIds = new Set<string>()
-      const allowedContentIds = new Set<string>()
+        const allowedPlaylistIds = new Set<string>()
+        const allowedContentIds = new Set<string>()
 
-      const collectIds = (items: any[]) => {
-        items.forEach(item => {
-          if (item.playlist_id) allowedPlaylistIds.add(item.playlist_id)
-          if (item.content_id) allowedContentIds.add(item.content_id)
-        })
+        const collectIds = (items: any[]) => {
+          if (!Array.isArray(items)) return
+          items.forEach(item => {
+            if (item.playlist_id) allowedPlaylistIds.add(item.playlist_id)
+            if (item.content_id) allowedContentIds.add(item.content_id)
+          })
+        }
+
+        if (slaRes.data) collectIds(slaRes.data)
+        if (taskRes.data) collectIds(taskRes.data)
+        if (noteRes.data) collectIds(noteRes.data)
+
+        const playlistIdsArr = Array.from(allowedPlaylistIds)
+        const contentIdsArr = Array.from(allowedContentIds)
+
+        // Cargar playlists asignadas o todas si no hay restricción explícita
+        if (playlistIdsArr.length > 0) {
+          const { data: pl } = await supabase.from("LibraryPlaylist").select("*").eq("teacher_id", student.teacher_id).in("id", playlistIdsArr).order("created_at", { ascending: false })
+          if (pl) setPlaylists(pl)
+        } else {
+          const { data: pl } = await supabase.from("LibraryPlaylist").select("*").eq("teacher_id", student.teacher_id).order("created_at", { ascending: false })
+          if (pl) setPlaylists(pl)
+        }
+
+        // Cargar contenidos asignados o todos si no hay restricción explícita
+        const filterConditions = []
+        if (contentIdsArr.length > 0) filterConditions.push(`id.in.(${contentIdsArr.join(',')})`)
+        if (playlistIdsArr.length > 0) filterConditions.push(`playlist_id.in.(${playlistIdsArr.join(',')})`)
+
+        if (filterConditions.length > 0) {
+          const { data: it } = await supabase
+            .from("LibraryContent")
+            .select("*")
+            .eq("teacher_id", student.teacher_id)
+            .or(filterConditions.join(','))
+            .order("order_index", { ascending: true })
+            .order("created_at", { ascending: false })
+          if (it) setItems(it)
+        } else {
+          // Fallback: Si el profesor no ha creado accesos restringidos específicos, mostrar su biblioteca pública
+          const { data: it } = await supabase
+            .from("LibraryContent")
+            .select("*")
+            .eq("teacher_id", student.teacher_id)
+            .order("order_index", { ascending: true })
+            .order("created_at", { ascending: false })
+          if (it) setItems(it)
+        }
       }
-
-      if (slaRes.data) collectIds(slaRes.data)
-      if (taskRes.data) collectIds(taskRes.data)
-      if (noteRes.data) collectIds(noteRes.data)
-
-      const playlistIdsArr = Array.from(allowedPlaylistIds)
-      const contentIdsArr = Array.from(allowedContentIds)
-
-      // Load allowed playlists
-      if (playlistIdsArr.length > 0) {
-        const { data: pl } = await supabase.from("LibraryPlaylist").select("*").eq("teacher_id", student.teacher_id).in("id", playlistIdsArr).order("created_at", { ascending: false })
-        if (pl) setPlaylists(pl)
-      } else {
-        setPlaylists([])
-      }
-
-      // Load allowed content
-      const filterConditions = []
-      if (contentIdsArr.length > 0) filterConditions.push(`id.in.(${contentIdsArr.join(',')})`)
-      if (playlistIdsArr.length > 0) filterConditions.push(`playlist_id.in.(${playlistIdsArr.join(',')})`)
-
-      if (filterConditions.length > 0) {
-        const { data: it } = await supabase
-          .from("LibraryContent")
-          .select("*")
-          .eq("teacher_id", student.teacher_id)
-          .or(filterConditions.join(','))
-          .order("order_index", { ascending: true })
-          .order("created_at", { ascending: false })
-        if (it) setItems(it)
-      } else {
-        setItems([])
-      }
+    } catch (err) {
+      console.error("Error al cargar biblioteca del estudiante:", err)
+    } finally {
+      setLoading(false)
     }
-    
-    setLoading(false)
   }
 
   async function handleCreatePlaylist(e: React.FormEvent) {
@@ -415,19 +429,23 @@ export default function BibliotecaPage() {
     setSaving(true)
 
     try {
+      const teacherId = profile?.teacherProfileId || null
       const { error } = await supabase.from("LibraryPlaylist").insert({
-        teacher_id: profile!.teacherProfileId!,
+        teacher_id: teacherId,
         title: playlistForm.title.trim(),
         description: playlistForm.description.trim() || null
       })
 
       if (!error) {
+        toast.success("Serie / Colección creada exitosamente")
         setPlaylistForm({ title: "", description: "" })
         setShowForm(false)
-        loadLibraryTeacher(profile!.teacherProfileId!)
+        if (teacherId) loadLibraryTeacher(teacherId)
       } else {
-        alert("Error al crear la serie.")
+        toast.error("Error al crear la serie: " + error.message)
       }
+    } catch (err: any) {
+      toast.error("Error inesperado: " + (err.message || err))
     } finally {
       setSaving(false)
     }
@@ -442,21 +460,25 @@ export default function BibliotecaPage() {
     let filePath = null
 
     try {
+      const ownerFolder = profile?.teacherProfileId || profile?.id || "general"
+
       if (file) {
         const fileExt = file.name.split('.').pop()
-        const fileName = `${Math.random()}.${fileExt}`
-        const path = `${profile!.teacherProfileId}/${fileName}`
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`
+        const path = `${ownerFolder}/${fileName}`
 
         const { error: uploadError } = await supabase.storage.from('materials').upload(path, file)
-        if (uploadError) throw uploadError
+        if (uploadError) {
+          console.error("Error al subir archivo a Supabase Storage:", uploadError)
+          throw new Error("Fallo al subir archivo: " + uploadError.message)
+        }
 
         filePath = path
         const { data: { publicUrl } } = supabase.storage.from('materials').getPublicUrl(path)
         finalUrl = publicUrl
       }
 
-      const { error } = await supabase.from("LibraryContent").insert({
-        teacher_id: profile!.teacherProfileId!,
+      const payload: any = {
         title: form.title.trim(),
         description: form.description.trim() || null,
         type: form.type,
@@ -465,18 +487,27 @@ export default function BibliotecaPage() {
         category: form.category,
         playlist_id: form.playlist_id || null,
         order_index: items.length
-      })
+      }
+
+      if (profile?.teacherProfileId) {
+        payload.teacher_id = profile.teacherProfileId
+      }
+
+      const { error } = await supabase.from("LibraryContent").insert(payload)
 
       if (!error) {
+        toast.success("Recurso publicado exitosamente en la biblioteca")
         setForm({ title: "", description: "", type: "link", url: "", category: "General", playlist_id: "" })
         setFile(null)
         setShowForm(false)
-        loadLibraryTeacher(profile!.teacherProfileId!)
+        if (profile?.teacherProfileId) loadLibraryTeacher(profile.teacherProfileId)
       } else {
-        alert("Error al guardar el recurso.")
+        console.error("Error DB insert:", error)
+        toast.error("Error al guardar el recurso: " + error.message)
       }
-    } catch (err) {
-      alert("Error al subir el archivo o recurso.")
+    } catch (err: any) {
+      console.error("Error general al subir recurso:", err)
+      toast.error("Error al subir el recurso: " + (err.message || err))
     } finally {
       setSaving(false)
     }
