@@ -448,20 +448,24 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
     try {
       const ids = classesToDelete.map(c => c.id)
 
-      // Registrar eventos en bitácora
+      // 1. Eliminar dependencias child primero para evitar bloqueos por Foreign Key
+      await supabase.from("ClassNote").delete().in("class_id", ids)
+      await supabase.from("Task").delete().in("class_id", ids)
+
+      // 2. Registrar eventos en bitácora (sin pasar class_id para evitar FK constraints si ClassLog no tuviera CASCADE)
       if (studentId && student?.teacher_id) {
         for (const c of classesToDelete) {
           logClassEvent({
             student_id: studentId,
-            class_id: c.id,
             teacher_id: student.teacher_id,
             action_type: "CLASS_DELETED",
             description: `Clase del ${c.date} ${c.start_time.slice(0, 5)} eliminada en bloque`,
-            metadata: { date: c.date, start_time: c.start_time }
+            metadata: { class_id: c.id, date: c.date, start_time: c.start_time }
           })
         }
       }
 
+      // 3. Eliminar las clases
       const { error } = await supabase.from("Class").delete().in("id", ids)
       if (error) throw error
 
@@ -473,7 +477,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
       if (studentId) loadAll()
     } catch (err: any) {
       console.error("Error deleting classes:", err)
-      toast.error("Error al eliminar las clases.")
+      toast.error("Error al eliminar las clases: " + (err.message || "fallo en la base de datos"))
     } finally {
       setDeletingClasses(false)
     }
@@ -829,6 +833,63 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
                   })}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* CONFIRMATION DELETE CLASSES MODAL */}
+          {confirmDeleteClasses && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-neutral-950/70 backdrop-blur-md animate-in fade-in duration-200">
+              <div className="bg-white rounded-3xl max-w-md w-full p-6 md:p-8 shadow-2xl border border-neutral-100 space-y-6 relative animate-in zoom-in-95 duration-200">
+                <div className="w-14 h-14 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center border border-red-100 mx-auto">
+                  <Trash2 className="w-7 h-7" />
+                </div>
+
+                <div className="text-center space-y-2">
+                  <h3 className="text-xl font-black text-neutral-900 tracking-tight">
+                    {confirmDeleteClasses.length === 1 ? "¿Eliminar esta clase?" : `¿Eliminar ${confirmDeleteClasses.length} clases seleccionadas?`}
+                  </h3>
+                  <p className="text-sm text-neutral-500 font-medium leading-relaxed">
+                    Esta acción eliminará las clases registradas de la agenda de forma permanente.
+                  </p>
+                </div>
+
+                <div className="bg-neutral-50 border border-neutral-100 rounded-2xl p-4 space-y-2 text-xs font-semibold text-neutral-700 max-h-44 overflow-y-auto scrollbar-thin">
+                  {confirmDeleteClasses.map(c => (
+                    <div key={c.id} className="flex justify-between items-center py-1.5 border-b border-neutral-200/60 last:border-0">
+                      <span className="font-bold text-neutral-900">
+                        📅 {formatSpanishShortDate(c.date)} ({formatTime(c.start_time)})
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                        c.status === "COMPLETED" ? "bg-emerald-100 text-emerald-700" : c.status === "CANCELLED" ? "bg-red-100 text-red-600" : "bg-sky-100 text-sky-700"
+                      }`}>
+                        {c.status === "COMPLETED" ? "Completada" : c.status === "CANCELLED" ? "Cancelada" : "Programada"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={() => setConfirmDeleteClasses(null)}
+                    disabled={deletingClasses}
+                    className="flex-1 py-3 bg-neutral-100 text-neutral-700 rounded-2xl text-xs font-bold hover:bg-neutral-200 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => handleDeleteClasses(confirmDeleteClasses)}
+                    disabled={deletingClasses}
+                    className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white rounded-2xl text-xs font-black transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {deletingClasses ? (
+                      <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
+                    <span>{deletingClasses ? "Eliminando..." : "Sí, Eliminar"}</span>
+                  </button>
+                </div>
+              </div>
             </div>
           )}
           </div>
@@ -1198,63 +1259,6 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
                         <Trash2 className="w-4 h-4" />
                       )}
                       <span>{deletingPayments ? "Eliminando..." : "Sí, Eliminar"}</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* CONFIRMATION DELETE CLASSES MODAL */}
-            {confirmDeleteClasses && (
-              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-neutral-950/70 backdrop-blur-md animate-in fade-in duration-200">
-                <div className="bg-white rounded-3xl max-w-md w-full p-6 md:p-8 shadow-2xl border border-neutral-100 space-y-6 relative animate-in zoom-in-95 duration-200">
-                  <div className="w-14 h-14 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center border border-red-100 mx-auto">
-                    <Trash2 className="w-7 h-7" />
-                  </div>
-
-                  <div className="text-center space-y-2">
-                    <h3 className="text-xl font-black text-neutral-900 tracking-tight">
-                      {confirmDeleteClasses.length === 1 ? "¿Eliminar esta clase?" : `¿Eliminar ${confirmDeleteClasses.length} clases seleccionadas?`}
-                    </h3>
-                    <p className="text-sm text-neutral-500 font-medium leading-relaxed">
-                      Esta acción eliminará las clases registradas de la agenda de forma permanente.
-                    </p>
-                  </div>
-
-                  <div className="bg-neutral-50 border border-neutral-100 rounded-2xl p-4 space-y-2 text-xs font-semibold text-neutral-700 max-h-44 overflow-y-auto scrollbar-thin">
-                    {confirmDeleteClasses.map(c => (
-                      <div key={c.id} className="flex justify-between items-center py-1.5 border-b border-neutral-200/60 last:border-0">
-                        <span className="font-bold text-neutral-900">
-                          📅 {formatSpanishShortDate(c.date)} ({formatTime(c.start_time)})
-                        </span>
-                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
-                          c.status === "COMPLETED" ? "bg-emerald-100 text-emerald-700" : c.status === "CANCELLED" ? "bg-red-100 text-red-600" : "bg-sky-100 text-sky-700"
-                        }`}>
-                          {c.status === "COMPLETED" ? "Completada" : c.status === "CANCELLED" ? "Cancelada" : "Programada"}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="flex gap-3 pt-2">
-                    <button
-                      onClick={() => setConfirmDeleteClasses(null)}
-                      disabled={deletingClasses}
-                      className="flex-1 py-3 bg-neutral-100 text-neutral-700 rounded-2xl text-xs font-bold hover:bg-neutral-200 transition-colors"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      onClick={() => handleDeleteClasses(confirmDeleteClasses)}
-                      disabled={deletingClasses}
-                      className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white rounded-2xl text-xs font-black transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
-                    >
-                      {deletingClasses ? (
-                        <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                      ) : (
-                        <Trash2 className="w-4 h-4" />
-                      )}
-                      <span>{deletingClasses ? "Eliminando..." : "Sí, Eliminar"}</span>
                     </button>
                   </div>
                 </div>
