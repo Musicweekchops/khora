@@ -14,6 +14,7 @@ import ReceiptUploader, { ParsedReceiptData } from "@/components/ui/ReceiptUploa
 
 import StudentClassReportModal from "@/components/students/StudentClassReportModal"
 import { calculateClassCounters, formatSpanishShortDate } from "@/lib/classCounter"
+import { logClassEvent } from "@/lib/classLogger"
 
 interface StudentData {
   id: string; user_id: string; teacher_id: string; status: string; modalidad: string; lead_source: string
@@ -54,6 +55,10 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
   const [selectedPaymentIds, setSelectedPaymentIds] = useState<Set<string>>(new Set())
   const [confirmDeletePayments, setConfirmDeletePayments] = useState<PaymentRow[] | null>(null)
   const [deletingPayments, setDeletingPayments] = useState(false)
+
+  const [selectedClassIds, setSelectedClassIds] = useState<Set<string>>(new Set())
+  const [confirmDeleteClasses, setConfirmDeleteClasses] = useState<ClassRow[] | null>(null)
+  const [deletingClasses, setDeletingClasses] = useState(false)
   const [showAddPaymentModal, setShowAddPaymentModal] = useState(false)
   const [newPaymentForm, setNewPaymentForm] = useState<{
     amount: string
@@ -420,6 +425,60 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
     }
   }
 
+  function toggleSelectClass(id: string) {
+    setSelectedClassIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAllClasses() {
+    if (selectedClassIds.size === classes.length) {
+      setSelectedClassIds(new Set())
+    } else {
+      setSelectedClassIds(new Set(classes.map(c => c.id)))
+    }
+  }
+
+  async function handleDeleteClasses(classesToDelete: ClassRow[]) {
+    if (classesToDelete.length === 0) return
+    setDeletingClasses(true)
+    try {
+      const ids = classesToDelete.map(c => c.id)
+
+      // Registrar eventos en bitácora
+      if (studentId && student?.teacher_id) {
+        for (const c of classesToDelete) {
+          logClassEvent({
+            student_id: studentId,
+            class_id: c.id,
+            teacher_id: student.teacher_id,
+            action_type: "CLASS_DELETED",
+            description: `Clase del ${c.date} ${c.start_time.slice(0, 5)} eliminada en bloque`,
+            metadata: { date: c.date, start_time: c.start_time }
+          })
+        }
+      }
+
+      const { error } = await supabase.from("Class").delete().in("id", ids)
+      if (error) throw error
+
+      toast.success(ids.length === 1 ? "Clase eliminada exitosamente" : `${ids.length} clases eliminadas exitosamente`)
+      setClasses(prev => prev.filter(c => !ids.includes(c.id)))
+      setSelectedClassIds(new Set())
+      setConfirmDeleteClasses(null)
+
+      if (studentId) loadAll()
+    } catch (err: any) {
+      console.error("Error deleting classes:", err)
+      toast.error("Error al eliminar las clases.")
+    } finally {
+      setDeletingClasses(false)
+    }
+  }
+
   async function handleCreatePayment() {
     if (!studentId || !student?.teacher_id || !newPaymentForm.amount) return
     try {
@@ -669,26 +728,68 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
 
         {activeTab === "classes" && (
           <div className="bg-white rounded-2xl md:rounded-3xl border border-neutral-100 overflow-hidden">
+            {selectedClassIds.size > 0 && (
+              <div className="bg-red-50 border-b border-red-100 p-4 flex items-center justify-between animate-in fade-in duration-200">
+                <div className="flex items-center gap-2 text-red-900 text-xs font-bold">
+                  <span>⚠️</span>
+                  <span>{selectedClassIds.size} clase{selectedClassIds.size > 1 ? "s" : ""} seleccionada{selectedClassIds.size > 1 ? "s" : ""}</span>
+                </div>
+                <button
+                  onClick={() => setConfirmDeleteClasses(classes.filter(c => selectedClassIds.has(c.id)))}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black transition-all shadow-sm flex items-center gap-2"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Eliminar Seleccionada{selectedClassIds.size > 1 ? "s" : ""} ({selectedClassIds.size})</span>
+                </button>
+              </div>
+            )}
+
             {classes.length === 0 ? (
               <div className="p-12 text-center"><span className="text-4xl opacity-30 block mb-3">📖</span><p className="text-neutral-500 font-bold">Sin clases registradas</p></div>
             ) : (
               <div className="overflow-x-auto scrollbar-thin">
                 <table className="w-full text-sm min-w-[600px] md:min-w-0">
-                <thead><tr className="border-b border-neutral-100 bg-neutral-50/50">
-                  <th className="text-left px-6 py-4 text-xs font-bold text-neutral-400 uppercase tracking-widest">N° Clase</th>
-                  <th className="text-left px-6 py-4 text-xs font-bold text-neutral-400 uppercase tracking-widest">Fecha</th>
-                  <th className="text-left px-6 py-4 text-xs font-bold text-neutral-400 uppercase tracking-widest">Horario</th>
-                  <th className="text-left px-6 py-4 text-xs font-bold text-neutral-400 uppercase tracking-widest">Modalidad</th>
-                  <th className="text-left px-6 py-4 text-xs font-bold text-neutral-400 uppercase tracking-widest">Estado</th>
-                </tr></thead>
+                <thead>
+                  <tr className="border-b border-neutral-100 bg-neutral-50/50">
+                    <th className="px-4 py-4 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        checked={classes.length > 0 && selectedClassIds.size === classes.length}
+                        onChange={toggleSelectAllClasses}
+                        className="rounded border-neutral-300 text-violet-600 focus:ring-violet-500 cursor-pointer"
+                      />
+                    </th>
+                    <th className="text-left px-6 py-4 text-xs font-bold text-neutral-400 uppercase tracking-widest">N° Clase</th>
+                    <th className="text-left px-6 py-4 text-xs font-bold text-neutral-400 uppercase tracking-widest">Fecha</th>
+                    <th className="text-left px-6 py-4 text-xs font-bold text-neutral-400 uppercase tracking-widest">Horario</th>
+                    <th className="text-left px-6 py-4 text-xs font-bold text-neutral-400 uppercase tracking-widest">Modalidad</th>
+                    <th className="text-left px-6 py-4 text-xs font-bold text-neutral-400 uppercase tracking-widest">Estado</th>
+                    <th className="text-right px-6 py-4 text-xs font-bold text-neutral-400 uppercase tracking-widest">Acciones</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {classes.map(c => {
                     const enriched = enrichedMap.get(c.id)
                     const counter = enriched?.counterLabel || "Clase"
                     const isRecovery = c.is_recovery || Boolean(c.original_class_date)
+                    const isSelected = selectedClassIds.has(c.id)
 
                     return (
-                      <tr key={c.id} className={`border-b border-neutral-50 cursor-pointer transition-colors ${c.is_recovery_pending ? "bg-amber-50/60 hover:bg-amber-100/60" : "hover:bg-violet-50/30"}`} onClick={() => window.location.href = `/dashboard/clases/detalles?id=${c.id}`}>
+                      <tr 
+                        key={c.id} 
+                        className={`border-b border-neutral-50 cursor-pointer transition-colors ${
+                          isSelected ? "bg-red-50/40 hover:bg-red-50/60" : c.is_recovery_pending ? "bg-amber-50/60 hover:bg-amber-100/60" : "hover:bg-violet-50/30"
+                        }`} 
+                        onClick={() => window.location.href = `/dashboard/clases/detalles?id=${c.id}`}
+                      >
+                        <td className="px-4 py-4 text-center" onClick={e => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelectClass(c.id)}
+                            className="w-4 h-4 rounded border-neutral-300 text-red-600 focus:ring-red-500 cursor-pointer"
+                          />
+                        </td>
                         <td className="px-6 py-4 font-black text-violet-600">
                           <span className="px-2.5 py-1 rounded-xl bg-violet-50 border border-violet-100 text-xs font-black">
                             {counter}
@@ -714,7 +815,15 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
                             c.status === "COMPLETED" ? "bg-emerald-100 text-emerald-700" : c.status === "CANCELLED" ? "bg-red-100 text-red-600" : "bg-sky-100 text-sky-700"
                           }`}>{c.status === "COMPLETED" ? "Completada" : c.status === "CANCELLED" ? "Cancelada" : "Programada"}</span>
                         </td>
-                        <td className="px-2 text-neutral-300">→</td>
+                        <td className="px-6 py-4 text-right" onClick={e => e.stopPropagation()}>
+                          <button
+                            onClick={() => setConfirmDeleteClasses([c])}
+                            title="Eliminar clase"
+                            className="p-2 text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all inline-flex items-center justify-center"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
                       </tr>
                     )
                   })}
@@ -1089,6 +1198,63 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
                         <Trash2 className="w-4 h-4" />
                       )}
                       <span>{deletingPayments ? "Eliminando..." : "Sí, Eliminar"}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* CONFIRMATION DELETE CLASSES MODAL */}
+            {confirmDeleteClasses && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-neutral-950/70 backdrop-blur-md animate-in fade-in duration-200">
+                <div className="bg-white rounded-3xl max-w-md w-full p-6 md:p-8 shadow-2xl border border-neutral-100 space-y-6 relative animate-in zoom-in-95 duration-200">
+                  <div className="w-14 h-14 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center border border-red-100 mx-auto">
+                    <Trash2 className="w-7 h-7" />
+                  </div>
+
+                  <div className="text-center space-y-2">
+                    <h3 className="text-xl font-black text-neutral-900 tracking-tight">
+                      {confirmDeleteClasses.length === 1 ? "¿Eliminar esta clase?" : `¿Eliminar ${confirmDeleteClasses.length} clases seleccionadas?`}
+                    </h3>
+                    <p className="text-sm text-neutral-500 font-medium leading-relaxed">
+                      Esta acción eliminará las clases registradas de la agenda de forma permanente.
+                    </p>
+                  </div>
+
+                  <div className="bg-neutral-50 border border-neutral-100 rounded-2xl p-4 space-y-2 text-xs font-semibold text-neutral-700 max-h-44 overflow-y-auto scrollbar-thin">
+                    {confirmDeleteClasses.map(c => (
+                      <div key={c.id} className="flex justify-between items-center py-1.5 border-b border-neutral-200/60 last:border-0">
+                        <span className="font-bold text-neutral-900">
+                          📅 {formatSpanishShortDate(c.date)} ({formatTime(c.start_time)})
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                          c.status === "COMPLETED" ? "bg-emerald-100 text-emerald-700" : c.status === "CANCELLED" ? "bg-red-100 text-red-600" : "bg-sky-100 text-sky-700"
+                        }`}>
+                          {c.status === "COMPLETED" ? "Completada" : c.status === "CANCELLED" ? "Cancelada" : "Programada"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      onClick={() => setConfirmDeleteClasses(null)}
+                      disabled={deletingClasses}
+                      className="flex-1 py-3 bg-neutral-100 text-neutral-700 rounded-2xl text-xs font-bold hover:bg-neutral-200 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={() => handleDeleteClasses(confirmDeleteClasses)}
+                      disabled={deletingClasses}
+                      className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white rounded-2xl text-xs font-black transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {deletingClasses ? (
+                        <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        <Trash2 className="w-4 h-4" />
+                      )}
+                      <span>{deletingClasses ? "Eliminando..." : "Sí, Eliminar"}</span>
                     </button>
                   </div>
                 </div>
