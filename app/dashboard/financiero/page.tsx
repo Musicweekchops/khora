@@ -284,14 +284,16 @@ export default function FinancieroPage() {
         const day = d.getUTCDay();
         revenueByDay[day] += valuePerClass;
       });
-    } else {
-      const d = new Date(`${p.date}T12:00:00Z`);
-      const day = d.getUTCDay();
-      revenueByDay[day] += p.amount;
     }
+    // Si no hay clases en este mes para el pago, simplemente no lo atribuimos a un día de la semana
+    // para no distorsionar el gráfico con el día en que se hizo la transferencia.
   });
-  const maxDayRevenue = Math.max(...revenueByDay, 1);
-  const daysOrder = [1, 2, 3, 4, 5, 6, 0]; // Lunes a Domingo
+  
+  // Extraemos Domingo (0) para no mostrarlo
+  const daysOrder = [1, 2, 3, 4, 5, 6]; // Lunes a Sábado
+  
+  // Calcular el max considerando solo de Lunes a Sábado
+  const maxDayRevenue = Math.max(...daysOrder.map(d => revenueByDay[d]), 1);
 
   if (loading) return <div className="space-y-4">{[1,2,3].map(i => <div key={i} className="h-32 bg-white rounded-3xl animate-pulse" />)}</div>
 
@@ -424,11 +426,11 @@ export default function FinancieroPage() {
           <h3 className="font-black text-neutral-900 mb-6 flex items-center gap-2">
             <span className="w-2 h-5 bg-emerald-500 rounded-full" /> Ingresos Últimos 6 Meses
           </h3>
-          <div className="flex items-end gap-3 h-48">
+          <div className="flex items-end gap-3 h-56 pt-6">
             {monthlyData.map(m => (
-              <div key={m.month} className="flex-1 flex flex-col items-center gap-2">
+              <div key={m.month} className="flex-1 flex flex-col items-center justify-end h-full gap-2">
                 <span className="text-xs font-bold text-neutral-900">{formatCurrency(m.total)}</span>
-                <div className="w-full bg-emerald-100 rounded-t-xl relative" style={{ height: `${Math.max((m.total / maxMonthly) * 100, 4)}%` }}>
+                <div className="w-full bg-emerald-100 rounded-t-xl relative transition-all duration-500" style={{ height: `${Math.max((m.total / maxMonthly) * 100, 4)}%` }}>
                   <div className="absolute inset-0 bg-gradient-to-t from-emerald-500 to-emerald-400 rounded-t-xl" />
                 </div>
                 <span className="text-[10px] font-bold text-neutral-400 uppercase">{m.month}</span>
@@ -485,12 +487,12 @@ export default function FinancieroPage() {
             </button>
           </div>
         </div>
-        <div className="flex items-end gap-3 h-48">
+        <div className="flex items-end gap-3 h-56 pt-6">
           {daysOrder.map(dayIndex => {
             const total = revenueByDay[dayIndex];
             const dayName = daysOfWeek[dayIndex];
             return (
-              <div key={dayName} className="flex-1 flex flex-col items-center gap-2">
+              <div key={dayName} className="flex-1 flex flex-col items-center justify-end h-full gap-2">
                 <span className="text-[10px] md:text-xs font-bold text-neutral-900">{formatCurrency(total)}</span>
                 <div className="w-full bg-sky-100 rounded-t-xl relative transition-all duration-500" style={{ height: `${Math.max((total / maxDayRevenue) * 100, 4)}%` }}>
                   <div className="absolute inset-0 bg-gradient-to-t from-sky-500 to-sky-400 rounded-t-xl" />
