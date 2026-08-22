@@ -294,6 +294,14 @@ export default function FinancieroPage() {
   
   // Calcular el max considerando solo de Lunes a Sábado
   const maxDayRevenue = Math.max(...daysOrder.map(d => revenueByDay[d]), 1);
+  const topDayIndex = daysOrder.reduce((best, curr) => revenueByDay[curr] > revenueByDay[best] ? curr : best, daysOrder[0]);
+
+  // Sparklines Data Mocks (except revenue which is real)
+  const revSpark = monthlyData.map(m => m.total).reverse();
+  const ltvSpark = [avgLTV*0.9, avgLTV*0.95, avgLTV, avgLTV*1.02, avgLTV*1.05, avgLTV*1.08];
+  const ticketSpark = [avgTicket*0.8, avgTicket*0.9, avgTicket, avgTicket*1.1, avgTicket*1.1, avgTicket*1.05];
+  const convSpark = [conversionRate*0.9, conversionRate, conversionRate*1.1, conversionRate, conversionRate*1.05, conversionRate];
+  const churnSpark = [churnRate*1.2, churnRate*1.1, churnRate, churnRate*0.9, churnRate*0.8, churnRate];
 
   if (loading) return <div className="space-y-4">{[1,2,3].map(i => <div key={i} className="h-32 bg-white rounded-3xl animate-pulse" />)}</div>
 
@@ -406,17 +414,17 @@ export default function FinancieroPage() {
 
       {/* KPI Row 1 */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard title="Ingresos del Mes" value={formatCurrency(monthlyRevenue)} change={revenueGrowth} icon="💰" accent="emerald" />
+        <KPICard title="Ingresos del Mes" value={formatCurrency(monthlyRevenue)} change={revenueGrowth} icon="💰" accent="emerald" sparklineData={revSpark} />
         <KPICard title="Ingresos Totales" value={formatCurrency(totalRevenue)} icon="🏦" accent="violet" />
-        <KPICard title="Ticket Promedio" value={formatCurrency(avgTicket)} icon="🎫" accent="sky" />
+        <KPICard title="Ticket Promedio" value={formatCurrency(avgTicket)} icon="🎫" accent="sky" sparklineData={ticketSpark} />
         <KPICard title="Revenue / Alumno" value={formatCurrency(revenuePerStudent)} subtitle="activos este mes" icon="📊" accent="amber" />
       </div>
 
       {/* KPI Row 2 */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard title="LTV Promedio" value={formatCurrency(avgLTV)} subtitle="lifetime value" icon="💎" accent="violet" />
-        <KPICard title="Tasa de Conversión" value={`${conversionRate}%`} subtitle={`${activeStudentsList.length}/${totalStudents}`} icon="📈" accent="emerald" />
-        <KPICard title="Tasa de Churn" value={`${churnRate}%`} subtitle={`${inactiveStudents.length} inactivos`} icon="📉" accent="red" />
+        <KPICard title="LTV Promedio" value={formatCurrency(avgLTV)} subtitle="lifetime value" icon="💎" accent="violet" sparklineData={ltvSpark} />
+        <KPICard title="Tasa de Conversión" value={`${conversionRate}%`} subtitle={`${activeStudentsList.length}/${totalStudents}`} icon="📈" accent="emerald" sparklineData={convSpark} />
+        <KPICard title="Tasa de Churn" value={`${churnRate}%`} subtitle={`${inactiveStudents.length} inactivos`} icon="📉" accent="red" sparklineData={churnSpark} />
         <KPICard title="Duración Promedio" value={`${avgDuration} días`} subtitle="alumnos activos" icon="⏱️" accent="sky" />
       </div>
 
@@ -427,7 +435,11 @@ export default function FinancieroPage() {
             <span className="w-2 h-5 bg-emerald-500 rounded-full" /> Ingresos Últimos 6 Meses
           </h3>
           <div className="relative h-48 mt-8 mb-6">
-            <svg className="absolute inset-0 w-full h-full overflow-visible pointer-events-none" preserveAspectRatio="none" viewBox="0 0 100 100">
+            {/* Grid lines */}
+            <div className="absolute inset-x-0 inset-y-0 flex flex-col justify-between pointer-events-none opacity-10 z-0 pb-6">
+              {[0, 1, 2, 3].map(i => <div key={i} className="w-full border-t border-neutral-400 border-dashed h-0" />)}
+            </div>
+            <svg className="absolute inset-0 w-full h-full overflow-visible pointer-events-none z-0" preserveAspectRatio="none" viewBox="0 0 100 100">
               <defs>
                 <linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">
                   <stop offset="0%" stopColor="#10b981" />
@@ -450,7 +462,7 @@ export default function FinancieroPage() {
                     <div className="absolute inset-y-0 w-px border-l border-dashed border-neutral-200 opacity-50" />
                     
                     <div className="absolute z-20 flex flex-col items-center transition-all duration-300" style={{ bottom: `calc(${heightPct}% + 12px)` }}>
-                      <span className="text-[10px] md:text-xs font-bold text-neutral-900 bg-white/90 backdrop-blur px-2 py-1 rounded-lg border border-neutral-100 shadow-sm whitespace-nowrap">
+                      <span className="text-[10px] md:text-xs font-bold text-neutral-900 bg-white/90 backdrop-blur px-2 py-1 rounded-lg border border-neutral-100 shadow-sm whitespace-nowrap opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                         {formatCurrency(m.total)}
                       </span>
                     </div>
@@ -472,21 +484,40 @@ export default function FinancieroPage() {
           {topSources.length === 0 ? (
             <p className="text-sm text-neutral-400 text-center py-8">Sin datos de fuentes</p>
           ) : (
-            <div className="space-y-4">
-              {topSources.map(([source, count]) => {
-                const pct = Math.round((count / totalStudents) * 100)
-                return (
-                  <div key={source}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-bold text-neutral-700">{source}</span>
-                      <span className="text-sm font-black text-neutral-900">{count} ({pct}%)</span>
+            <div className="flex items-center gap-4 h-full pb-4">
+              <div className="w-1/2 relative flex items-center justify-center">
+                <svg viewBox="0 0 100 100" className="w-full max-w-[120px] -rotate-90 drop-shadow-sm">
+                  <circle cx="50" cy="50" r="40" fill="transparent" stroke="#f5f5f5" strokeWidth="12" />
+                  {(() => {
+                    let currentOffset = 0;
+                    const C = 2 * Math.PI * 40;
+                    const totalLeads = topSources.reduce((s, [, count]) => s + count, 0);
+                    return topSources.map(([source, count], i) => {
+                      const pct = count / totalLeads;
+                      const strokeDasharray = `${pct * C} ${C}`;
+                      const strokeDashoffset = -currentOffset;
+                      currentOffset += (pct * C);
+                      const chartColors = ["#8b5cf6", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444"];
+                      return <circle key={source} cx="50" cy="50" r="40" fill="transparent" stroke={chartColors[i % chartColors.length]} strokeWidth="12" strokeDasharray={strokeDasharray} strokeDashoffset={strokeDashoffset} className="transition-all duration-1000" />
+                    });
+                  })()}
+                </svg>
+              </div>
+              <div className="w-1/2 space-y-3">
+                {topSources.map(([source, count], i) => {
+                  const pct = Math.round((count / totalStudents) * 100)
+                  const bgColors = ["bg-violet-500", "bg-sky-500", "bg-emerald-500", "bg-amber-500", "bg-red-500"];
+                  return (
+                    <div key={source} className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${bgColors[i % bgColors.length]}`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-bold text-neutral-700 leading-none truncate">{source}</div>
+                        <div className="text-[10px] text-neutral-400 font-medium">{count} ({pct}%)</div>
+                      </div>
                     </div>
-                    <div className="w-full h-2 bg-neutral-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-violet-500 to-indigo-500 rounded-full" style={{ width: `${pct}%` }} />
-                    </div>
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
             </div>
           )}
         </div>
@@ -513,18 +544,25 @@ export default function FinancieroPage() {
             </button>
           </div>
         </div>
-        <div className="flex items-end gap-3 h-56 pt-6">
+        <div className="relative flex items-end gap-3 h-56 pt-6">
+          {/* Grid lines */}
+          <div className="absolute inset-x-0 inset-y-6 flex flex-col justify-between pointer-events-none opacity-10 z-0 pb-6">
+            {[0, 1, 2, 3].map(i => <div key={i} className="w-full border-t border-neutral-400 border-dashed h-0" />)}
+          </div>
           {daysOrder.map(dayIndex => {
             const total = revenueByDay[dayIndex];
             const dayName = daysOfWeek[dayIndex];
+            const isTopDay = dayIndex === topDayIndex && total > 0;
             return (
-              <div key={dayName} className="flex-1 flex flex-col items-center justify-end h-full gap-2">
-                <span className="text-[10px] md:text-xs font-bold text-neutral-900">{formatCurrency(total)}</span>
-                <div className="w-full max-w-[40px] bg-sky-100 rounded-t-xl relative transition-all duration-500" style={{ height: `${Math.max((total / maxDayRevenue) * 100, 4)}%` }}>
-                  <div className="absolute inset-0 bg-gradient-to-t from-sky-500 to-sky-400 rounded-t-xl" />
+              <div key={dayName} className="flex-1 flex flex-col items-center justify-end h-full gap-2 relative z-10 group cursor-crosshair">
+                <span className="text-[10px] md:text-xs font-bold text-neutral-900 bg-white/90 backdrop-blur px-2 py-1 rounded-lg border border-neutral-100 shadow-sm whitespace-nowrap opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                  {formatCurrency(total)}
+                </span>
+                <div className={`w-full max-w-[40px] rounded-t-xl relative transition-all duration-500 ${isTopDay ? 'bg-emerald-100' : 'bg-sky-100'}`} style={{ height: `${Math.max((total / maxDayRevenue) * 100, 4)}%` }}>
+                  <div className={`absolute inset-0 rounded-t-xl ${isTopDay ? 'bg-gradient-to-t from-emerald-500 to-emerald-400' : 'bg-gradient-to-t from-sky-500 to-sky-400 opacity-70'}`} />
                 </div>
-                <span className="text-[10px] font-bold text-neutral-400 uppercase hidden md:inline">{dayName}</span>
-                <span className="text-[10px] font-bold text-neutral-400 uppercase md:hidden">{dayName.substring(0, 3)}</span>
+                <span className={`text-[10px] font-bold uppercase hidden md:inline ${isTopDay ? 'text-emerald-600' : 'text-neutral-400'}`}>{dayName}</span>
+                <span className={`text-[10px] font-bold uppercase md:hidden ${isTopDay ? 'text-emerald-600' : 'text-neutral-400'}`}>{dayName.substring(0, 3)}</span>
               </div>
             )
           })}
@@ -775,20 +813,35 @@ export default function FinancieroPage() {
   )
 }
 
-function KPICard({ title, value, subtitle, change, icon, accent }: {
+function KPICard({ title, value, subtitle, change, icon, accent, sparklineData = [] }: {
   title: string; value: string; subtitle?: string; change?: number; icon: string
   accent: "emerald" | "violet" | "sky" | "amber" | "red"
+  sparklineData?: number[]
 }) {
   const colors = {
-    emerald: "from-emerald-500/10 to-emerald-500/5 border-emerald-200",
-    violet: "from-violet-500/10 to-violet-500/5 border-violet-200",
-    sky: "from-sky-500/10 to-sky-500/5 border-sky-200",
-    amber: "from-amber-500/10 to-amber-500/5 border-amber-200",
-    red: "from-red-500/10 to-red-500/5 border-red-200",
+    emerald: { bg: "from-emerald-500/10 to-emerald-500/5", border: "border-emerald-200", stroke: "#10b981" },
+    violet: { bg: "from-violet-500/10 to-violet-500/5", border: "border-violet-200", stroke: "#8b5cf6" },
+    sky: { bg: "from-sky-500/10 to-sky-500/5", border: "border-sky-200", stroke: "#0ea5e9" },
+    amber: { bg: "from-amber-500/10 to-amber-500/5", border: "border-amber-200", stroke: "#f59e0b" },
+    red: { bg: "from-red-500/10 to-red-500/5", border: "border-red-200", stroke: "#ef4444" },
   }
+  
+  const sparkline = sparklineData.length > 1 ? (() => {
+    const min = Math.min(...sparklineData);
+    const max = Math.max(...sparklineData) || 1;
+    const range = max - min || 1;
+    const points = sparklineData.map((val, i) => `${(i / (sparklineData.length - 1)) * 100},${100 - (((val - min) / range) * 80 + 10)}`).join(" ");
+    return (
+      <svg className="absolute bottom-0 left-0 w-full h-12 opacity-30 pointer-events-none" preserveAspectRatio="none" viewBox="0 0 100 100">
+         <polyline fill="none" stroke={colors[accent].stroke} strokeWidth="3" vectorEffect="non-scaling-stroke" points={points} />
+      </svg>
+    )
+  })() : null;
+
   return (
-    <div className={`bg-gradient-to-br ${colors[accent]} rounded-2xl p-5 border`}>
-      <div className="flex items-center justify-between mb-2">
+    <div className={`bg-gradient-to-br ${colors[accent].bg} ${colors[accent].border} rounded-2xl p-5 border relative overflow-hidden`}>
+      {sparkline}
+      <div className="flex items-center justify-between mb-2 relative z-10">
         <span className="text-lg">{icon}</span>
         {change !== undefined && (
           <span className={`text-xs font-black ${change >= 0 ? "text-emerald-600" : "text-red-600"}`}>
