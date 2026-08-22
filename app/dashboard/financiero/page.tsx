@@ -426,16 +426,42 @@ export default function FinancieroPage() {
           <h3 className="font-black text-neutral-900 mb-6 flex items-center gap-2">
             <span className="w-2 h-5 bg-emerald-500 rounded-full" /> Ingresos Últimos 6 Meses
           </h3>
-          <div className="flex items-end gap-3 h-56 pt-6">
-            {monthlyData.map(m => (
-              <div key={m.month} className="flex-1 flex flex-col items-center justify-end h-full gap-2">
-                <span className="text-xs font-bold text-neutral-900">{formatCurrency(m.total)}</span>
-                <div className="w-full bg-emerald-100 rounded-t-xl relative transition-all duration-500" style={{ height: `${Math.max((m.total / maxMonthly) * 100, 4)}%` }}>
-                  <div className="absolute inset-0 bg-gradient-to-t from-emerald-500 to-emerald-400 rounded-t-xl" />
-                </div>
-                <span className="text-[10px] font-bold text-neutral-400 uppercase">{m.month}</span>
-              </div>
-            ))}
+          <div className="relative h-48 mt-8 mb-6">
+            <svg className="absolute inset-0 w-full h-full overflow-visible pointer-events-none" preserveAspectRatio="none" viewBox="0 0 100 100">
+              <defs>
+                <linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor="#10b981" />
+                  <stop offset="100%" stopColor="#3b82f6" />
+                </linearGradient>
+              </defs>
+              <polyline 
+                fill="none" 
+                stroke="url(#lineGrad)" 
+                strokeWidth="3" 
+                vectorEffect="non-scaling-stroke"
+                points={monthlyData.map((m, i) => `${((i + 0.5) / monthlyData.length) * 100},${100 - Math.max((m.total / maxMonthly) * 100, 2)}`).join(" ")}
+              />
+            </svg>
+            <div className="flex items-end justify-between h-full relative z-10 w-full">
+              {monthlyData.map((m, i) => {
+                const heightPct = Math.max((m.total / maxMonthly) * 100, 2);
+                return (
+                  <div key={m.month} className="flex-1 flex flex-col items-center justify-end h-full relative group cursor-crosshair">
+                    <div className="absolute inset-y-0 w-px border-l border-dashed border-neutral-200 opacity-50" />
+                    
+                    <div className="absolute z-20 flex flex-col items-center transition-all duration-300" style={{ bottom: `calc(${heightPct}% + 12px)` }}>
+                      <span className="text-[10px] md:text-xs font-bold text-neutral-900 bg-white/90 backdrop-blur px-2 py-1 rounded-lg border border-neutral-100 shadow-sm whitespace-nowrap">
+                        {formatCurrency(m.total)}
+                      </span>
+                    </div>
+
+                    <div className="absolute w-3 h-3 bg-white rounded-full border-[3px] border-emerald-500 shadow-sm z-10 transition-all duration-300 group-hover:scale-150 group-hover:border-blue-500" style={{ bottom: `calc(${heightPct}% - 6px)` }} />
+                    
+                    <span className="text-[10px] font-bold text-neutral-400 uppercase absolute -bottom-6">{m.month}</span>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         </div>
 
@@ -494,7 +520,7 @@ export default function FinancieroPage() {
             return (
               <div key={dayName} className="flex-1 flex flex-col items-center justify-end h-full gap-2">
                 <span className="text-[10px] md:text-xs font-bold text-neutral-900">{formatCurrency(total)}</span>
-                <div className="w-full bg-sky-100 rounded-t-xl relative transition-all duration-500" style={{ height: `${Math.max((total / maxDayRevenue) * 100, 4)}%` }}>
+                <div className="w-full max-w-[40px] bg-sky-100 rounded-t-xl relative transition-all duration-500" style={{ height: `${Math.max((total / maxDayRevenue) * 100, 4)}%` }}>
                   <div className="absolute inset-0 bg-gradient-to-t from-sky-500 to-sky-400 rounded-t-xl" />
                 </div>
                 <span className="text-[10px] font-bold text-neutral-400 uppercase hidden md:inline">{dayName}</span>
