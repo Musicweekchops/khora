@@ -43,6 +43,8 @@ export default function FinancieroPage() {
   const [deletingPayments, setDeletingPayments] = useState(false)
   const [students, setStudents] = useState<StudentRow[]>([])
   const [unpaidStudents, setUnpaidStudents] = useState<UnpaidStudent[]>([])
+  const [classes, setClasses] = useState<{ id: string, student_id: string, date: string }[]>([])
+  const [chartMode, setChartMode] = useState<"MONTH" | "ALL">("MONTH")
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState<PaymentModal | null>(null)
   const [saving, setSaving] = useState(false)
@@ -123,6 +125,28 @@ export default function FinancieroPage() {
           }))
       )
     }
+
+    // Cargar clases para el gráfico de días de la semana
+    let allClasses: any[] = [];
+    let hasMore = true;
+    let page = 0;
+    while (hasMore) {
+      const { data: cls, error: clsErr } = await supabase
+        .from("Class")
+        .select("id, student_id, date")
+        .eq("teacher_id", teacherId)
+        .in("status", ["SCHEDULED", "COMPLETED"])
+        .range(page * 1000, (page + 1) * 1000 - 1);
+      
+      if (clsErr || !cls || cls.length === 0) {
+        hasMore = false;
+      } else {
+        allClasses = [...allClasses, ...cls];
+        page++;
+        if (cls.length < 1000) hasMore = false;
+      }
+    }
+    setClasses(allClasses)
 
     setLoading(false)
   }
@@ -240,6 +264,34 @@ export default function FinancieroPage() {
   }
   const maxMonthly = Math.max(...monthlyData.map(m => m.total), 1)
   const currentMonthLabel = now.toLocaleDateString("es-CL", { month: "long", year: "numeric" })
+
+  // ── Cálculo Ingresos por Día de la Semana ──
+  const daysOfWeek = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+  const revenueByDay = Array(7).fill(0);
+  const paymentsToUse = chartMode === "MONTH" ? thisMonthPayments : payments;
+  
+  paymentsToUse.forEach(p => {
+    const paymentMonth = p.date.substring(0, 7);
+    const studentClasses = classes.filter(c => 
+      c.student_id === p.student_id && 
+      c.date.startsWith(paymentMonth)
+    );
+    
+    if (studentClasses.length > 0) {
+      const valuePerClass = p.amount / studentClasses.length;
+      studentClasses.forEach(c => {
+        const d = new Date(`${c.date}T12:00:00Z`);
+        const day = d.getUTCDay();
+        revenueByDay[day] += valuePerClass;
+      });
+    } else {
+      const d = new Date(`${p.date}T12:00:00Z`);
+      const day = d.getUTCDay();
+      revenueByDay[day] += p.amount;
+    }
+  });
+  const maxDayRevenue = Math.max(...revenueByDay, 1);
+  const daysOrder = [1, 2, 3, 4, 5, 6, 0]; // Lunes a Domingo
 
   if (loading) return <div className="space-y-4">{[1,2,3].map(i => <div key={i} className="h-32 bg-white rounded-3xl animate-pulse" />)}</div>
 
@@ -409,6 +461,45 @@ export default function FinancieroPage() {
               })}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* ── Gráfico Días de la Semana ── */}
+      <div className="bg-white rounded-3xl border border-neutral-100 p-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+          <h3 className="font-black text-neutral-900 flex items-center gap-2">
+            <span className="w-2 h-5 bg-sky-500 rounded-full" /> Ingresos por Día de la Semana
+          </h3>
+          <div className="flex bg-neutral-100 p-1 rounded-xl self-start md:self-auto">
+            <button
+              onClick={() => setChartMode("MONTH")}
+              className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-colors ${chartMode === "MONTH" ? "bg-white text-neutral-900 shadow" : "text-neutral-500 hover:text-neutral-700"}`}
+            >
+              Mes Actual
+            </button>
+            <button
+              onClick={() => setChartMode("ALL")}
+              className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-colors ${chartMode === "ALL" ? "bg-white text-neutral-900 shadow" : "text-neutral-500 hover:text-neutral-700"}`}
+            >
+              Histórico
+            </button>
+          </div>
+        </div>
+        <div className="flex items-end gap-3 h-48">
+          {daysOrder.map(dayIndex => {
+            const total = revenueByDay[dayIndex];
+            const dayName = daysOfWeek[dayIndex];
+            return (
+              <div key={dayName} className="flex-1 flex flex-col items-center gap-2">
+                <span className="text-[10px] md:text-xs font-bold text-neutral-900">{formatCurrency(total)}</span>
+                <div className="w-full bg-sky-100 rounded-t-xl relative transition-all duration-500" style={{ height: `${Math.max((total / maxDayRevenue) * 100, 4)}%` }}>
+                  <div className="absolute inset-0 bg-gradient-to-t from-sky-500 to-sky-400 rounded-t-xl" />
+                </div>
+                <span className="text-[10px] font-bold text-neutral-400 uppercase hidden md:inline">{dayName}</span>
+                <span className="text-[10px] font-bold text-neutral-400 uppercase md:hidden">{dayName.substring(0, 3)}</span>
+              </div>
+            )
+          })}
         </div>
       </div>
 
