@@ -63,6 +63,7 @@ export default function StudentsList() {
   const [students, setStudents] = useState<Student[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
+  const [filterStatus, setFilterStatus] = useState<string>("ALL")
   const [inviteLink, setInviteLink] = useState("")
 
   useEffect(() => {
@@ -104,10 +105,11 @@ export default function StudentsList() {
     }
   }
 
-  const filtered = students.filter(s =>
-    s.name.toLowerCase().includes(search.toLowerCase()) ||
-    s.email.toLowerCase().includes(search.toLowerCase()),
-  )
+  const filtered = students.filter(s => {
+    const matchesSearch = s.name.toLowerCase().includes(search.toLowerCase()) || s.email.toLowerCase().includes(search.toLowerCase());
+    const matchesFilter = filterStatus === "ALL" || s.status === filterStatus;
+    return matchesSearch && matchesFilter;
+  })
 
   const statusColors: Record<string, string> = {
     ACTIVE: "bg-emerald-100 text-emerald-700",
@@ -154,9 +156,10 @@ export default function StudentsList() {
               copyToClipboard(link)
             }}
             className="flex-1 md:flex-none px-4 md:px-6 py-3 bg-white border border-neutral-200 text-neutral-700 rounded-2xl text-sm font-bold hover:bg-neutral-50 hover:border-neutral-300 transition-colors shadow-sm flex items-center justify-center gap-2 whitespace-nowrap"
+            title="Copia el enlace para que tus alumnos se auto-registren en tu escuela"
           >
             <span className="text-lg">🔗</span> 
-            <span className="hidden sm:inline">Copiar Link</span>
+            <span className="hidden sm:inline">Link de Registro</span>
             <span className="sm:hidden">Link</span>
           </button>
           <Link
@@ -168,46 +171,35 @@ export default function StudentsList() {
         </div>
       </div>
 
-      {/* Invite Link Card */}
-      {profile?.teacherProfileId && (
-        <div className="bg-white rounded-3xl border border-neutral-100 p-5 shadow-sm space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-neutral-800 flex items-center gap-2">
-              <span className="text-base">🔗</span> Enlace de invitación para alumnos
-            </h2>
-            <span className="text-[10px] bg-violet-50 text-violet-600 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-              Registro Directo
-            </span>
-          </div>
-          <p className="text-xs text-neutral-500 leading-relaxed">
-            Comparte este enlace corto con tus nuevos alumnos. Al ingresar, podrán registrarse y quedar vinculados a tu cuenta automáticamente.
-          </p>
-          <div className="flex items-center gap-2 bg-neutral-50 border border-neutral-200/60 rounded-2xl p-1.5 pl-4 shadow-inner max-w-full">
-            <span className="text-xs font-mono text-neutral-600 truncate select-all flex-1 min-w-0">
-              {inviteLink}
-            </span>
-            <button
-              onClick={() => {
-                const fullLink = `${window.location.origin}/unirse?teacherId=${profile.teacherProfileId}`
-                copyToClipboard(fullLink)
-              }}
-              className="px-4 py-2 bg-neutral-900 hover:bg-violet-600 text-white text-xs font-bold rounded-xl transition-all shadow-sm shrink-0 flex items-center gap-1.5"
-            >
-              <span>📋</span> Copiar
-            </button>
-          </div>
+      {/* Search and Filters */}
+      <div className="flex flex-col md:flex-row gap-3 items-center">
+        <div className="relative flex-1 w-full">
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          </span>
+          <input
+            type="text"
+            placeholder="Buscar por nombre o email…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full pl-12 pr-5 py-3.5 bg-white border border-neutral-200 rounded-2xl outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 transition-all text-sm font-bold placeholder:font-medium placeholder:text-neutral-400 shadow-sm"
+          />
         </div>
-      )}
-
-      {/* Search */}
-      <div className="relative">
-        <input
-          type="text"
-          placeholder="Buscar por nombre o email…"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="w-full px-5 py-3 bg-white border border-neutral-200 rounded-2xl outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-300 transition-all text-sm font-medium"
-        />
+        <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 scrollbar-none">
+          {["ALL", "ACTIVE", "TRIAL", "INACTIVE"].map(status => (
+            <button
+              key={status}
+              onClick={() => setFilterStatus(status)}
+              className={`px-5 py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider whitespace-nowrap transition-all shadow-sm ${
+                filterStatus === status 
+                  ? "bg-neutral-900 text-white ring-2 ring-neutral-900 ring-offset-2" 
+                  : "bg-white border border-neutral-200 text-neutral-500 hover:bg-neutral-50 hover:text-neutral-900"
+              }`}
+            >
+              {status === "ALL" ? "Todos" : statusLabels[status] ?? status}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* List */}
@@ -221,27 +213,48 @@ export default function StudentsList() {
         <div className="space-y-3">
           {filtered.map(s => (
             <Link key={s.id} href={`/dashboard/alumnos/detalles?id=${s.id}`}>
-              <div className="bg-white rounded-2xl border border-neutral-100 p-5 flex items-center gap-4 hover:shadow-md hover:border-violet-200 transition-all group">
-                {/* Avatar with online dot */}
-                <div className="relative flex-shrink-0">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-violet-100 to-indigo-100 flex items-center justify-center text-lg font-bold text-violet-600">
-                    {s.name.charAt(0).toUpperCase()}
+              <div className="bg-white rounded-[24px] border border-neutral-100 p-4 md:p-5 flex flex-col md:flex-row md:items-center gap-4 hover:shadow-lg hover:border-violet-200 hover:-translate-y-0.5 transition-all duration-300 group">
+                <div className="flex items-center gap-4 flex-1 min-w-0">
+                  {/* Dynamic Avatar */}
+                  <div className="relative flex-shrink-0">
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-black shadow-inner border-2 border-white ${
+                      s.status === 'ACTIVE' ? 'bg-gradient-to-br from-emerald-100 to-emerald-200 text-emerald-700' :
+                      s.status === 'TRIAL' ? 'bg-gradient-to-br from-sky-100 to-sky-200 text-sky-700' :
+                      s.status === 'INACTIVE' ? 'bg-gradient-to-br from-red-100 to-red-200 text-red-700' :
+                      'bg-gradient-to-br from-violet-100 to-indigo-200 text-violet-700'
+                    }`}>
+                      {s.name.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="absolute -bottom-0.5 -right-0.5 ring-2 ring-white rounded-full">
+                      <LastSeenBadge lastSeenAt={s.last_seen_at} size="sm" />
+                    </span>
                   </div>
-                  <span className="absolute -bottom-0.5 -right-0.5">
-                    <LastSeenBadge lastSeenAt={s.last_seen_at} size="sm" />
-                  </span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-neutral-900 group-hover:text-violet-600 transition-colors">{s.name}</p>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <p className="text-sm text-neutral-500 truncate">{s.email}</p>
-                    <LastSeenBadge lastSeenAt={s.last_seen_at} size="md" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-black text-neutral-900 group-hover:text-violet-600 transition-colors truncate">{s.name}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <p className="text-xs text-neutral-500 font-medium truncate">{s.email}</p>
+                      {s.phone && <span className="hidden md:inline text-neutral-300 text-xs">•</span>}
+                      {s.phone && <p className="hidden md:inline text-xs text-neutral-500 font-medium">{s.phone}</p>}
+                    </div>
                   </div>
                 </div>
-                <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${statusColors[s.status] ?? statusColors.PROSPECT}`}>
-                  {statusLabels[s.status] ?? s.status}
-                </span>
-                <span className="text-neutral-300 group-hover:text-violet-400 transition-colors">→</span>
+
+                <div className="flex items-center justify-between md:justify-end gap-6 border-t md:border-t-0 pt-4 md:pt-0 border-neutral-50 mt-2 md:mt-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest bg-neutral-100/80 px-2.5 py-1.5 rounded-xl border border-neutral-200/50">
+                      {s.modalidad === "online" ? "💻 Online" : "🏠 Presenc."}
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center gap-4">
+                    <span className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm ${statusColors[s.status] ?? statusColors.PROSPECT}`}>
+                      {statusLabels[s.status] ?? s.status}
+                    </span>
+                    <div className="w-8 h-8 rounded-full bg-neutral-50 flex items-center justify-center text-neutral-400 group-hover:bg-violet-50 group-hover:text-violet-600 transition-colors">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>
+                    </div>
+                  </div>
+                </div>
               </div>
             </Link>
           ))}
