@@ -34,6 +34,7 @@ import { useToast } from "@/components/ui/Toast"
 import LibraryPickerModal from "@/components/ui/LibraryPickerModal"
 import { checkTeacherConflict, getAvailableSlots, addMinutes } from "@/lib/availability"
 import { logClassEvent } from "@/lib/classLogger"
+import { calculateClassCounters, formatSpanishShortDate } from "@/lib/classCounter"
 
 interface ClassData {
   id: string; date: string; start_time: string; end_time: string
@@ -45,6 +46,9 @@ interface ClassData {
   teacher_user_id?: string | null
   preferred_day?: string | null
   is_recovery_pending?: boolean
+  counterLabel?: string
+  isRecovery?: boolean
+  recoveryLabel?: string
 }
 interface Note { 
   id: string; content: string; created_at: string; content_id?: string | null; playlist_id?: string | null;
@@ -263,7 +267,33 @@ export default function ClassDetailView({ classId }: { classId: string }) {
         .select("id, date, start_time, end_time, status, modalidad, duration, student_id, teacher_id, schedule_id, is_recurring, is_recovery_pending, StudentProfile ( id, preferred_day, user_id, User ( name, email ) ), TeacherProfile ( user_id, User ( name, email ) )")
         .eq("id", classId).maybeSingle()
 
-      if (c) {
+        let counterLabel = "Clase"
+        let isRecovery = false
+        let recoveryLabel = ""
+
+        if (c.student_id) {
+          const classDateObj = new Date(c.date + "T12:00")
+          const startOfMonth = `${classDateObj.getFullYear()}-${String(classDateObj.getMonth() + 1).padStart(2, "0")}-01`
+          const endOfMonth = new Date(classDateObj.getFullYear(), classDateObj.getMonth() + 1, 0).toISOString().split('T')[0]
+
+          const { data: monthClassesReq } = await supabase
+             .from("Class")
+             .select("id, student_id, date, start_time, status, is_recovery, original_class_date, is_recovery_pending")
+             .eq("student_id", c.student_id)
+             .gte("date", startOfMonth)
+             .lte("date", endOfMonth)
+             
+          if (monthClassesReq) {
+            const countersMap = calculateClassCounters(monthClassesReq)
+            const enriched = countersMap.get(c.id)
+            if (enriched) {
+               counterLabel = enriched.counterLabel
+               isRecovery = enriched.isRecovery
+               recoveryLabel = enriched.recoveryLabel || ""
+            }
+          }
+        }
+
         const classData: ClassData = {
           id: c.id, date: c.date, start_time: c.start_time, end_time: c.end_time,
           status: c.status, modalidad: c.modalidad, duration: c.duration ?? 60,
@@ -277,6 +307,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
           teacher_user_id: (c as any).TeacherProfile?.user_id,
           preferred_day: (c as any).StudentProfile?.preferred_day ?? null,
           is_recovery_pending: (c as any).is_recovery_pending ?? false,
+          counterLabel, isRecovery, recoveryLabel
         }
         setCls(classData)
         setEditForm({
@@ -1677,7 +1708,22 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                 <h1 className="text-2xl md:text-4xl font-black text-neutral-900 tracking-tight capitalize">
                   {new Date(cls.date + "T12:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}
                 </h1>
-                <div className="flex items-center gap-3 mt-2">
+                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                  {cls.counterLabel && (
+                    <span className="px-2.5 py-0.5 rounded-lg bg-violet-100 text-violet-800 text-[11px] font-black mr-1">
+                      {cls.counterLabel}
+                    </span>
+                  )}
+                  {cls.isRecovery && (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300 mr-1">
+                      {cls.recoveryLabel || "🔄 Recuperación"}
+                    </span>
+                  )}
+                  {!cls.isRecovery && cls.is_recovery_pending && (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300 mr-1">
+                      ⚠️ Pendiente
+                    </span>
+                  )}
                   <div className="flex items-center gap-1.5 text-xs md:text-sm text-neutral-500 font-bold">
                     <Clock className="w-3.5 h-3.5 md:w-4 md:h-4 text-neutral-300" />
                     <span>{formatTime(cls.start_time)} – {formatTime(cls.end_time)}</span>

@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase"
 import { formatCurrency, formatTime, toDateStr } from "@/lib/utils"
 import type { UserProfile } from "@/lib/context/AuthContext"
 import { toast } from "sonner"
+import { calculateClassCounters, formatSpanishShortDate } from "@/lib/classCounter"
 
 interface Stats { 
   activeStudents: number 
@@ -14,7 +15,11 @@ interface Stats {
   monthlyRevenue: number 
   firstPendingBooking?: { id: string; date: string } | null 
 }
-interface TodayClass { id: string; start_time: string; end_time: string; student_name: string; status: string; modalidad: string; is_recovery_pending?: boolean }
+interface TodayClass { 
+  id: string; start_time: string; end_time: string; student_name: string; 
+  status: string; modalidad: string; is_recovery_pending?: boolean;
+  counterLabel?: string; isRecovery?: boolean; recoveryLabel?: string;
+}
 
 export default function TeacherDashboard({ profile }: { profile: UserProfile }) {
   const [stats, setStats] = useState<Stats | null>(null)
@@ -41,15 +46,17 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
       const now = new Date()
       const today = toDateStr(now)
       const startOfMonth = toDateStr(new Date(now.getFullYear(), now.getMonth(), 1))
+      const endOfMonth = toDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 0))
 
-      const [students, todayCl, bookings, payments, availCheck, classTypesCheck, teacherProf] = await Promise.all([
+      const [students, todayCl, bookings, payments, availCheck, classTypesCheck, teacherProf, monthClassesReq] = await Promise.all([
         supabase.from("StudentProfile").select("id", { count: "exact", head: true }).eq("teacher_id", teacherId),
-        supabase.from("Class").select("id, start_time, end_time, status, modalidad, is_recovery_pending, StudentProfile ( User ( name ) )").eq("teacher_id", teacherId).eq("date", today).neq("status", "CANCELLED").order("start_time"),
+        supabase.from("Class").select("id, start_time, end_time, status, modalidad, is_recovery_pending, is_recovery, original_class_date, StudentProfile ( User ( name ) )").eq("teacher_id", teacherId).eq("date", today).neq("status", "CANCELLED").order("start_time"),
         supabase.from("Booking").select("id, date").eq("teacher_id", teacherId).eq("status", "PENDING").order("date", { ascending: true }),
         supabase.from("Payment").select("amount").eq("teacher_id", teacherId).gte("date", startOfMonth),
         supabase.from("Availability").select("id", { count: "exact", head: true }).eq("teacher_id", teacherId),
         supabase.from("ClassType").select("id", { count: "exact", head: true }).eq("teacher_id", teacherId),
         supabase.from("TeacherProfile").select("slug").eq("id", teacherId).maybeSingle(),
+        supabase.from("Class").select("id, student_id, date, start_time, status, is_recovery, original_class_date, is_recovery_pending").eq("teacher_id", teacherId).gte("date", startOfMonth).lte("date", endOfMonth)
       ])
 
       setStats({
@@ -60,13 +67,21 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
         firstPendingBooking: bookings.data?.[0] || null,
       })
 
+      const countersMap = calculateClassCounters(monthClassesReq.data || [])
+
       if (todayCl.data) {
-        setTodayClasses(todayCl.data.map((c: any) => ({
-          id: c.id, start_time: c.start_time, end_time: c.end_time,
-          student_name: c.StudentProfile?.User?.name ?? "Sin asignar",
-          status: c.status, modalidad: c.modalidad,
-          is_recovery_pending: !!c.is_recovery_pending,
-        })))
+        setTodayClasses(todayCl.data.map((c: any) => {
+          const enriched = countersMap.get(c.id)
+          return {
+            id: c.id, start_time: c.start_time, end_time: c.end_time,
+            student_name: c.StudentProfile?.User?.name ?? "Sin asignar",
+            status: c.status, modalidad: c.modalidad,
+            is_recovery_pending: !!c.is_recovery_pending,
+            counterLabel: enriched?.counterLabel || "Clase",
+            isRecovery: enriched?.isRecovery || false,
+            recoveryLabel: enriched?.recoveryLabel,
+          }
+        }))
       }
 
       setAvailCount(availCheck.count ?? 0)
@@ -296,11 +311,21 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
                     <span className={`text-sm font-black ${c.is_recovery_pending ? "text-amber-800" : "text-sky-600"}`}>{formatTime(c.start_time)}</span>
                   </div>
                   <div className="flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-bold text-neutral-900 group-hover:text-violet-600 transition-colors">{c.student_name}</p>
-                      {c.is_recovery_pending && (
+                      {c.counterLabel && (
+                        <span className="px-2 py-0.5 rounded-lg bg-violet-100 text-violet-800 text-[10px] font-black">
+                          {c.counterLabel}
+                        </span>
+                      )}
+                      {c.isRecovery && (
                         <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300">
-                          🔄 Recuperación
+                          {c.recoveryLabel || "🔄 Recuperación"}
+                        </span>
+                      )}
+                      {!c.isRecovery && c.is_recovery_pending && (
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300">
+                          ⚠️ Pendiente
                         </span>
                       )}
                     </div>
