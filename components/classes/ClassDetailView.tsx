@@ -267,6 +267,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
         .select("id, date, start_time, end_time, status, modalidad, duration, student_id, teacher_id, schedule_id, is_recurring, is_recovery_pending, StudentProfile ( id, preferred_day, user_id, User ( name, email ) ), TeacherProfile ( user_id, User ( name, email ) )")
         .eq("id", classId).maybeSingle()
 
+      if (c) {
         let counterLabel = "Clase"
         let isRecovery = false
         let recoveryLabel = ""
