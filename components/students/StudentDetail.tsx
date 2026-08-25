@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { formatCurrency, formatDate, formatTime } from "@/lib/utils"
 import ScheduleManager from "@/components/students/ScheduleManager"
@@ -41,6 +42,7 @@ interface TaskRow {
   completed: boolean; 
   created_at: string; 
   class_date: string;
+  attached_page?: string | null;
   LibraryContent?: { title: string; url: string; type: string } | null;
   LibraryPlaylist?: { title: string } | null;
 }
@@ -48,6 +50,7 @@ interface PaymentRow { id: string; amount: number; method: string; date: string;
 interface NoteRow { id: string; content: string; created_at: string; class_date: string }
 
 export default function StudentDetail({ studentId }: { studentId: string }) {
+  const router = useRouter()
   const [student, setStudent] = useState<StudentData | null>(null)
   const [classes, setClasses] = useState<ClassRow[]>([])
   const [tasks, setTasks] = useState<TaskRow[]>([])
@@ -155,7 +158,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
     // Tasks
     const { data: tk } = await supabase
       .from("Task")
-      .select("id, title, description, completed, created_at, Class ( date ), LibraryContent ( title, url, type ), LibraryPlaylist ( title )")
+      .select("id, title, description, completed, created_at, attached_page, Class ( date ), LibraryContent ( title, url, type ), LibraryPlaylist ( title )")
       .eq("student_id", studentId)
       .order("created_at", { ascending: false })
 
@@ -166,6 +169,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
       completed: t.completed,
       created_at: t.created_at, 
       class_date: t.Class?.date ?? "",
+      attached_page: t.attached_page,
       LibraryContent: t.LibraryContent,
       LibraryPlaylist: t.LibraryPlaylist
     })))
@@ -595,6 +599,14 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
       )}
 
       {/* HEADER */}
+      <div className="mb-4">
+        <button 
+          onClick={() => router.back()} 
+          className="text-neutral-500 hover:text-neutral-900 text-sm font-bold flex items-center gap-1.5 transition-colors"
+        >
+          <span className="text-lg leading-none">‹</span> Volver
+        </button>
+      </div>
       <div className="bg-white rounded-2xl md:rounded-3xl border border-neutral-100 p-4 md:p-8">
         <div className="flex flex-col md:flex-row items-start justify-between gap-6">
           <div className="flex items-center gap-4 md:gap-6">
@@ -918,7 +930,11 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
 
                   <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-neutral-400 font-medium">
                     {t.class_date && <span>📅 Clase: {new Date(t.class_date + "T12:00").toLocaleDateString("es-CL")}</span>}
-                    {t.LibraryContent && <span className="bg-violet-50 text-violet-700 px-2 py-0.5 rounded-md text-[10px] font-bold">📖 {t.LibraryContent.title}</span>}
+                    {t.LibraryContent && (
+                      <a href={t.LibraryContent.url + (t.attached_page ? `#page=${t.attached_page}` : '')} target="_blank" rel="noopener noreferrer" className="bg-violet-50 text-violet-700 hover:bg-violet-600 hover:text-white transition-all px-2 py-0.5 rounded-md text-[10px] font-bold">
+                        📖 {t.LibraryContent.title}
+                      </a>
+                    )}
                     {t.LibraryPlaylist && <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md text-[10px] font-bold">📚 Serie: {t.LibraryPlaylist.title}</span>}
                   </div>
                 </div>

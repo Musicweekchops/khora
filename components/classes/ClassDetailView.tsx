@@ -57,7 +57,7 @@ interface Note {
 }
 interface Task { 
   id: string; title: string; description: string | null; completed: boolean;
-  content_id?: string | null; playlist_id?: string | null; created_at: string;
+  content_id?: string | null; playlist_id?: string | null; created_at: string; attached_page?: string | null;
   LibraryContent?: { title: string; url: string; type: string } | null;
   LibraryPlaylist?: { title: string; description: string | null } | null;
   progress?: number;
@@ -119,9 +119,9 @@ export default function ClassDetailView({ classId }: { classId: string }) {
 
   // Notes & tasks
   const [newNote, setNewNote] = useState({ content: "", attached_id: "", attached_title: "", attached_type: "" })
-  const [newTask, setNewTask] = useState({ title: "", description: "", attached_id: "", attached_title: "", attached_type: "", progress: 0 })
+  const [newTask, setNewTask] = useState({ title: "", description: "", attached_id: "", attached_title: "", attached_type: "", attached_page: "", progress: 0 })
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
-  const [editingTaskForm, setEditingTaskForm] = useState({ title: "", description: "", attached_id: "", attached_title: "", attached_type: "", progress: 0 })
+  const [editingTaskForm, setEditingTaskForm] = useState({ title: "", description: "", attached_id: "", attached_title: "", attached_type: "", attached_page: "", progress: 0 })
   const [library, setLibrary] = useState<LibraryItem[]>([])
   const [playlists, setPlaylists] = useState<Playlist[]>([])
   const [saving, setSaving] = useState(false)
@@ -1282,6 +1282,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
         description: newTask.description.trim() || null,
         content_id: contentId,
         playlist_id: playlistId,
+        attached_page: newTask.attached_page.trim() || null,
         progress: newTask.progress || 0
       }).select()
 
@@ -1314,7 +1315,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
             }
           }).catch(err => console.error("Error sending task email:", err))
         }
-        setNewTask({ title: "", description: "", attached_id: "", attached_title: "", attached_type: "", progress: 0 })
+        setNewTask({ title: "", description: "", attached_id: "", attached_title: "", attached_type: "", attached_page: "", progress: 0 })
         await loadNotesAndTasks()
       }
     } catch (err) {
@@ -1378,6 +1379,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
           description: editingTaskForm.description.trim() || null,
           content_id: contentId,
           playlist_id: playlistId,
+          attached_page: editingTaskForm.attached_page.trim() || null,
           progress: editingTaskForm.progress,
           completed: editingTaskForm.progress === 100
         })
@@ -1421,6 +1423,14 @@ export default function ClassDetailView({ classId }: { classId: string }) {
 
   return (
     <div className="space-y-4 md:space-y-6">
+      <div className="mb-1">
+        <button 
+          onClick={() => router.back()} 
+          className="text-neutral-500 hover:text-neutral-900 text-sm font-bold flex items-center gap-1.5 transition-colors"
+        >
+          <span className="text-lg leading-none">‹</span> Volver
+        </button>
+      </div>
       {/* MODAL DE CONFIRMACIÓN DE ASISTENCIA */}
       {showConfirmedModal && cls && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-neutral-950/70 backdrop-blur-md animate-in fade-in duration-300">
@@ -2016,14 +2026,24 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                           <span className="truncate">{editingTaskForm.attached_id ? `📎 ${editingTaskForm.attached_title || "Material Adjunto"}` : "📎 Adjuntar Material"}</span>
                         </button>
                         {editingTaskForm.attached_id && (
-                          <button
-                            type="button"
-                            onClick={() => setEditingTaskForm(p => ({...p, attached_id: "", attached_title: "", attached_type: ""}))}
-                            className="p-2 text-neutral-400 hover:text-red-600 rounded-xl hover:bg-red-50 transition-all flex-shrink-0"
-                            title="Quitar adjunto"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          <>
+                            <input
+                              type="text"
+                              placeholder="Pág (Opcional)"
+                              value={editingTaskForm.attached_page || ""}
+                              onChange={e => setEditingTaskForm(p => ({ ...p, attached_page: e.target.value }))}
+                              className="w-24 px-3 py-2 bg-white border border-neutral-200 rounded-xl text-xs outline-none focus:border-emerald-400 placeholder:text-neutral-400"
+                              title="Página o segundo exacto del material"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setEditingTaskForm(p => ({...p, attached_id: "", attached_title: "", attached_type: "", attached_page: ""}))}
+                              className="p-2 text-neutral-400 hover:text-red-600 rounded-xl hover:bg-red-50 transition-all flex-shrink-0"
+                              title="Quitar adjunto"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </>
                         )}
                       </div>
                     </div>
@@ -2138,7 +2158,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                             <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">{t.LibraryContent.type}</p>
                           </div>
                         </div>
-                        <a href={t.LibraryContent.url} target="_blank" rel="noopener noreferrer" className="p-2 bg-white text-emerald-600 rounded-xl hover:bg-emerald-600 transition-all">
+                        <a href={t.LibraryContent.url + (t.attached_page ? `#page=${t.attached_page}` : '')} target="_blank" rel="noopener noreferrer" className="p-2 bg-white text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm">
                           <ExternalLink className="w-4 h-4" />
                         </a>
                       </div>
@@ -2243,14 +2263,24 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                             <span className="truncate">{newTask.attached_id ? `📎 ${newTask.attached_title || "Material Adjunto"}` : "📎 Adjuntar Material"}</span>
                           </button>
                           {newTask.attached_id && (
-                            <button
-                              type="button"
-                              onClick={() => setNewTask(p => ({...p, attached_id: "", attached_title: "", attached_type: ""}))}
-                              className="p-2.5 text-neutral-400 hover:text-red-600 rounded-xl hover:bg-red-50 transition-all flex-shrink-0"
-                              title="Quitar adjunto"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            <>
+                              <input
+                                type="text"
+                                placeholder="Pág (Opcional)"
+                                value={newTask.attached_page || ""}
+                                onChange={e => setNewTask(p => ({ ...p, attached_page: e.target.value }))}
+                                className="w-24 px-3 py-2 bg-white border border-neutral-200 rounded-xl text-xs outline-none focus:border-emerald-400 placeholder:text-neutral-400"
+                                title="Página o segundo exacto del material"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setNewTask(p => ({...p, attached_id: "", attached_title: "", attached_type: "", attached_page: ""}))}
+                                className="p-2.5 text-neutral-400 hover:text-red-600 rounded-xl hover:bg-red-50 transition-all flex-shrink-0"
+                                title="Quitar adjunto"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </>
                           )}
                         </div>
                         <button 
