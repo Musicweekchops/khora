@@ -145,11 +145,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.log(`🔔 Auth event: ${event} | initialCheckDone: ${initialCheckDone}`)
 
         // 1. Evitar recargas redundantes si es el mismo usuario (Token Refresh o tab focus)
+        // EXCEPCIÓN: Si profileRef.current es null (ej. falló por token expirado), DEBEMOS recargarlo.
         if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') && 
             sessionRef.current?.user?.id === currentSession?.user?.id) {
-          console.log(`⏸️ Ignorando ${event} - Mismo usuario (Token Refresh)`)
+          
           setSession(currentSession) // Solo actualizamos la sesión internamente
-          return
+          
+          if (profileRef.current) {
+            console.log(`⏸️ Ignorando ${event} - Mismo usuario y perfil ya cargado`)
+            return
+          } else {
+            console.log(`🔄 ${event} - Mismo usuario pero sin perfil. Re-intentando carga...`)
+          }
         }
 
         setSession(currentSession)
