@@ -207,7 +207,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (s?.user) {
           fetchProfile(s.user).then(p => {
             if (mounted) {
-              setProfile(p)
+              // Evitar Race Condition: Si onAuthStateChange ya cargó un perfil exitosamente
+              // mientras este fetchProfile fallaba (ej. token refresh), NO lo sobreescribas con null.
+              setProfile(currentProfile => {
+                if (currentProfile && !p) return currentProfile
+                return p
+              })
               setLoading(false)
             }
           })
