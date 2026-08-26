@@ -71,14 +71,14 @@ export default function LoginPage() {
             )}
 
             <div>
-              <label className="kh-label">Nombre</label>
+              <label className="kh-label">Email o Nombre Exacto</label>
               <input 
                 type="text" 
                 required 
                 value={emailOrName} 
                 onChange={e => setEmailOrName(e.target.value)} 
                 className="kh-input" 
-                placeholder="Nombre completo" 
+                placeholder="tu@email.com" 
               />
             </div>
 
@@ -103,10 +103,19 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <p className="text-center text-sm text-neutral-500 mt-5">
-          ¿No tienes cuenta?{" "}
-          <Link href="/register" className="text-neutral-900 font-medium hover:underline">Crear cuenta</Link>
-        </p>
+        <div className="mt-8 space-y-4 text-center">
+          <div className="p-4 bg-white border border-neutral-200 rounded-xl shadow-sm text-sm">
+            <p className="text-neutral-600 font-medium mb-1">¿Eres alumno y no tienes cuenta?</p>
+            <p className="text-neutral-500 text-xs">Pídele a tu profesor el <strong>enlace de invitación</strong> para registrarte. No puedes crear tu cuenta desde aquí.</p>
+          </div>
+          
+          <p className="text-sm text-neutral-500">
+            ¿Eres profesor o academia?{" "}
+            <Link href="/register" className="text-neutral-900 font-medium hover:underline">
+              Crea tu cuenta aquí
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   )

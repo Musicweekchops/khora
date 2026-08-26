@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation"
 export default function RegisterPage() {
   const router = useRouter()
   const [form, setForm] = useState({ name: "", email: "", password: "", region: "", comuna: "", instrumento: "" })
+  const [roleSelect, setRoleSelect] = useState<'TEACHER' | 'STUDENT' | null>(null)
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -64,122 +65,171 @@ export default function RegisterPage() {
           <p className="text-sm text-neutral-500 mt-1.5">Crea tu cuenta para gestionar alumnos</p>
         </div>
 
-        {/* Mensaje de advertencia para alumnos */}
-        <div className="mb-6 bg-blue-50 border border-blue-100 rounded-2xl p-4 flex gap-3 text-left">
-          <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
-          <div>
-            <h3 className="text-sm font-bold text-blue-900">¿Eres estudiante?</h3>
-            <p className="text-xs text-blue-700 mt-1 leading-relaxed">
-              No debes crear tu cuenta aquí. Pídele a tu profesor que te envíe su <strong className="font-bold">enlace de invitación personal</strong> por WhatsApp para unirte a su clase.
-            </p>
-          </div>
-        </div>
-
-        <div className="kh-card p-6">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <div className="bg-red-50 text-red-700 text-sm font-medium p-3 rounded-lg border border-red-100">
-                {error}
+        {!roleSelect ? (
+          <div className="space-y-4">
+            <button 
+              onClick={() => setRoleSelect('TEACHER')}
+              className="w-full bg-white border-2 border-neutral-200 hover:border-neutral-900 rounded-xl p-5 text-left transition-all group"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-neutral-100 rounded-full flex items-center justify-center text-xl group-hover:bg-neutral-900 group-hover:text-white transition-colors">
+                  👨‍🏫
+                </div>
+                <div>
+                  <h3 className="font-semibold text-neutral-900">Soy Profesor o Academia</h3>
+                  <p className="text-sm text-neutral-500 mt-0.5">Quiero crear mi plataforma para gestionar mis clases y alumnos.</p>
+                </div>
               </div>
-            )}
-
-            <div>
-              <label className="kh-label">Nombre completo</label>
-              <input type="text" required value={form.name} onChange={e => set("name", e.target.value)} className="kh-input" placeholder="Tu nombre" />
-            </div>
-
-            <div>
-              <label className="kh-label">Email</label>
-              <input type="email" required value={form.email} onChange={e => set("email", e.target.value)} className="kh-input" placeholder="tu@email.com" />
-            </div>
-
-            <div>
-              <label className="kh-label">Contraseña</label>
-              <div className="relative">
-                <input 
-                  type={showPass ? "text" : "password"} 
-                  required 
-                  minLength={6} 
-                  value={form.password} 
-                  onChange={e => set("password", e.target.value)} 
-                  className="kh-input pr-10 w-full" 
-                  placeholder="Mínimo 6 caracteres" 
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPass(!showPass)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-neutral-400 hover:text-neutral-600 transition-colors"
-                >
-                  {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="kh-label">Región</label>
-                <select 
-                  required 
-                  value={form.region} 
-                  onChange={e => {
-                    set("region", e.target.value)
-                    set("comuna", "") // Resetear comuna al cambiar región
-                  }} 
-                  className="kh-input text-[13px] text-neutral-600 bg-white truncate"
-                >
-                  <option value="" disabled>Selecciona...</option>
-                  {CHILE_REGIONS.map(r => (
-                    <option key={r.region} value={r.region}>{r.region}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="kh-label">Comuna</label>
-                <select 
-                  required 
-                  value={form.comuna} 
-                  onChange={e => set("comuna", e.target.value)} 
-                  className="kh-input text-[13px] text-neutral-600 bg-white truncate"
-                  disabled={!form.region}
-                >
-                  <option value="" disabled>Selecciona...</option>
-                  {availableComunas.map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="kh-label">Instrumento / Especialidad</label>
-              <select 
-                required 
-                value={form.instrumento} 
-                onChange={e => set("instrumento", e.target.value)} 
-                className="kh-input text-[13px] text-neutral-600 bg-white"
-              >
-                <option value="" disabled>Selecciona tu instrumento...</option>
-                <option value="Batería">🥁 Batería</option>
-                <option value="Piano / Teclado">🎹 Piano / Teclado</option>
-                <option value="Guitarra">🎸 Guitarra</option>
-                <option value="Bajo Eléctrico">🎸 Bajo Eléctrico</option>
-                <option value="Canto / Voz">🎤 Canto / Voz</option>
-                <option value="Producción Musical">🎚️ Producción Musical</option>
-                <option value="Otros">🎵 Otros</option>
-              </select>
-            </div>
-
-            <button type="submit" disabled={loading} className="kh-btn-primary w-full py-2.5 mt-2">
-              {loading ? (
-                <span className="flex items-center gap-2">
-                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Registrando…
-                </span>
-              ) : "Crear cuenta de profesor"}
             </button>
-          </form>
-        </div>
+
+            <button 
+              onClick={() => setRoleSelect('STUDENT')}
+              className="w-full bg-white border-2 border-neutral-200 hover:border-blue-500 rounded-xl p-5 text-left transition-all group"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-neutral-100 rounded-full flex items-center justify-center text-xl group-hover:bg-blue-500 group-hover:text-white transition-colors">
+                  🎸
+                </div>
+                <div>
+                  <h3 className="font-semibold text-neutral-900">Soy Alumno</h3>
+                  <p className="text-sm text-neutral-500 mt-0.5">Quiero ver mis clases, notas y pagos con mi profesor.</p>
+                </div>
+              </div>
+            </button>
+          </div>
+        ) : roleSelect === 'STUDENT' ? (
+          <div className="bg-blue-50 border border-blue-200 rounded-2xl p-6 text-center">
+            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center text-2xl mx-auto mb-4 shadow-sm">
+              👋
+            </div>
+            <h2 className="text-lg font-bold text-blue-900 mb-2">¡Hola! No necesitas crear cuenta aquí</h2>
+            <p className="text-sm text-blue-800 leading-relaxed mb-6">
+              Para registrarte como alumno, <strong>debes usar el enlace de invitación personal</strong> que te enviará tu profesor por WhatsApp o correo.
+            </p>
+            <p className="text-xs text-blue-600 mb-6">
+              Si creas tu cuenta por este medio, serás registrado como profesor y no podrás ver tus clases.
+            </p>
+            <button 
+              onClick={() => setRoleSelect(null)}
+              className="kh-btn-secondary w-full py-2.5"
+            >
+              Volver atrás
+            </button>
+          </div>
+        ) : (
+          <div className="kh-card p-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <div className="flex items-center gap-2 mb-6">
+              <button onClick={() => setRoleSelect(null)} className="text-neutral-400 hover:text-neutral-900 transition-colors">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+              </button>
+              <h2 className="font-semibold text-neutral-900">Datos de la Academia</h2>
+            </div>
+            
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {error && (
+                <div className="bg-red-50 text-red-700 text-sm font-medium p-3 rounded-lg border border-red-100">
+                  {error}
+                </div>
+              )}
+
+              <div>
+                <label className="kh-label">Nombre completo</label>
+                <input type="text" required value={form.name} onChange={e => set("name", e.target.value)} className="kh-input" placeholder="Tu nombre" />
+              </div>
+
+              <div>
+                <label className="kh-label">Email</label>
+                <input type="email" required value={form.email} onChange={e => set("email", e.target.value)} className="kh-input" placeholder="tu@email.com" />
+              </div>
+
+              <div>
+                <label className="kh-label">Contraseña</label>
+                <div className="relative">
+                  <input 
+                    type={showPass ? "text" : "password"} 
+                    required 
+                    minLength={6} 
+                    value={form.password} 
+                    onChange={e => set("password", e.target.value)} 
+                    className="kh-input pr-10 w-full" 
+                    placeholder="Mínimo 6 caracteres" 
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPass(!showPass)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-neutral-400 hover:text-neutral-600 transition-colors"
+                  >
+                    {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="kh-label">Región</label>
+                  <select 
+                    required 
+                    value={form.region} 
+                    onChange={e => {
+                      set("region", e.target.value)
+                      set("comuna", "") // Resetear comuna al cambiar región
+                    }} 
+                    className="kh-input text-[13px] text-neutral-600 bg-white truncate"
+                  >
+                    <option value="" disabled>Selecciona...</option>
+                    {CHILE_REGIONS.map(r => (
+                      <option key={r.region} value={r.region}>{r.region}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="kh-label">Comuna</label>
+                  <select 
+                    required 
+                    value={form.comuna} 
+                    onChange={e => set("comuna", e.target.value)} 
+                    className="kh-input text-[13px] text-neutral-600 bg-white truncate"
+                    disabled={!form.region}
+                  >
+                    <option value="" disabled>Selecciona...</option>
+                    {availableComunas.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="kh-label">Instrumento / Especialidad</label>
+                <select 
+                  required 
+                  value={form.instrumento} 
+                  onChange={e => set("instrumento", e.target.value)} 
+                  className="kh-input text-[13px] text-neutral-600 bg-white"
+                >
+                  <option value="" disabled>Selecciona tu instrumento...</option>
+                  <option value="Batería">🥁 Batería</option>
+                  <option value="Piano / Teclado">🎹 Piano / Teclado</option>
+                  <option value="Guitarra">🎸 Guitarra</option>
+                  <option value="Bajo Eléctrico">🎸 Bajo Eléctrico</option>
+                  <option value="Canto / Voz">🎤 Canto / Voz</option>
+                  <option value="Producción Musical">🎚️ Producción Musical</option>
+                  <option value="Otros">🎵 Otros</option>
+                </select>
+              </div>
+
+              <button type="submit" disabled={loading} className="kh-btn-primary w-full py-2.5 mt-2">
+                {loading ? (
+                  <span className="flex items-center gap-2">
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Registrando…
+                  </span>
+                ) : "Crear cuenta de profesor"}
+              </button>
+            </form>
+          </div>
+        )}
 
         <p className="text-center text-sm text-neutral-500 mt-5">
           ¿Ya tienes cuenta?{" "}
