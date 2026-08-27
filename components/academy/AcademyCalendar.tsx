@@ -58,6 +58,7 @@ export default function AcademyCalendar({ academyId }: Props) {
   const [students, setStudents] = useState<{ id: string; name: string }[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [filterTab, setFilterTab] = useState<"ALL" | "PENDING">("ALL")
+  const [currentTime, setCurrentTime] = useState(() => new Date())
 
   // Quick-add form state
   const [quickForm, setQuickForm] = useState({ student_id: "", start_time: "10:00", end_time: "11:00", modalidad: "online" })
@@ -73,6 +74,13 @@ export default function AcademyCalendar({ academyId }: Props) {
 
   useEffect(() => {
     loadTeachers()
+    
+    // Update current time every minute
+    const interval = setInterval(() => {
+      setCurrentTime(new Date())
+    }, 60000)
+    
+    return () => clearInterval(interval)
   }, [])
 
   useEffect(() => {
@@ -330,6 +338,17 @@ export default function AcademyCalendar({ academyId }: Props) {
                         }`}
                       >
                         <div className="absolute inset-0 opacity-0 group-hover:opacity-100 flex items-center justify-center text-emerald-300 font-bold text-xl pb-2">+</div>
+
+                        {/* Current Time Line */}
+                        {isToday && currentTime.getHours() === hour && (
+                          <div
+                            className="absolute left-0 right-0 z-20 flex items-center pointer-events-none"
+                            style={{ top: `${currentTime.getMinutes()}px`, transform: 'translateY(-50%)' }}
+                          >
+                            <div className="w-2.5 h-2.5 rounded-full bg-red-500 -ml-[5px]"></div>
+                            <div className="flex-1 border-t-2 border-red-500"></div>
+                          </div>
+                        )}
 
                         {slotClasses.map(cls => {
                           const startMins = parseInt(cls.start_time.split(":")[1] || "0")
