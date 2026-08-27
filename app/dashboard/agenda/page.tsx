@@ -50,6 +50,15 @@ export default function AgendaPage() {
   const [currentMonthDate, setCurrentMonthDate] = useState(() => new Date())
   const [searchTerm, setSearchTerm] = useState("")
   const [filterTab, setFilterTab] = useState<"ALL" | "PENDING" | "COMPLETED">("ALL")
+  const [currentTime, setCurrentTime] = useState(() => new Date())
+
+  // Update current time every minute
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date())
+    }, 60000)
+    return () => clearInterval(interval)
+  }, [])
 
   // Quick-add form state
   const [quickForm, setQuickForm] = useState({ student_id: "", start_time: "10:00", end_time: "11:00", modalidad: "online" })
@@ -658,6 +667,17 @@ export default function AgendaPage() {
                   >
                     {/* Hover indicator for creating classes */}
                     <div className="absolute inset-0 opacity-0 group-hover:opacity-100 flex items-center justify-center text-violet-300 font-black text-2xl pb-2">+</div>
+
+                    {/* Current Time Line */}
+                    {isToday && currentTime.getHours() === hour && (
+                      <div
+                        className="absolute left-0 right-0 z-20 flex items-center pointer-events-none"
+                        style={{ top: `${currentTime.getMinutes()}px`, transform: 'translateY(-50%)' }}
+                      >
+                        <div className="w-2.5 h-2.5 rounded-full bg-red-500 -ml-[5px]"></div>
+                        <div className="flex-1 border-t-2 border-red-500"></div>
+                      </div>
+                    )}
 
                     {slotClasses.map(cls => {
                       const startHr = parseInt(cls.start_time.split(":")[0])
