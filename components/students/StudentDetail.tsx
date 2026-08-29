@@ -931,7 +931,18 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
                   <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-neutral-400 font-medium">
                     {t.class_date && <span>📅 Clase: {new Date(t.class_date + "T12:00").toLocaleDateString("es-CL")}</span>}
                     {t.LibraryContent && (
-                      <a href={t.LibraryContent.url + (t.attached_page ? `#page=${t.attached_page}` : '')} target="_blank" rel="noopener noreferrer" className="bg-violet-50 text-violet-700 hover:bg-violet-600 hover:text-white transition-all px-2 py-0.5 rounded-md text-[10px] font-bold">
+                      <a 
+                        href={t.LibraryContent.url + (t.attached_page ? `#page=${t.attached_page}` : '')} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        onClick={(e) => {
+                          if (t.attached_page && typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+                            e.preventDefault();
+                            window.open(`/visor-pdf?url=${encodeURIComponent(t.LibraryContent!.url)}&page=${t.attached_page}`, "_blank");
+                          }
+                        }}
+                        className="bg-violet-50 text-violet-700 hover:bg-violet-600 hover:text-white transition-all px-2 py-0.5 rounded-md text-[10px] font-bold"
+                      >
                         📖 {t.LibraryContent.title}
                       </a>
                     )}

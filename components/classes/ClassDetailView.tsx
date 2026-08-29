@@ -2159,7 +2159,18 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                             <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">{t.LibraryContent.type}</p>
                           </div>
                         </div>
-                        <a href={t.LibraryContent.url + (t.attached_page ? `#page=${t.attached_page}` : '')} target="_blank" rel="noopener noreferrer" className="p-2 bg-white text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm">
+                        <a 
+                          href={t.LibraryContent.url + (t.attached_page ? `#page=${t.attached_page}` : '')} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          onClick={(e) => {
+                            if (t.attached_page && typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+                              e.preventDefault();
+                              window.open(`/visor-pdf?url=${encodeURIComponent(t.LibraryContent!.url)}&page=${t.attached_page}`, "_blank");
+                            }
+                          }}
+                          className="p-2 bg-white text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm"
+                        >
                           <ExternalLink className="w-4 h-4" />
                         </a>
                       </div>
