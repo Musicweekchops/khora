@@ -42,7 +42,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             Si este mensaje persiste por más de 10 segundos, cierra sesión e intenta de nuevo.
           </p>
           <button
-            onClick={async () => { await signOut(); router.push("/login") }}
+            onClick={async () => { 
+              try {
+                await signOut(); 
+              } finally {
+                router.push("/login");
+              }
+            }}
             className="kh-btn-primary w-full py-2.5"
           >
             Cerrar Sesión
