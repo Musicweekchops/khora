@@ -9,6 +9,7 @@ import AvailabilitySettings from "@/components/agenda/AvailabilitySettings"
 import { checkTeacherConflict } from "@/lib/availability"
 import { toast } from "sonner"
 import { calculateClassCounters, formatSpanishShortDate } from "@/lib/classCounter"
+import BottomSheet from "@/components/ui/BottomSheet"
 
 interface CalendarClass {
   id: string; date: string; start_time: string; end_time: string
@@ -1070,32 +1071,10 @@ export default function AgendaPage() {
       </div>
 
       {/* Quick-Add Modal / Bottom Drawer on Mobile */}
-      {showModal && selectedSlot && (
-        <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-0 md:p-4 animate-in fade-in duration-200"
-          onClick={() => setShowModal(false)}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            className="bg-white w-full md:max-w-md rounded-t-[40px] md:rounded-[32px] p-6 md:p-8 shadow-2xl flex flex-col max-h-[90vh] md:max-h-[95vh] overflow-y-auto animate-in slide-in-from-bottom md:slide-in-from-bottom-0 duration-300"
-          >
-            {/* Grab handle for drawer on mobile */}
-            <div className="w-12 h-1.5 bg-neutral-200 rounded-full mx-auto mb-4 md:hidden flex-shrink-0" />
-
-            <div className="flex items-center justify-between mb-5 flex-shrink-0">
-              <div>
-                <h3 className="text-xl md:text-2xl font-black text-neutral-900 tracking-tight">Crear sesión</h3>
-                <p className="text-xs text-neutral-400 font-medium mt-0.5">Asigna una nueva sesión a tu alumno</p>
-              </div>
-              <button
-                onClick={() => setShowModal(false)}
-                className="w-9 h-9 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-500 hover:text-neutral-900 transition-colors"
-              >
-                ✕
-              </button>
-            </div>
-
+      <BottomSheet isOpen={showModal && selectedSlot !== null} onClose={() => setShowModal(false)} title="Crear sesión">
+        {selectedSlot && (
             <div className="space-y-4">
+              <p className="text-xs text-neutral-400 font-medium -mt-2 mb-4">Asigna una nueva sesión a tu alumno</p>
               {/* Date selection calendar inside modal */}
               <div>
                 <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-2 ml-1">Fecha de la sesión</label>
@@ -1168,7 +1147,7 @@ export default function AgendaPage() {
                 <select
                   value={quickForm.student_id}
                   onChange={e => setQuickForm(p => ({ ...p, student_id: e.target.value }))}
-                  className="w-full px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl outline-none focus:border-violet-400 text-sm font-bold text-neutral-700 appearance-none bg-no-repeat bg-[right_1rem_center]"
+                  className="w-full px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl outline-none focus:border-violet-400 text-[16px] md:text-sm font-bold text-neutral-700 appearance-none bg-no-repeat bg-[right_1rem_center]"
                   style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundSize: '1.25rem' }}
                 >
                   <option value="">Sin asignar</option>
@@ -1180,12 +1159,12 @@ export default function AgendaPage() {
                 <div>
                   <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-2 ml-1">Inicio</label>
                   <input type="time" value={quickForm.start_time} onChange={e => setQuickForm(p => ({ ...p, start_time: e.target.value }))}
-                    className="w-full px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl outline-none focus:border-violet-400 text-sm font-bold text-neutral-700" />
+                    className="w-full px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl outline-none focus:border-violet-400 text-[16px] md:text-sm font-bold text-neutral-700" />
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-2 ml-1">Fin</label>
                   <input type="time" value={quickForm.end_time} onChange={e => setQuickForm(p => ({ ...p, end_time: e.target.value }))}
-                    className="w-full px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl outline-none focus:border-violet-400 text-sm font-bold text-neutral-700" />
+                    className="w-full px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl outline-none focus:border-violet-400 text-[16px] md:text-sm font-bold text-neutral-700" />
                 </div>
               </div>
 
@@ -1214,52 +1193,16 @@ export default function AgendaPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+        )}
+      </BottomSheet>
       {/* Availability Settings Modal */}
-      {showAvailModal && profile?.teacherProfileId && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-[40px] p-10 w-full max-w-4xl shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            <button
-              onClick={() => setShowAvailModal(false)}
-              className="absolute top-8 right-8 w-10 h-10 flex items-center justify-center bg-neutral-100 rounded-full hover:bg-neutral-200 transition-colors text-neutral-500 font-bold"
-            >
-              ✕
-            </button>
-            <AvailabilitySettings teacherId={profile.teacherProfileId} />
-          </div>
-        </div>
-      )}
+      <BottomSheet isOpen={showAvailModal} onClose={() => setShowAvailModal(false)} title="Disponibilidad" className="md:max-w-4xl">
+        {profile?.teacherProfileId && <AvailabilitySettings teacherId={profile.teacherProfileId} />}
+      </BottomSheet>
 
       {/* Booking Approval Modal */}
-      {showBookingModal && selectedBooking && (
-        <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-0 md:p-4 animate-in fade-in duration-200"
-          onClick={() => setShowBookingModal(false)}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            className="bg-white w-full md:max-w-md rounded-t-[40px] md:rounded-[32px] p-6 md:p-8 shadow-2xl flex flex-col max-h-[90vh] md:max-h-[95vh] overflow-y-auto animate-in slide-in-from-bottom md:slide-in-from-bottom-0 duration-300 border border-neutral-100"
-          >
-            <div className="w-12 h-1.5 bg-neutral-200 rounded-full mx-auto mb-4 md:hidden flex-shrink-0" />
-
-            {/* Header */}
-            <div className="flex items-center justify-between mb-6 flex-shrink-0">
-              <div>
-                <span className="text-[9px] font-black bg-amber-50 text-amber-700 border border-amber-200/60 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                  Reserva Pendiente
-                </span>
-                <h3 className="text-xl md:text-2xl font-black text-neutral-900 tracking-tight mt-1.5">Aprobación de Clase</h3>
-              </div>
-              <button
-                onClick={() => setShowBookingModal(false)}
-                className="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-500 hover:text-neutral-900 transition-colors font-bold text-xs"
-              >
-                ✕
-              </button>
-            </div>
-
+      <BottomSheet isOpen={showBookingModal && selectedBooking !== null} onClose={() => setShowBookingModal(false)} title="Aprobación de Clase">
+        {selectedBooking && (
             <div className="space-y-5">
               {/* PASO 1: Datos de la Solicitud */}
               <div className="space-y-2">
@@ -1332,7 +1275,7 @@ export default function AgendaPage() {
                   <select
                     value={bookingStudentId}
                     onChange={e => setBookingStudentId(e.target.value)}
-                    className="w-full px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl outline-none focus:border-violet-400 text-sm font-bold text-neutral-700 appearance-none bg-no-repeat bg-[right_1rem_center] transition-all cursor-pointer"
+                    className="w-full px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl outline-none focus:border-violet-400 text-[16px] md:text-sm font-bold text-neutral-700 appearance-none bg-no-repeat bg-[right_1rem_center] transition-all cursor-pointer"
                     style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundSize: '1.25rem' }}
                   >
                     <option value="">Clase puntual (No asociar a un perfil)</option>
@@ -1377,14 +1320,14 @@ export default function AgendaPage() {
                 <button
                   onClick={handleRejectBooking}
                   disabled={processingBooking}
-                  className="flex-1 py-3.5 border border-red-200 hover:bg-red-55 rounded-2xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50 text-red-500"
+                  className="flex-1 py-3.5 border border-red-200 hover:bg-red-50 rounded-2xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50 text-red-500"
                 >
                   Rechazar Solicitud
                 </button>
                 <button
                   onClick={handleAcceptBooking}
                   disabled={processingBooking}
-                  className="flex-1 py-3.5 bg-neutral-900 hover:bg-violet-650 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50 shadow-md shadow-neutral-950/10 flex items-center justify-center gap-1.5"
+                  className="flex-1 py-3.5 bg-neutral-900 hover:bg-violet-600 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50 shadow-md shadow-neutral-950/10 flex items-center justify-center gap-1.5"
                 >
                   {processingBooking ? (
                     <>
@@ -1397,9 +1340,8 @@ export default function AgendaPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+        )}
+      </BottomSheet>
     </div>
   )
 }

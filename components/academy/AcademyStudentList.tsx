@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import ReassignStudentModal from "./ReassignStudentModal"
+import BottomSheet from "@/components/ui/BottomSheet"
 
 interface StudentRow {
   id: string
@@ -291,118 +292,104 @@ export default function AcademyStudentList({ academyId }: Props) {
       )}
 
       {/* Modal Crear Alumno */}
-      {showCreate && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/25 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[420px]">
-            <div className="px-6 py-5 border-b border-neutral-100 flex items-center justify-between">
-              <div>
-                <h2 className="text-base font-semibold text-neutral-900">Nuevo Alumno</h2>
-                <p className="text-xs text-neutral-400 mt-0.5">Se creará su cuenta y se le asignará un profesor</p>
+      <BottomSheet isOpen={showCreate} onClose={() => setShowCreate(false)} title="Nuevo Alumno">
+        <div className="space-y-4">
+          <p className="text-xs text-neutral-400 -mt-2">Se creará su cuenta y se le asignará un profesor</p>
+          <form onSubmit={handleCreateStudent} className="space-y-4">
+            {createError && (
+              <div className="bg-red-50 text-red-700 text-sm font-medium p-3 rounded-xl border border-red-100">
+                {createError}
               </div>
-              <button
-                onClick={() => setShowCreate(false)}
-                className="w-7 h-7 flex items-center justify-center bg-neutral-100 rounded-full text-neutral-500 hover:bg-neutral-200 text-xs transition-colors"
-              >
-                ✕
-              </button>
+            )}
+
+            <div>
+              <label className="block text-[11px] font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">Nombre completo</label>
+              <input
+                type="text"
+                required
+                value={newForm.name}
+                onChange={e => setNewForm(p => ({ ...p, name: e.target.value }))}
+                className="w-full px-3 py-2.5 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-all text-[16px] md:text-sm"
+                placeholder="Nombre del alumno"
+              />
             </div>
 
-            <form onSubmit={handleCreateStudent} className="p-6 space-y-4">
-              {createError && (
-                <div className="bg-red-50 text-red-700 text-sm font-medium p-3 rounded-xl border border-red-100">
-                  {createError}
-                </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">Email</label>
+              <input
+                type="email"
+                required
+                value={newForm.email}
+                onChange={e => setNewForm(p => ({ ...p, email: e.target.value }))}
+                className="w-full px-3 py-2.5 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-all text-[16px] md:text-sm"
+                placeholder="alumno@email.com"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">Teléfono (Opcional)</label>
+              <input
+                type="tel"
+                value={newForm.phone}
+                onChange={e => setNewForm(p => ({ ...p, phone: e.target.value }))}
+                className="w-full px-3 py-2.5 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-all text-[16px] md:text-sm"
+                placeholder="+56 9 1234 5678"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">Profesor Asignado</label>
+              {teachers.length === 0 ? (
+                <p className="text-xs text-red-500 italic">Debes tener al menos un profesor activo para crear un alumno.</p>
+              ) : (
+                <select
+                  required
+                  value={newForm.teacherId}
+                  onChange={e => setNewForm(p => ({ ...p, teacherId: e.target.value }))}
+                  className="w-full px-3 py-2.5 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-all bg-white text-[16px] md:text-sm"
+                >
+                  <option value="" disabled>Seleccionar profesor...</option>
+                  {teachers.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
               )}
+            </div>
 
-              <div>
-                <label className="block text-[11px] font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">Nombre completo</label>
-                <input
-                  type="text"
-                  required
-                  value={newForm.name}
-                  onChange={e => setNewForm(p => ({ ...p, name: e.target.value }))}
-                  className="w-full text-sm px-3 py-2.5 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-all"
-                  placeholder="Nombre del alumno"
-                />
-              </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">Contraseña temporal</label>
+              <input
+                type="text"
+                required
+                minLength={6}
+                value={newForm.password}
+                onChange={e => setNewForm(p => ({ ...p, password: e.target.value }))}
+                className="w-full px-3 py-2.5 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-all font-mono text-[16px] md:text-sm"
+                placeholder="Mínimo 6 caracteres"
+              />
+            </div>
 
-              <div>
-                <label className="block text-[11px] font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">Email</label>
-                <input
-                  type="email"
-                  required
-                  value={newForm.email}
-                  onChange={e => setNewForm(p => ({ ...p, email: e.target.value }))}
-                  className="w-full text-sm px-3 py-2.5 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-all"
-                  placeholder="alumno@email.com"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">Teléfono (Opcional)</label>
-                <input
-                  type="tel"
-                  value={newForm.phone}
-                  onChange={e => setNewForm(p => ({ ...p, phone: e.target.value }))}
-                  className="w-full text-sm px-3 py-2.5 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-all"
-                  placeholder="+56 9 1234 5678"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">Profesor Asignado</label>
-                {teachers.length === 0 ? (
-                  <p className="text-xs text-red-500 italic">Debes tener al menos un profesor activo para crear un alumno.</p>
-                ) : (
-                  <select
-                    required
-                    value={newForm.teacherId}
-                    onChange={e => setNewForm(p => ({ ...p, teacherId: e.target.value }))}
-                    className="w-full text-sm px-3 py-2.5 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-all bg-white"
-                  >
-                    <option value="" disabled>Seleccionar profesor...</option>
-                    {teachers.map(t => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">Contraseña temporal</label>
-                <input
-                  type="text"
-                  required
-                  minLength={6}
-                  value={newForm.password}
-                  onChange={e => setNewForm(p => ({ ...p, password: e.target.value }))}
-                  className="w-full text-sm px-3 py-2.5 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-all font-mono"
-                  placeholder="Mínimo 6 caracteres"
-                />
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCreate(false)}
-                  className="flex-1 px-4 py-2.5 text-sm font-semibold bg-neutral-100 text-neutral-600 rounded-xl hover:bg-neutral-200 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={creating || teachers.length === 0}
-                  className="flex-1 px-4 py-2.5 text-sm font-semibold bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
-                >
-                  {creating ? (
-                    <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Creando...</>
-                  ) : "Crear Alumno"}
-                </button>
-              </div>
-            </form>
-          </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowCreate(false)}
+                className="flex-1 px-4 py-2.5 text-sm font-semibold bg-neutral-100 text-neutral-600 rounded-xl hover:bg-neutral-200 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={creating || teachers.length === 0}
+                className="flex-1 px-4 py-2.5 text-sm font-semibold bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                {creating ? (
+                  <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Creando...</>
+                ) : "Crear Alumno"}
+              </button>
+            </div>
+          </form>
         </div>
-      )}
+      </BottomSheet>
     </div>
   )
 }
