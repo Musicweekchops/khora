@@ -35,7 +35,7 @@ export default function BottomSheet({ isOpen, onClose, children, title, classNam
   return (
     <AnimatePresence>
       {isOpen && (
-        <>
+        <div className="fixed inset-0 z-[90] flex items-end md:items-center justify-center pointer-events-none">
           {/* Fondo oscuro (backdrop) */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -43,7 +43,7 @@ export default function BottomSheet({ isOpen, onClose, children, title, classNam
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-[90] touch-none"
+            className="absolute inset-0 bg-black/40 backdrop-blur-[2px] touch-none pointer-events-auto"
           />
           
           {/* Panel */}
@@ -61,7 +61,7 @@ export default function BottomSheet({ isOpen, onClose, children, title, classNam
               }
             }}
             // En móvil se ancla abajo. En desktop se centra como modal.
-            className={`fixed bottom-0 left-0 right-0 md:top-1/2 md:-translate-y-1/2 md:bottom-auto md:max-w-md md:mx-auto z-[100] bg-white rounded-t-3xl md:rounded-3xl shadow-2xl flex flex-col max-h-[90vh] md:max-h-[85vh] ${className}`}
+            className={`relative w-full md:max-w-md bg-white rounded-t-3xl md:rounded-3xl shadow-2xl flex flex-col max-h-[90vh] md:max-h-[85vh] pointer-events-auto ${className}`}
           >
             {/* Tirador (Handle) para mobile */}
             <div className="w-full flex justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing shrink-0 touch-none md:hidden">
@@ -85,7 +85,7 @@ export default function BottomSheet({ isOpen, onClose, children, title, classNam
               {children}
             </div>
           </motion.div>
-        </>
+        </div>
       )}
     </AnimatePresence>
   )
