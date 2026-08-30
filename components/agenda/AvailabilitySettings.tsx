@@ -163,70 +163,80 @@ export default function AvailabilitySettings({ teacherId }: { teacherId: string 
       {activeTab === "horarios" ? (
         <>
           {/* Formulario para nuevo rango */}
-          <div className="bg-neutral-50 rounded-3xl p-8 border border-neutral-100">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
-              <div>
-                <label className="kh-label px-1">Día de la semana</label>
+          <div className="bg-neutral-50/50 rounded-3xl p-6 border border-neutral-100">
+            <h4 className="text-sm font-black text-neutral-900 mb-4 flex items-center gap-2">
+              <span className="bg-violet-100 text-violet-600 w-6 h-6 rounded-full flex items-center justify-center text-[10px]">✚</span>
+              Nuevo Horario
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest pl-1">Día</label>
                 <select 
                   value={newRange.day_of_week} 
                   onChange={e => setNewRange(p => ({...p, day_of_week: Number(e.target.value)}))}
-                  className="kh-input"
+                  className="w-full px-4 py-3 bg-white border border-neutral-200 rounded-2xl outline-none focus:border-violet-400 text-sm font-bold text-neutral-700 shadow-sm transition-all"
                 >
                   {DAYS.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
               </div>
-              <div>
-                <label className="kh-label px-1">Hora de Inicio</label>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest pl-1">Inicio</label>
                 <input 
                   type="time" 
                   value={newRange.start_time} 
                   onChange={e => setNewRange(p => ({...p, start_time: e.target.value}))}
-                  className="kh-input"
+                  className="w-full px-4 py-3 bg-white border border-neutral-200 rounded-2xl outline-none focus:border-violet-400 text-sm font-bold text-neutral-700 shadow-sm transition-all"
                 />
               </div>
-              <div>
-                <label className="kh-label px-1">Hora de Fin</label>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest pl-1">Fin</label>
                 <input 
                   type="time" 
                   value={newRange.end_time} 
                   onChange={e => setNewRange(p => ({...p, end_time: e.target.value}))}
-                  className="kh-input"
+                  className="w-full px-4 py-3 bg-white border border-neutral-200 rounded-2xl outline-none focus:border-violet-400 text-sm font-bold text-neutral-700 shadow-sm transition-all"
                 />
               </div>
               <button 
                 onClick={handleAdd} 
                 disabled={saving}
-                className="kh-btn-primary py-4"
+                className="w-full py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50 shadow-md shadow-violet-600/20"
               >
-                {saving ? "Cargando..." : "+ Agregar Horario"}
+                {saving ? "..." : "Agregar Horario"}
               </button>
             </div>
           </div>
 
           {/* Lista de rangos por día */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
             {DAYS.map(day => {
               const dayRanges = ranges.filter(r => r.day_of_week === day.id)
+              const isOpen = dayRanges.length > 0
               return (
-                <div key={day.id} className="bg-white rounded-2xl border border-neutral-100 p-4 border-t-4 border-t-violet-500">
-                  <h4 className="font-black text-neutral-900 mb-3 flex items-center justify-between">
-                    <span>{day.name}</span>
-                    {dayRanges.length === 0 && <span className="text-[10px] text-neutral-300 font-bold uppercase tracking-widest">Cerrado</span>}
+                <div key={day.id} className={`rounded-3xl border p-5 transition-all ${isOpen ? "bg-white border-violet-100 shadow-sm shadow-violet-100/50" : "bg-neutral-50/50 border-neutral-100"}`}>
+                  <h4 className="font-black mb-4 flex items-center justify-between">
+                    <span className={isOpen ? "text-violet-950" : "text-neutral-400"}>{day.name}</span>
+                    {!isOpen && <span className="text-[9px] text-neutral-300 font-bold uppercase tracking-widest bg-neutral-100 px-2 py-0.5 rounded-md">Cerrado</span>}
                   </h4>
-                  <div className="space-y-2">
+                  <div className="space-y-2.5">
                     {dayRanges.map(r => (
-                      <div key={r.id} className="flex items-center justify-between bg-neutral-50 p-2 rounded-xl group transition-all hover:bg-neutral-100">
-                        <span className="text-sm font-bold text-neutral-600">
+                      <div key={r.id} className="flex items-center justify-between bg-violet-50/50 border border-violet-100/50 p-2.5 rounded-2xl group transition-all hover:bg-violet-50">
+                        <span className="text-xs font-black text-violet-700">
                           {formatTime(r.start_time)} – {formatTime(r.end_time)}
                         </span>
                         <button 
                           onClick={() => handleDelete(r.id)}
-                          className="text-neutral-300 hover:text-red-500 transition-colors px-2"
+                          className="text-violet-300 hover:text-red-500 hover:bg-red-50 w-6 h-6 rounded-full flex items-center justify-center transition-colors text-xs"
                         >
                           ✕
                         </button>
                       </div>
                     ))}
+                    {isOpen && (
+                       <div className="pt-2">
+                         <span className="text-[10px] font-bold text-violet-400">{dayRanges.length} {dayRanges.length === 1 ? 'turno' : 'turnos'}</span>
+                       </div>
+                    )}
                   </div>
                 </div>
               )
