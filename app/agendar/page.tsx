@@ -94,7 +94,7 @@ function PublicBookingPage() {
   const [monthlyLimit, setMonthlyLimit] = useState(4)
 
   // Unified flow states
-  const [flowType, setFlowType] = useState<"regular" | "nuevo" | null>(null)
+  const [flowType, setFlowType] = useState<"regular" | "nuevo" | "login" | null>("nuevo")
   
   // Login form states (Alumno Regular inline)
   const [loginEmailOrName, setLoginEmailOrName] = useState("")
@@ -903,61 +903,9 @@ function PublicBookingPage() {
       // 2. Register account first if guest (inline registration)
       let studentUserId = null
       if (!profile) {
-        if (!formData.name || !formData.email || !formData.phone || !loginPassword) {
-          throw new Error("Por favor completa todos tus datos de contacto y crea una contraseña.")
+        if (!formData.name || !formData.email || !formData.phone) {
+          throw new Error("Por favor completa todos tus datos de contacto.")
         }
-        
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-        const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-        const cleanEmail = formData.email.trim().toLowerCase()
-        const cleanPhone = formData.phone.trim()
-
-        const createRes = await fetch(`${supabaseUrl}/functions/v1/create-student`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "apikey": anonKey || "",
-            "Authorization": `Bearer ${anonKey}`
-          },
-          body: JSON.stringify({
-            email: cleanEmail,
-            password: loginPassword.trim(),
-            name: formData.name.trim(),
-            phone: cleanPhone,
-            teacher_id: selectedTeacher.id
-          })
-        })
-
-        const edgeData = await createRes.json()
-        if (!createRes.ok || edgeData?.error) {
-          throw new Error(edgeData?.error || "Error al crear la cuenta. Intenta con otro correo.")
-        }
-
-        studentUserId = edgeData.userId
-
-        // Log in to gain credentials
-        const loginRes = await supabase.auth.signInWithPassword({
-          email: cleanEmail,
-          password: loginPassword.trim()
-        })
-
-        if (loginRes.error) throw loginRes.error
-
-        // Update StudentProfile preferred settings
-        const dayNames = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"]
-        const dayOfWeekNum = new Date(formData.date + "T12:00").getDay()
-        const prefDayStr = dayNames[dayOfWeekNum]
-
-        await supabase
-          .from("StudentProfile")
-          .update({
-            modalidad: formData.message || "online",
-            preferred_day: prefDayStr,
-            preferred_time: selectedSlot,
-            status: "TRIAL",
-            lead_source: "WEBSITE"
-          })
-          .eq("user_id", studentUserId)
       }
 
       // 3. Strict student limits check if logged in
@@ -1206,6 +1154,18 @@ function PublicBookingPage() {
           )}
         </div>
 
+        {/* Login button for regular students */}
+        {!profile && flowType === "nuevo" && (
+          <div className="absolute top-4 right-4 z-50">
+            <button 
+              onClick={() => setFlowType("login")}
+              className="text-[10px] font-black text-neutral-400 hover:text-violet-600 uppercase tracking-widest bg-white border border-neutral-200 px-3 py-1.5 rounded-full shadow-sm transition-all flex items-center gap-1.5"
+            >
+              <UserCheck className="w-3.5 h-3.5" /> Acceso Alumnos
+            </button>
+          </div>
+        )}
+
         {/* Stepper Progress Indicator */}
         {!success && (
           <div className="max-w-md mx-auto animate-in fade-in duration-300">
@@ -1312,13 +1272,45 @@ function PublicBookingPage() {
               </div>
             )}
 
+            {/* FLOW: LOGIN / ALUMNO REGULAR */}
+            {flowType === "login" && !profile && (
+              <div className="space-y-6">
+                <button
+                  onClick={() => setFlowType("nuevo")}
+                  className="inline-flex items-center gap-2 text-xs font-black text-neutral-400 hover:text-violet-600 uppercase tracking-wider transition-colors"
+                >
+                  <ArrowLeft className="w-4 h-4" /> Volver al Agendamiento
+                </button>
+                <div className="max-w-md mx-auto bg-white border border-neutral-200 rounded-3xl p-8 shadow-md">
+                  <div className="text-center">
+                    <LogIn className="w-10 h-10 text-violet-400 mx-auto mb-3" />
+                    <h2 className="text-lg font-black text-neutral-900 uppercase tracking-wider">Acceso Alumnos</h2>
+                    <p className="text-xs text-neutral-500 mt-1">Gestiona, re-agenda o cancela tus reservas</p>
+                  </div>
+                  <form onSubmit={handleInlineLogin} className="space-y-4 mt-6">
+                    <div>
+                      <label className="kh-label block text-[10px] text-neutral-400">Nombre</label>
+                      <input type="text" required value={loginEmailOrName} onChange={e => setLoginEmailOrName(e.target.value)} className="kh-input bg-white border-neutral-200 text-neutral-900" placeholder="Tu nombre" />
+                    </div>
+                    <div>
+                      <label className="kh-label block text-[10px] text-neutral-400">Contraseña</label>
+                      <input type="password" required value={loginPassword} onChange={e => setLoginPassword(e.target.value)} className="kh-input bg-white border-neutral-200 text-neutral-900" placeholder="••••••••" />
+                    </div>
+                    <button type="submit" disabled={loggingIn} className="w-full py-3.5 bg-violet-600 hover:bg-violet-750 text-white rounded-xl text-xs font-black uppercase tracking-wider border border-violet-500 flex items-center justify-center gap-2">
+                      {loggingIn ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : "Ingresar"}
+                    </button>
+                  </form>
+                </div>
+              </div>
+            )}
+
             {/* FLOW: ALUMNO REGULAR */}
             {flowType === "regular" && (
               <div className="space-y-6">
                 {/* Back button to flow selection (only if NOT logged in) */}
                 {!profile && (
                   <button
-                    onClick={() => { setFlowType(null); setError(""); }}
+                    onClick={() => { /* removed setFlowType(null) to keep user in nuevo */ setError(""); }}
                     className="inline-flex items-center gap-2 text-xs font-black text-neutral-400 hover:text-white uppercase tracking-wider transition-colors"
                   >
                     <ArrowLeft className="w-4 h-4" /> Volver
@@ -1326,49 +1318,7 @@ function PublicBookingPage() {
                 )}
 
                 {/* Inline Login form for Regular Student */}
-                {!profile ? (
-                  <div className="max-w-md mx-auto bg-white border border-neutral-200 rounded-3xl p-8 shadow-md">
-                    <div className="text-center">
-                      <LogIn className="w-10 h-10 text-violet-400 mx-auto mb-3" />
-                      <h2 className="text-lg font-black text-neutral-900 uppercase tracking-wider">Identifícate</h2>
-                      <p className="text-xs text-neutral-500 mt-1">Nombre de usuario y contraseña solamente</p>
-                    </div>
-
-                    <form onSubmit={handleInlineLogin} className="space-y-4">
-                      <div>
-                        <label className="kh-label block text-[10px] text-neutral-400">Nombre</label>
-                        <input
-                          type="text"
-                          required
-                          value={loginEmailOrName}
-                          onChange={e => setLoginEmailOrName(e.target.value)}
-                          className="kh-input bg-white border-neutral-200 text-neutral-900"
-                          placeholder="Nombre completo"
-                        />
-                      </div>
-                      <div>
-                        <label className="kh-label block text-[10px] text-neutral-400">Contraseña</label>
-                        <input
-                          type="password"
-                          required
-                          value={loginPassword}
-                          onChange={e => setLoginPassword(e.target.value)}
-                          className="kh-input bg-white border-neutral-200 text-neutral-900"
-                          placeholder="••••••••"
-                        />
-                      </div>
-                      <button
-                        type="submit"
-                        disabled={loggingIn}
-                        className="w-full py-3.5 bg-violet-600 hover:bg-violet-750 text-white rounded-xl text-xs font-black uppercase tracking-wider border border-violet-500 flex items-center justify-center gap-2"
-                      >
-                        {loggingIn ? (
-                          <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        ) : "Iniciar Sesión"}
-                      </button>
-                    </form>
-                  </div>
-                ) : (
+                {!profile ? null : (
                   // Logged-in regular student view
                   <div className="space-y-6 animate-in fade-in duration-300">
                     <div className="flex items-center justify-between bg-white px-5 py-3 rounded-2xl border border-neutral-200 shadow-sm">
@@ -1752,7 +1702,7 @@ function PublicBookingPage() {
                   }}
                   className="inline-flex items-center gap-2 text-xs font-black text-neutral-400 hover:text-white uppercase tracking-wider transition-colors"
                 >
-                  <ArrowLeft className="w-4 h-4" /> Volver al inicio
+                  <ArrowLeft className="w-4 h-4" /> Empezar de nuevo
                 </button>
 
                 {/* Step 2.N: Class Type Selection */}
@@ -2075,17 +2025,7 @@ function PublicBookingPage() {
                                       placeholder="+56912345678"
                                     />
                                   </div>
-                                  <div>
-                                    <label className="kh-label block text-[10px] text-neutral-400">Crea tu contraseña (para tu cuenta de alumno)</label>
-                                    <input
-                                      type="password"
-                                      required
-                                      value={loginPassword}
-                                      onChange={e => setLoginPassword(e.target.value)}
-                                      className="kh-input bg-white border-neutral-200 text-neutral-900"
-                                      placeholder="Mínimo 6 caracteres"
-                                    />
-                                  </div>
+                                  
                                 </div>
                                 
                                 <div>
