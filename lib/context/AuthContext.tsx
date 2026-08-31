@@ -16,6 +16,7 @@ export interface UserProfile {
   role: 'TEACHER' | 'STUDENT' | 'ACADEMY'
   is_admin: boolean
   teacherProfileId: string | null
+  teacherSlug: string | null
   studentProfileId: string | null
   academyProfileId: string | null
   instrumento?: string | null
@@ -81,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .from('User')
           .select(`
             id, email, name, phone, role, is_admin, completed_onboarding,
-            TeacherProfile ( id, instrumento, academy_id ),
+            TeacherProfile ( id, instrumento, academy_id, slug ),
             StudentProfile ( id ),
             AcademyProfile ( id )
           `)
@@ -103,6 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             role: data.role as 'TEACHER' | 'STUDENT' | 'ACADEMY',
             is_admin: data.is_admin ?? false,
             teacherProfileId: tp?.id ?? null,
+            teacherSlug: tp?.slug ?? null,
             studentProfileId: sp?.id ?? null,
             academyProfileId: ap?.id ?? null,
             instrumento: tp?.instrumento ?? null,

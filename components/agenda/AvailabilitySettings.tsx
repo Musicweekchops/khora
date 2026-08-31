@@ -110,32 +110,35 @@ export default function AvailabilitySettings({ teacherId }: { teacherId: string 
   return (
     <div className="space-y-8">
       {/* Link de Reserva Section */}
-      <div className="kh-card p-8 bg-violet-600 text-white border-none shadow-xl shadow-violet-600/20">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="kh-card p-6 sm:p-8 bg-violet-600 text-white border-none shadow-xl shadow-violet-600/20">
+        <div className="flex flex-col gap-6">
           <div className="space-y-1">
             <h3 className="text-xl font-black">Tu Link de Reserva</h3>
             <p className="text-violet-100 text-sm opacity-90 font-medium">Comparte este link para que tus alumnos agenden clases.</p>
           </div>
-          <div className="flex gap-2 bg-white/10 p-1.5 rounded-2xl backdrop-blur-md">
-            <input 
-              type="text" 
-              value={slug}
-              onChange={e => setSlug(e.target.value)}
-              className="bg-transparent border-none text-white font-black text-sm px-4 outline-none w-40"
-              placeholder="tu-nombre"
-            />
-            <button onClick={updateSlug} className="bg-white text-violet-600 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-violet-50 transition-all">
-              {saving ? "..." : "Guardar"}
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-2 bg-white/10 p-1.5 rounded-2xl backdrop-blur-md">
+              <span className="text-violet-200 text-xs font-medium pl-3 hidden sm:inline">khora.cl/agendar?p=</span>
+              <input 
+                type="text" 
+                value={slug}
+                onChange={e => setSlug(e.target.value)}
+                className="bg-transparent border-none text-white font-black text-sm px-2 outline-none w-full min-w-0"
+                placeholder="tu-nombre"
+              />
+              <button onClick={updateSlug} className="bg-white text-violet-600 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-violet-50 transition-all shrink-0">
+                {saving ? "..." : "Guardar"}
+              </button>
+            </div>
+            <button 
+              onClick={copyLink} 
+              className={`w-full py-4 rounded-2xl text-sm font-black uppercase tracking-widest transition-all ${
+                copied ? "bg-emerald-500 text-white" : "bg-white text-violet-600 hover:scale-[1.02]"
+              }`}
+            >
+              {copied ? "✓ Copiado" : "🔗 Copiar Link Público"}
             </button>
           </div>
-          <button 
-            onClick={copyLink} 
-            className={`px-8 py-4 rounded-2xl text-sm font-black uppercase tracking-widest transition-all ${
-              copied ? "bg-emerald-500 text-white" : "bg-white text-violet-600 hover:scale-105"
-            }`}
-          >
-            {copied ? "✓ Copiado" : "🔗 Copiar Link Público"}
-          </button>
         </div>
       </div>
 
@@ -161,15 +164,15 @@ export default function AvailabilitySettings({ teacherId }: { teacherId: string 
       </div>
 
       {activeTab === "horarios" ? (
-        <>
+        <div className="space-y-6">
           {/* Formulario para nuevo rango */}
-          <div className="bg-neutral-50/50 rounded-3xl p-6 border border-neutral-100">
+          <div className="bg-neutral-50/50 rounded-3xl p-5 border border-neutral-100">
             <h4 className="text-sm font-black text-neutral-900 mb-4 flex items-center gap-2">
               <span className="bg-violet-100 text-violet-600 w-6 h-6 rounded-full flex items-center justify-center text-[10px]">✚</span>
               Nuevo Horario
             </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end">
-              <div className="space-y-1.5">
+            <div className="grid grid-cols-2 gap-4 items-end">
+              <div className="col-span-2 space-y-1.5">
                 <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest pl-1">Día</label>
                 <select 
                   value={newRange.day_of_week} 
@@ -185,7 +188,7 @@ export default function AvailabilitySettings({ teacherId }: { teacherId: string 
                   type="time" 
                   value={newRange.start_time} 
                   onChange={e => setNewRange(p => ({...p, start_time: e.target.value}))}
-                  className="w-full px-4 py-3 bg-white border border-neutral-200 rounded-2xl outline-none focus:border-violet-400 text-sm font-bold text-neutral-700 shadow-sm transition-all"
+                  className="w-full px-3 sm:px-4 py-3 bg-white border border-neutral-200 rounded-2xl outline-none focus:border-violet-400 text-sm font-bold text-neutral-700 shadow-sm transition-all"
                 />
               </div>
               <div className="space-y-1.5">
@@ -194,13 +197,13 @@ export default function AvailabilitySettings({ teacherId }: { teacherId: string 
                   type="time" 
                   value={newRange.end_time} 
                   onChange={e => setNewRange(p => ({...p, end_time: e.target.value}))}
-                  className="w-full px-4 py-3 bg-white border border-neutral-200 rounded-2xl outline-none focus:border-violet-400 text-sm font-bold text-neutral-700 shadow-sm transition-all"
+                  className="w-full px-3 sm:px-4 py-3 bg-white border border-neutral-200 rounded-2xl outline-none focus:border-violet-400 text-sm font-bold text-neutral-700 shadow-sm transition-all"
                 />
               </div>
               <button 
                 onClick={handleAdd} 
                 disabled={saving}
-                className="w-full py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50 shadow-md shadow-violet-600/20"
+                className="col-span-2 w-full mt-2 py-3.5 bg-violet-600 hover:bg-violet-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50 shadow-md shadow-violet-600/20"
               >
                 {saving ? "..." : "Agregar Horario"}
               </button>
@@ -208,7 +211,7 @@ export default function AvailabilitySettings({ teacherId }: { teacherId: string 
           </div>
 
           {/* Lista de rangos por día */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {DAYS.map(day => {
               const dayRanges = ranges.filter(r => r.day_of_week === day.id)
               const isOpen = dayRanges.length > 0
@@ -242,7 +245,7 @@ export default function AvailabilitySettings({ teacherId }: { teacherId: string 
               )
             })}
           </div>
-        </>
+        </div>
       ) : (
         <ServiceManager teacherId={teacherId} />
       )}

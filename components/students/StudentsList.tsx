@@ -74,8 +74,8 @@ export default function StudentsList() {
   useEffect(() => {
     if (profile?.teacherProfileId) {
       fetchStudents(profile.teacherProfileId)
-      if (typeof window !== "undefined") {
-        setInviteLink(`${window.location.host}/unirse?teacherId=${profile.teacherProfileId}`)
+      if (profile?.role === "TEACHER" && profile?.teacherSlug) {
+        setInviteLink(`${window.location.host}/agendar?p=${profile.teacherSlug}`)
       }
     }
   }, [profile])
@@ -166,8 +166,8 @@ export default function StudentsList() {
         <div className="flex items-center gap-2 w-full md:w-auto">
           <button 
             onClick={() => {
-              if (!profile?.teacherProfileId) return
-              const link = `${window.location.origin}/unirse?teacherId=${profile.teacherProfileId}`
+              if (!profile?.teacherSlug) return
+              const link = `${window.location.origin}/agendar?p=${profile.teacherSlug}`
               copyToClipboard(link)
             }}
             className="flex-1 md:flex-none px-4 md:px-6 py-3 bg-white border border-neutral-200 text-neutral-700 rounded-2xl text-sm font-bold hover:bg-neutral-50 hover:border-neutral-300 transition-colors shadow-sm flex items-center justify-center gap-2 whitespace-nowrap"
