@@ -2033,7 +2033,6 @@ function PublicBookingPage() {
                                   </div>
                                   
                                 </div>
-                                </div>
                               </div>
                             )}
 

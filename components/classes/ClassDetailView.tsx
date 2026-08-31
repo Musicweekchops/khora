@@ -2105,6 +2105,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                                 attached_id: attachedId,
                                 attached_title: attachedTitle,
                                 attached_type: attachedType,
+                                attached_page: "",
                                 progress: t.progress || 0
                             });
                             setEditingTaskId(t.id);
