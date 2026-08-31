@@ -17,7 +17,7 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
   const [error, setError] = useState("")
   const [form, setForm] = useState({
     name: "", email: "", phone: "", password: "",
-    status: "PROSPECT", lead_source: "", modalidad: "online",
+    status: "PROSPECT", lead_source: "", modalidad: "",
     preferred_day: "", preferred_time: "",
     emergency_contact: "", emergency_phone: "",
     payment_frequency: "MONTHLY", payment_day: "5", monthly_fee: "0",
@@ -43,7 +43,7 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
       password: "",
       status: data.status ?? "PROSPECT",
       lead_source: data.lead_source ?? "",
-      modalidad: data.modalidad ?? "online",
+      modalidad: data.modalidad ?? "",
       preferred_day: data.preferred_day ?? "",
       preferred_time: data.preferred_time ?? "",
       emergency_contact: data.emergency_contact ?? "",
@@ -69,6 +69,7 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
       if (mode === "create") {
         if (!form.name.trim()) throw new Error("El nombre es obligatorio")
         if (!form.email.trim()) throw new Error("El email es obligatorio")
+        if (!form.modalidad) throw new Error("Debes seleccionar la modalidad de clases")
 
         const email = form.email.trim().toLowerCase()
         const initialPassword = form.password.trim() || "student123"
@@ -90,6 +91,7 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
             name: form.name.trim(),
             phone: form.phone.trim() || null,
             teacher_id: profile.teacherProfileId,
+            modalidad: form.modalidad,
             skipPush: true
           })
         })

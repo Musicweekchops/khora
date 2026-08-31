@@ -51,7 +51,7 @@ function RegistrationForm() {
     name: "",
     email: "",
     password: "",
-    modalidad: "presencial",
+    modalidad: "",
   })
 
   // Lista de Espera Modal / Drawer
@@ -174,6 +174,10 @@ function RegistrationForm() {
     e.preventDefault()
     if (!form.name || !form.email || !form.password || !selectedSlot || !teacherId) {
       toast("Completa todos los campos, incluyendo tu contraseña", "error")
+      return
+    }
+    if (!form.modalidad) {
+      toast("Por favor selecciona si prefieres modalidad Presencial u Online", "error")
       return
     }
 

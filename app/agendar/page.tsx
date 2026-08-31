@@ -891,6 +891,12 @@ function PublicBookingPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!selectedClass || !selectedSlot || !selectedTeacher) return
+    
+    if (!formData.message) {
+      setError("Debes seleccionar la modalidad de la clase (Presencial u Online) antes de confirmar.")
+      return
+    }
+
     setSubmitting(true)
     setError("")
 
@@ -2027,23 +2033,27 @@ function PublicBookingPage() {
                                   </div>
                                   
                                 </div>
-                                
-                                <div>
-                                  <label className="kh-label block text-[10px] text-neutral-400">Modalidad de Clase</label>
-                                  <div className="grid grid-cols-2 gap-2 p-1 bg-neutral-100 border border-neutral-200 rounded-xl">
-                                    {["presencial", "online"].map(m => (
-                                      <button
-                                        key={m}
-                                        type="button"
-                                        onClick={() => setFormData(p => ({ ...p, message: m }))}
-                                        className={`py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${
-                                          formData.message === m ? "bg-white text-neutral-900 shadow-sm border border-neutral-200/50" : "text-neutral-500 hover:text-neutral-300"
-                                        }`}
-                                      >
-                                        {m === "presencial" ? "🏠 Presencial" : "📹 Online"}
-                                      </button>
-                                    ))}
-                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* MODALITY SELECTOR (REQUIRED FOR EVERYONE) */}
+                            {selectedSlot && (
+                              <div className="pt-4 border-t border-neutral-800 mt-4">
+                                <label className="kh-label block text-[10px] text-neutral-400 mb-2">Modalidad de Clase</label>
+                                <div className="grid grid-cols-2 gap-2 p-1 bg-neutral-100 border border-neutral-200 rounded-xl">
+                                  {["presencial", "online"].map(m => (
+                                    <button
+                                      key={m}
+                                      type="button"
+                                      onClick={() => setFormData(p => ({ ...p, message: m }))}
+                                      className={`py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${
+                                        formData.message === m ? "bg-white text-neutral-900 shadow-sm border border-neutral-200/50" : "text-neutral-500 hover:text-neutral-300"
+                                      }`}
+                                    >
+                                      {m === "presencial" ? "🏠 Presencial" : "📹 Online"}
+                                    </button>
+                                  ))}
                                 </div>
                               </div>
                             )}

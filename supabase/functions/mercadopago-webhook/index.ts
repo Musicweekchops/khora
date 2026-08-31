@@ -171,6 +171,7 @@ serve(async (req) => {
                 name: (payerName || "Alumno").trim(),
                 phone: payerPhone,
                 teacher_id: teacherId,
+                modalidad: modalidad,
                 skipPush: true
               })
             })

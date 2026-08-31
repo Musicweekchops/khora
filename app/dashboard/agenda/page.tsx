@@ -221,7 +221,7 @@ export default function AgendaPage() {
 
       const formattedBookings = (bookingData || []).map((b: any) => ({
         id: b.id, date: b.date, start_time: b.start_time, end_time: b.end_time,
-        status: "PENDING", modalidad: "online", is_recurring: false,
+        status: "PENDING", modalidad: b.message?.toLowerCase()?.includes("presencial") ? "presencial" : "online", is_recurring: false,
         student_name: `SOLICITUD: ${b.name}`,
         is_booking: true,
         booking_email: b.email,
