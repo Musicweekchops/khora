@@ -184,7 +184,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         // 5. Redirecciones controladas
-        if (event === 'SIGNED_IN') {
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
           // Si no había sesión, o si estamos en una ruta pública (como /login), redirigir
           if (!sessionRef.current || isPublicPath(pathname)) {
             if (fetchedProfile?.is_admin) {
