@@ -8,8 +8,5 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    // No-op lock para evitar advertencias de Web Locks API y bloqueos
-    // en navegadores que no lo soportan bien (ej. Safari/iOS).
-    lock: (_name: string, _acquireTimeout: number, fn: () => Promise<any>) => fn(),
   }
 })
