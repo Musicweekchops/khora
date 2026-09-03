@@ -23,7 +23,8 @@ import {
   Trash2,
   Plus,
   LogIn,
-  ClipboardList
+  ClipboardList,
+  UserPlus
 } from "lucide-react"
 
 interface ClassType {
@@ -94,12 +95,16 @@ function PublicBookingPage() {
   const [monthlyLimit, setMonthlyLimit] = useState(4)
 
   // Unified flow states
-  const [flowType, setFlowType] = useState<"regular" | "nuevo" | "login" | null>("nuevo")
+  const [flowType, setFlowType] = useState<"regular" | "nuevo" | "login" | "registro" | null>("nuevo")
   
-  // Login form states (Alumno Regular inline)
+  // Login form states (Alumno Regular) // UI State
   const [loginEmailOrName, setLoginEmailOrName] = useState("")
   const [loginPassword, setLoginPassword] = useState("")
   const [loggingIn, setLoggingIn] = useState(false)
+
+  // Register State
+  const [registerForm, setRegisterForm] = useState({ name: "", email: "", phone: "", password: "" })
+  const [registering, setRegistering] = useState(false)
 
   // Regular student actions and states
   const [regularAction, setRegularAction] = useState<"reagendar" | "recuperar" | "cancelar" | null>(null)
@@ -677,6 +682,54 @@ function PublicBookingPage() {
       setLoggingIn(false)
     } else {
       setLoggingIn(false)
+    }
+  }
+
+  async function handleRegister(e: React.FormEvent) {
+    e.preventDefault()
+    if (!registerForm.name || !registerForm.email || !registerForm.password || !baseTeacher) return
+
+    setRegistering(true)
+    setError("")
+
+    try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+      const res = await fetch(`${supabaseUrl}/functions/v1/create-student`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": anonKey || "",
+          "Authorization": `Bearer ${anonKey}`
+        },
+        body: JSON.stringify({
+          email: registerForm.email.trim().toLowerCase(),
+          password: registerForm.password.trim(),
+          name: registerForm.name.trim(),
+          phone: registerForm.phone.trim() || null,
+          teacher_id: baseTeacher.id
+        })
+      })
+
+      const edgeData = await res.json()
+      if (!res.ok || edgeData?.error) {
+        throw new Error(edgeData?.error || "Error al crear la cuenta. Intenta con otro correo.")
+      }
+
+      // Auto-login
+      const { error: loginErr } = await supabase.auth.signInWithPassword({
+        email: registerForm.email.trim().toLowerCase(),
+        password: registerForm.password.trim()
+      })
+
+      if (loginErr) throw loginErr
+
+      window.location.href = "/dashboard/tareas"
+
+    } catch (err: any) {
+      setError(err.message || "Ocurrió un error inesperado al registrar la cuenta.")
+      setRegistering(false)
     }
   }
 
@@ -1271,7 +1324,13 @@ function PublicBookingPage() {
                       onClick={() => setFlowType("nuevo")}
                       className="w-full py-4 bg-white hover:bg-neutral-50 text-neutral-700 rounded-xl text-xs font-black uppercase tracking-wider transition-all border border-neutral-200 flex items-center justify-center gap-2 shadow-sm"
                     >
-                      <Sparkles className="w-4 h-4" /> No, soy alumno nuevo
+                      <Sparkles className="w-4 h-4" /> No, soy alumno nuevo (Agendar)
+                    </button>
+                    <button
+                      onClick={() => setFlowType("registro")}
+                      className="w-full py-3 bg-neutral-50 hover:bg-neutral-100 text-neutral-500 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border border-neutral-200 flex items-center justify-center gap-2 shadow-sm"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" /> Solo quiero crear mi cuenta
                     </button>
                   </div>
                 </div>
@@ -1304,6 +1363,46 @@ function PublicBookingPage() {
                     </div>
                     <button type="submit" disabled={loggingIn} className="w-full py-3.5 bg-violet-600 hover:bg-violet-750 text-white rounded-xl text-xs font-black uppercase tracking-wider border border-violet-500 flex items-center justify-center gap-2">
                       {loggingIn ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : "Ingresar"}
+                    </button>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* FLOW: REGISTRO */}
+            {flowType === "registro" && !profile && (
+              <div className="space-y-6">
+                <button
+                  onClick={() => setFlowType(null)}
+                  className="inline-flex items-center gap-2 text-xs font-black text-neutral-400 hover:text-violet-600 uppercase tracking-wider transition-colors"
+                >
+                  <ArrowLeft className="w-4 h-4" /> Volver al Inicio
+                </button>
+                <div className="max-w-md mx-auto bg-white border border-neutral-200 rounded-3xl p-8 shadow-md">
+                  <div className="text-center">
+                    <UserPlus className="w-10 h-10 text-violet-400 mx-auto mb-3" />
+                    <h2 className="text-lg font-black text-neutral-900 uppercase tracking-wider">Crear Cuenta</h2>
+                    <p className="text-xs text-neutral-500 mt-1">Crea tu cuenta de alumno para acceder a la escuela.</p>
+                  </div>
+                  <form onSubmit={handleRegister} className="space-y-4 mt-6">
+                    <div>
+                      <label className="kh-label block text-[10px] text-neutral-400">Nombre Completo</label>
+                      <input type="text" required value={registerForm.name} onChange={e => setRegisterForm(p => ({ ...p, name: e.target.value }))} className="kh-input bg-white border-neutral-200 text-neutral-900" placeholder="Ej: Daniel Gómez" />
+                    </div>
+                    <div>
+                      <label className="kh-label block text-[10px] text-neutral-400">Correo Electrónico</label>
+                      <input type="email" required value={registerForm.email} onChange={e => setRegisterForm(p => ({ ...p, email: e.target.value }))} className="kh-input bg-white border-neutral-200 text-neutral-900" placeholder="daniel@ejemplo.com" />
+                    </div>
+                    <div>
+                      <label className="kh-label block text-[10px] text-neutral-400">Teléfono / WhatsApp</label>
+                      <input type="tel" required value={registerForm.phone} onChange={e => setRegisterForm(p => ({ ...p, phone: e.target.value }))} className="kh-input bg-white border-neutral-200 text-neutral-900" placeholder="+56912345678" />
+                    </div>
+                    <div>
+                      <label className="kh-label block text-[10px] text-neutral-400">Contraseña (Mínimo 6 caracteres)</label>
+                      <input type="password" required value={registerForm.password} onChange={e => setRegisterForm(p => ({ ...p, password: e.target.value }))} className="kh-input bg-white border-neutral-200 text-neutral-900" placeholder="••••••••" minLength={6} />
+                    </div>
+                    <button type="submit" disabled={registering} className="w-full py-3.5 bg-violet-600 hover:bg-violet-750 text-white rounded-xl text-xs font-black uppercase tracking-wider border border-violet-500 flex items-center justify-center gap-2 mt-4">
+                      {registering ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : "Crear mi cuenta"}
                     </button>
                   </form>
                 </div>
