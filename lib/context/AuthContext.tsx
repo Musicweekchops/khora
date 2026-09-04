@@ -41,14 +41,30 @@ const AuthContext = createContext<AuthContextType>({
 })
 
 // -------------------------------------------------------------------
-// Rutas públicas
+// Rutas públicas (accesibles sin autenticación)
 // -------------------------------------------------------------------
 const PUBLIC_PATHS = ['/login', '/register', '/', '/agendar', '/recuperar', '/actualizar-password', '/unirse']
 
+// Rutas que, si el usuario ya está logueado, lo redirigen al dashboard
+// (no incluye /unirse ni /agendar, que deben ser accesibles siempre)
+const AUTH_REDIRECT_PATHS = ['/login', '/register']
+
 function isPublicPath(pathname: string | null) {
   if (!pathname) return false
-  const publicPaths = ['/login', '/register', '/', '/agendar', '/recuperar', '/actualizar-password', '/unirse']
-  return publicPaths.some(p => pathname === p || pathname.startsWith('/agendar/'))
+  return (
+    pathname === '/' ||
+    pathname === '/login' ||
+    pathname === '/register' ||
+    pathname.startsWith('/agendar') ||
+    pathname.startsWith('/unirse') ||
+    pathname.startsWith('/recuperar') ||
+    pathname.startsWith('/actualizar-password')
+  )
+}
+
+function isAuthRedirectPath(pathname: string | null) {
+  if (!pathname) return false
+  return AUTH_REDIRECT_PATHS.some(p => pathname === p || pathname.startsWith(p))
 }
 
 // -------------------------------------------------------------------
@@ -185,8 +201,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // 5. Redirecciones controladas
         if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-          // Si no había sesión, o si estamos en una ruta pública (como /login), redirigir
-          if (!sessionRef.current || isPublicPath(pathname)) {
+          // Solo redirigir al dashboard si el usuario está en /login o /register
+          if (!sessionRef.current || isAuthRedirectPath(pathname)) {
             if (fetchedProfile?.is_admin) {
               router.push('/dashboard/admin')
             } else {
@@ -245,8 +261,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       router.push('/login')
     }
     
-    // 2. Authenticated users sitting on /login -> to dashboard
-    if (user && profile && isPublicPath(pathname)) {
+    // 2. Authenticated users on /login or /register -> to dashboard
+    // (no redirigir en /unirse ni /agendar porque son páginas públicas válidas)
+    if (user && profile && isAuthRedirectPath(pathname)) {
       if (profile.is_admin) {
         router.push('/dashboard/admin')
       } else {
