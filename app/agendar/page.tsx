@@ -581,8 +581,10 @@ function PublicBookingPage() {
     }
   }, [rescheduleDate, classToReschedule, selectedTeacher])
 
-  // Student specific limits checker prior to booking
-  async function checkStudentLimits(targetDate: string) {
+  // Student specific limits checker prior to booking.
+  // excludeClassId: when rescheduling, pass the ID of the class being moved so it
+  // is not counted against the student's own monthly/weekly limits.
+  async function checkStudentLimits(targetDate: string, excludeClassId?: string) {
     if (!profile?.studentProfileId) return { allowed: true }
 
     const targetDateObj = new Date(targetDate + "T12:00")
@@ -597,15 +599,15 @@ function PublicBookingPage() {
       .maybeSingle()
 
     const dayOfWeekNum = getPreferredDayOfWeek(sp?.preferred_day)
-    const calculatedMonthlyLimit = dayOfWeekNum !== null 
+    const calculatedMonthlyLimit = dayOfWeekNum !== null
       ? countDaysInMonth(targetYear, targetMonth, dayOfWeekNum)
       : 4
 
-    // 2. Count monthly classes
+    // 2. Count monthly classes (excluding the class being rescheduled if provided)
     const startOfMonth = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-01`
     const endOfMonth = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(new Date(targetYear, targetMonth + 1, 0).getDate()).padStart(2, '0')}`
 
-    const { count: mCount, error: mErr } = await supabase
+    let monthlyQuery = supabase
       .from("Class")
       .select("id", { count: "exact" })
       .eq("student_id", profile.studentProfileId)
@@ -613,6 +615,8 @@ function PublicBookingPage() {
       .neq("status", "CANCELLED_BY_STUDENT")
       .gte("date", startOfMonth)
       .lte("date", endOfMonth)
+    if (excludeClassId) monthlyQuery = monthlyQuery.neq("id", excludeClassId)
+    const { count: mCount, error: mErr } = await monthlyQuery
 
     if (mErr) throw mErr
 
@@ -623,9 +627,10 @@ function PublicBookingPage() {
       }
     }
 
-    // 3. Count weekly classes (limit of 1 class per week)
+    // 3. Count weekly classes — limit of 1 class per week
+    // (excluding the class being rescheduled so moving within the same week is always allowed)
     const { startOfWeek, endOfWeek } = getWeekRange(targetDate)
-    const { count: wCount, error: wErr } = await supabase
+    let weeklyQuery = supabase
       .from("Class")
       .select("id", { count: "exact" })
       .eq("student_id", profile.studentProfileId)
@@ -633,6 +638,8 @@ function PublicBookingPage() {
       .neq("status", "CANCELLED_BY_STUDENT")
       .gte("date", startOfWeek)
       .lte("date", endOfWeek)
+    if (excludeClassId) weeklyQuery = weeklyQuery.neq("id", excludeClassId)
+    const { count: wCount, error: wErr } = await weeklyQuery
 
     if (wErr) throw wErr
 
@@ -843,7 +850,7 @@ function PublicBookingPage() {
       const startTime = rescheduleSlot
       const endTime = addMinutes(startTime, classToReschedule.ClassType?.duration || 60)
 
-      // Overlap checks
+      // 1. Teacher schedule conflict check (exclude the class being rescheduled)
       const { data: existingClasses } = await supabase
         .from("Class")
         .select("start_time, end_time")
@@ -864,6 +871,29 @@ function PublicBookingPage() {
 
       if (hasConflict) {
         throw new Error("El profesor no tiene disponible ese bloque. Por favor selecciona otro.")
+      }
+
+      // 2. Student weekly conflict check.
+      // Reagendar es un movimiento — no crea cupos nuevos — por eso NO aplicamos el
+      // límite mensual. Pero sí validamos que el alumno no tenga OTRA clase distinta
+      // esa misma semana (se excluye la clase que se está moviendo del conteo).
+      if (profile?.studentProfileId) {
+        const { startOfWeek, endOfWeek } = getWeekRange(rescheduleDate)
+        const { count: weeklyOtherCount } = await supabase
+          .from("Class")
+          .select("id", { count: "exact" })
+          .eq("student_id", profile.studentProfileId)
+          .neq("status", "CANCELLED")
+          .neq("status", "CANCELLED_BY_STUDENT")
+          .gte("date", startOfWeek)
+          .lte("date", endOfWeek)
+          .neq("id", classToReschedule.id)
+
+        if (weeklyOtherCount !== null && weeklyOtherCount >= 1) {
+          throw new Error(
+            "Ya tienes otra clase programada en esa semana. Cancela primero esa clase antes de reagendar aquí."
+          )
+        }
       }
 
       const originalDate = classToReschedule.date
@@ -1698,6 +1728,13 @@ function PublicBookingPage() {
                             </div>
 
                             <form onSubmit={handleRescheduleClass} className="p-6 space-y-6">
+                              {/* Info banner: rescheduling does not consume monthly quota */}
+                              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 flex items-start gap-2.5">
+                                <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                                <p className="text-xs text-emerald-700 font-medium leading-relaxed">
+                                  <strong>Mover tu clase no consume cupo mensual.</strong> Solo cambias la fecha y hora de una clase que ya existe.
+                                </p>
+                              </div>
                               
                               {/* WEEKLY AVAILABILITY PREVIEW */}
                               <WeeklyAvailabilityView 

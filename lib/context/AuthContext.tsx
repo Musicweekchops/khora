@@ -201,9 +201,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // 5. Redirecciones controladas
         if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-          // Solo redirigir al dashboard si el usuario está en /login o /register
-          if (!sessionRef.current || isAuthRedirectPath(pathname)) {
-            if (fetchedProfile?.is_admin) {
+          // Solo redirigir al dashboard si HAY sesión activa Y el usuario está en /login o /register.
+          // Si no hay sesión (usuario anónimo visitando /unirse, /agendar, etc.), NO redirigir.
+          if (currentSession && fetchedProfile && isAuthRedirectPath(pathname)) {
+            if (fetchedProfile.is_admin) {
               router.push('/dashboard/admin')
             } else {
               router.push('/dashboard')
