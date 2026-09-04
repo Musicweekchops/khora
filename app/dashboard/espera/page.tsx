@@ -87,8 +87,8 @@ export default function WaitingListPage() {
   }
 
   const handleCopyLink = () => {
-    if (!profile?.teacherSlug) return
-    const link = `${window.location.origin}/agendar?p=${profile.teacherSlug}`
+    if (!profile?.teacherProfileId) return
+    const link = `${window.location.origin}/unirse?teacherId=${profile.teacherProfileId}`
     navigator.clipboard.writeText(link)
     setCopied(true)
     toast("¡Enlace de Ads copiado!", "success")
@@ -327,7 +327,7 @@ export default function WaitingListPage() {
                 <div className="min-w-0 flex-1">
                   <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Enlace de campaña</p>
                   <p className="text-xs font-bold text-violet-400 truncate mt-0.5">
-                    {profile?.teacherSlug ? `${window.location.origin}/agendar?p=${profile.teacherSlug}` : "Cargando..."}
+                    {profile?.teacherProfileId ? `${window.location.origin}/unirse?teacherId=${profile.teacherProfileId}` : "Cargando..."}
                   </p>
                 </div>
                 <button

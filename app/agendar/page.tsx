@@ -70,6 +70,7 @@ function PublicBookingPage() {
   const searchParams = useSearchParams()
   const teacherSlug = searchParams.get("p")
   const academySlug = searchParams.get("a")
+  const initialFlow = searchParams.get("flow") as "regular" | "nuevo" | "login" | "registro" | null
 
   const [academy, setAcademy] = useState<Academy | null>(null)
   const [teachers, setTeachers] = useState<Teacher[]>([])
@@ -95,7 +96,7 @@ function PublicBookingPage() {
   const [monthlyLimit, setMonthlyLimit] = useState(4)
 
   // Unified flow states
-  const [flowType, setFlowType] = useState<"regular" | "nuevo" | "login" | "registro" | null>("nuevo")
+  const [flowType, setFlowType] = useState<"regular" | "nuevo" | "login" | "registro" | null>(initialFlow)
   
   // Login form states (Alumno Regular) // UI State
   const [loginEmailOrName, setLoginEmailOrName] = useState("")
@@ -687,7 +688,7 @@ function PublicBookingPage() {
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault()
-    if (!registerForm.name || !registerForm.email || !registerForm.password || !baseTeacher) return
+    if (!registerForm.name || !registerForm.email || !registerForm.password || !selectedTeacher) return
 
     setRegistering(true)
     setError("")
@@ -708,7 +709,7 @@ function PublicBookingPage() {
           password: registerForm.password.trim(),
           name: registerForm.name.trim(),
           phone: registerForm.phone.trim() || null,
-          teacher_id: baseTeacher.id
+          teacher_id: selectedTeacher.id
         })
       })
 

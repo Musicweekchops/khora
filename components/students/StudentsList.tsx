@@ -163,20 +163,35 @@ export default function StudentsList() {
           <h1 className="text-3xl font-black text-neutral-900 tracking-tight">Alumnos</h1>
           <p className="text-neutral-500 font-medium mt-1">{students.length} registrados</p>
         </div>
-        <div className="flex items-center gap-2 w-full md:w-auto">
+        <div className="flex items-center gap-2 w-full md:w-auto flex-wrap sm:flex-nowrap">
           <button 
             onClick={() => {
               if (!profile?.teacherSlug) return
               const link = `${window.location.origin}/agendar?p=${profile.teacherSlug}`
               copyToClipboard(link)
             }}
-            className="flex-1 md:flex-none px-4 md:px-6 py-3 bg-white border border-neutral-200 text-neutral-700 rounded-2xl text-sm font-bold hover:bg-neutral-50 hover:border-neutral-300 transition-colors shadow-sm flex items-center justify-center gap-2 whitespace-nowrap"
-            title="Copia el enlace para que tus alumnos se auto-registren en tu escuela"
+            className="flex-1 md:flex-none px-3 md:px-4 py-3 bg-white border border-neutral-200 text-neutral-700 rounded-2xl text-sm font-bold hover:bg-neutral-50 hover:border-neutral-300 transition-colors shadow-sm flex items-center justify-center gap-2 whitespace-nowrap"
+            title="Copia el enlace para que tus alumnos agenden clases"
+          >
+            <span className="text-lg">📅</span> 
+            <span className="hidden sm:inline">Link Agenda</span>
+            <span className="sm:hidden">Agenda</span>
+          </button>
+          
+          <button 
+            onClick={() => {
+              if (!profile?.teacherSlug) return
+              const link = `${window.location.origin}/agendar?p=${profile.teacherSlug}&flow=registro`
+              copyToClipboard(link)
+            }}
+            className="flex-1 md:flex-none px-3 md:px-4 py-3 bg-white border border-neutral-200 text-neutral-700 rounded-2xl text-sm font-bold hover:bg-neutral-50 hover:border-neutral-300 transition-colors shadow-sm flex items-center justify-center gap-2 whitespace-nowrap"
+            title="Copia el enlace directo para que tus alumnos creen su cuenta"
           >
             <span className="text-lg">🔗</span> 
-            <span className="hidden sm:inline">Link de Registro</span>
-            <span className="sm:hidden">Link</span>
+            <span className="hidden sm:inline">Link Autoregistro</span>
+            <span className="sm:hidden">Registro</span>
           </button>
+
           <Link
             href="/dashboard/alumnos/nuevo"
             className="flex-[2] md:flex-none px-4 md:px-6 py-3 bg-neutral-900 text-white rounded-2xl text-sm font-bold hover:bg-violet-600 transition-colors shadow-lg text-center whitespace-nowrap"
