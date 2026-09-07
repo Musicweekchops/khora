@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import AdminShell from "@/components/admin/AdminShell"
 import { supabase } from "@/lib/supabase"
 import { 
   Save, Plus, Trash, Edit, Star, Upload, Image as ImageIcon, Eye,
@@ -477,7 +476,7 @@ export default function AdminLandingPage() {
   }
 
   return (
-    <AdminShell>
+    <div className="w-full">
       <div className="max-w-7xl mx-auto px-6 md:px-12 py-10 pb-24 font-sans">
         
         {/* HEADER BAR */}
@@ -1340,6 +1339,6 @@ export default function AdminLandingPage() {
           </div>
         )}
 
-    </AdminShell>
+    </div>
   )
 }
