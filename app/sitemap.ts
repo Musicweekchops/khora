@@ -1,12 +1,27 @@
 import { createClient } from "@supabase/supabase-js"
 import { MetadataRoute } from "next"
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+export const dynamic = "force-static"
+export const revalidate = 3600 // revalidate every hour
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.warn("Supabase credentials missing. Generating basic sitemap.")
+    return [
+      {
+        url: "https://khora.cl",
+        lastModified: new Date(),
+        changeFrequency: "monthly",
+        priority: 0.5,
+      },
+    ]
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
   // Obtener todos los profesores activos con slug
   const { data: teachers } = await supabase
     .from("TeacherProfile")
