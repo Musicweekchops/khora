@@ -12,14 +12,29 @@ import TestimonialsSection from "@/components/landing/TestimonialsSection"
 import ContactSection from "@/components/landing/ContactSection"
 import WhatsAppFAB from "@/components/landing/WhatsAppFAB"
 
-// Public Supabase client (anon key — RLS handles security)
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder'
+import { supabase } from "@/lib/supabase"
 
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export async function generateStaticParams() {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    console.error("❌ CRITICAL ERROR: NEXT_PUBLIC_SUPABASE_URL or ANON_KEY are missing. Render needs these environment variables to generate the static pages for /[slug]/landing.")
+    throw new Error("Missing Supabase Environment Variables")
+  }
 
+  try {
+    const { data: teachers, error } = await supabase.from("TeacherProfile").select("slug").not("slug", "is", null)
+    if (error || !teachers || teachers.length === 0) {
+      console.warn("⚠️ WARNING: No teachers found or Supabase query failed. Generating a dummy page so the build doesn't crash.")
+      return [{ slug: "sin-profesores" }]
+    }
+    return teachers.map((t) => ({ slug: t.slug }))
+  } catch (err) {
+    console.error("❌ CRITICAL ERROR: Failed to fetch teachers for static generation.", err)
+    throw err
+  }
+}
 
 async function getLandingData(slug: string) {
+
   // 1. Resolve teacher by slug (or UUID fallback)
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug)
   let teacherQuery = supabase

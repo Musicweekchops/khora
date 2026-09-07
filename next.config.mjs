@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'export',
   images: {
-
     unoptimized: true,
   },
   // Deshabilitar linting y typescript durante el build para acelerar

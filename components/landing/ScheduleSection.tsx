@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { supabase } from "@/lib/supabase"
+import { getAvailableSlots } from "@/lib/availability"
 
 interface Slot {
   date: string
@@ -37,14 +39,39 @@ export default function ScheduleSection({ slug }: ScheduleSectionProps) {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch(`/api/landing/${slug}/availability`, { cache: "no-store" })
-        const data = await res.json()
-        if (data.availability?.length > 0) {
-          setAvailability(data.availability)
-          setSelectedDate(data.availability[0].date)
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug)
+        let teacherQuery = supabase.from("TeacherProfile").select("id")
+        if (isUuid) {
+          teacherQuery = teacherQuery.or(`slug.eq.${slug},id.eq.${slug}`)
+        } else {
+          teacherQuery = teacherQuery.eq("slug", slug)
         }
-      } catch {
-        // silently fail — no availability to show
+        
+        const { data: teacher, error } = await teacherQuery.maybeSingle()
+        if (error || !teacher) return
+
+        const teacherId = teacher.id
+        const today = new Date()
+        const results: { date: string; slots: string[] }[] = []
+
+        for (let i = 0; i < 14; i++) {
+          const d = new Date(today)
+          d.setDate(today.getDate() + i)
+          const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+
+          const slots = await getAvailableSlots(dateStr, teacherId, 60)
+
+          if (slots.length > 0) {
+            results.push({ date: dateStr, slots })
+          }
+        }
+
+        if (results.length > 0) {
+          setAvailability(results)
+          setSelectedDate(results[0].date)
+        }
+      } catch (err) {
+        // silently fail
       } finally {
         setLoading(false)
       }
