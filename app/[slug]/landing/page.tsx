@@ -13,10 +13,11 @@ import ContactSection from "@/components/landing/ContactSection"
 import WhatsAppFAB from "@/components/landing/WhatsAppFAB"
 
 // Public Supabase client (anon key — RLS handles security)
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder'
+
+const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
 
 async function getLandingData(slug: string) {
   // 1. Resolve teacher by slug (or UUID fallback)

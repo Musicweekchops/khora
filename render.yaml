@@ -1,8 +1,9 @@
 services:
-  - type: static
-    name: khora-static
+  - type: web
+    name: khora-web
     buildCommand: npm install && npm run build
-    publishPath: out
+    startCommand: npm start
+
     envVars:
       - key: NEXT_PUBLIC_SUPABASE_URL
         sync: false
