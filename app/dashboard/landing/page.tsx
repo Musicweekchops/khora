@@ -202,15 +202,15 @@ export default function AdminLandingPage() {
       setSaving(true)
       
       const updates = [
-        { key: "hero", value: hero, teacher_id: teacherId },
-        { key: "features", value: features, teacher_id: teacherId },
-        { key: "cta_footer", value: ctaFooter, teacher_id: teacherId }
+        { key: "hero", value: hero, teacher_id: teacherId || null },
+        { key: "features", value: features, teacher_id: teacherId || null },
+        { key: "cta_footer", value: ctaFooter, teacher_id: teacherId || null }
       ]
 
       for (const row of updates) {
         const { error } = await supabase
           .from("LandingSetting")
-          .upsert(row, { onConflict: teacherId ? "key,teacher_id" : "key" })
+          .upsert(row, { onConflict: "key,teacher_id" })
         if (error) throw error
       }
 
@@ -298,7 +298,8 @@ export default function AdminLandingPage() {
         comment: formComment.trim(),
         avatar_url: formAvatarUrl.trim() || null,
         rating: formRating,
-        order: formOrder
+        order: formOrder,
+        teacher_id: teacherId || null
       }
 
       if (editingId) {
@@ -365,8 +366,8 @@ export default function AdminLandingPage() {
     try {
       setSaving(true)
       await supabase.from("LandingSetting").upsert(
-        { key: "hero_image", value: { url: heroImageUrl }, teacher_id: teacherId },
-        { onConflict: teacherId ? "key,teacher_id" : "key" }
+        { key: "hero_image", value: { url: heroImageUrl }, teacher_id: teacherId || null },
+        { onConflict: "key,teacher_id" }
       )
       alert("¡Imagen hero actualizada!")
     } finally { setSaving(false) }
@@ -456,8 +457,8 @@ export default function AdminLandingPage() {
       setSaving(true)
       const value = { title: methTitle, text: methText, items: methItems }
       await supabase.from("LandingSetting").upsert(
-        { key: "methodology", value, teacher_id: teacherId },
-        { onConflict: teacherId ? "key,teacher_id" : "key" }
+        { key: "methodology", value, teacher_id: teacherId || null },
+        { onConflict: "key,teacher_id" }
       )
       alert("¡Metodología guardada!")
     } finally { setSaving(false) }
@@ -468,8 +469,8 @@ export default function AdminLandingPage() {
       setSaving(true)
       const value = { whatsapp: contactWhatsapp, email: contactEmail, instagram: contactInstagram }
       await supabase.from("LandingSetting").upsert(
-        { key: "contact", value, teacher_id: teacherId },
-        { onConflict: teacherId ? "key,teacher_id" : "key" }
+        { key: "contact", value, teacher_id: teacherId || null },
+        { onConflict: "key,teacher_id" }
       )
       alert("¡Contacto guardado!")
     } finally { setSaving(false) }
