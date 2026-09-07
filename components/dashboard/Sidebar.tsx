@@ -81,16 +81,29 @@ const TEACHER_NAV = [
   { name: "Clases", href: "/dashboard/clases", icon: Icons.classes },
   { name: "Biblioteca", href: "/dashboard/biblioteca", icon: Icons.library },
   { name: "Financiero", href: "/dashboard/financiero", icon: Icons.financial },
+  { name: "Mi Landing", href: "/dashboard/admin/landing", icon: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+      <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+      <line x1="12" y1="22.08" x2="12" y2="12"></line>
+    </svg>
+  )},
   { name: "Ajustes", href: "/dashboard/ajustes", icon: Icons.settings },
 ]
 
-// Profesores de academia: sin Financiero (lo gestiona la academia)
 const ACADEMY_TEACHER_NAV = [
   { name: "Dashboard", href: "/dashboard", icon: Icons.dashboard },
   { name: "Mis Alumnos", href: "/dashboard/alumnos", icon: Icons.students },
   { name: "Agenda", href: "/dashboard/agenda", icon: Icons.calendar },
   { name: "Clases", href: "/dashboard/clases", icon: Icons.classes },
   { name: "Biblioteca", href: "/dashboard/biblioteca", icon: Icons.library },
+  { name: "Mi Landing", href: "/dashboard/admin/landing", icon: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+      <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+      <line x1="12" y1="22.08" x2="12" y2="12"></line>
+    </svg>
+  )},
   { name: "Ajustes", href: "/dashboard/ajustes", icon: Icons.settings },
 ]
 
