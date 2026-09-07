@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { supabase } from "@/lib/supabase"
 import { 
   Save, Plus, Trash, Edit, Star, Upload, Image as ImageIcon, Eye,
-  MessageSquare, FileText, Globe, ArrowRight, Check, X, Sparkles
+  MessageSquare, FileText, Globe, ArrowRight, Check, X, Sparkles, Copy
 } from "lucide-react"
 
 // Types
@@ -493,15 +493,27 @@ export default function AdminLandingPage() {
           </div>
           <div className="flex items-center gap-3">
             {(teacherSlug || teacherId) && (
-              <a
-                href={`/${teacherSlug || teacherId}/landing`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-5 py-3 rounded-2xl bg-white border border-neutral-200 text-neutral-600 hover:text-neutral-900 hover:border-neutral-300 text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-sm transition-all"
-              >
-                <Eye className="w-4 h-4 text-neutral-400" />
-                Ver Landing →
-              </a>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(`https://khora.cl/${teacherSlug || teacherId}/landing`)
+                    alert("¡Enlace copiado al portapapeles!")
+                  }}
+                  className="px-5 py-3 rounded-2xl bg-white border border-neutral-200 text-neutral-600 hover:text-neutral-900 hover:border-neutral-300 text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-sm transition-all"
+                >
+                  <Copy className="w-4 h-4 text-neutral-400" />
+                  Copiar
+                </button>
+                <a
+                  href={`/${teacherSlug || teacherId}/landing`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-5 py-3 rounded-2xl bg-white border border-neutral-200 text-neutral-600 hover:text-neutral-900 hover:border-neutral-300 text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-sm transition-all"
+                >
+                  <Eye className="w-4 h-4 text-neutral-400" />
+                  Ver Landing →
+                </a>
+              </div>
             )}
             {activeTab === "texts" && (
               <button
