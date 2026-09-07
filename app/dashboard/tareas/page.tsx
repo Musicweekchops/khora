@@ -269,8 +269,16 @@ export default function TareasPage() {
                         </div>
                         {selectedTask.LibraryContent.url && (
                           <a
-                            href={selectedTask.LibraryContent.url}
-                            target="_blank"
+                            href={
+                              selectedTask.LibraryContent.type?.toLowerCase() === 'pdf' || selectedTask.LibraryContent.url.toLowerCase().includes('.pdf')
+                                ? `/visor-pdf?url=${encodeURIComponent(selectedTask.LibraryContent.url)}`
+                                : selectedTask.LibraryContent.url
+                            }
+                            target={
+                              selectedTask.LibraryContent.type?.toLowerCase() === 'pdf' || selectedTask.LibraryContent.url.toLowerCase().includes('.pdf')
+                                ? "_self"
+                                : "_blank"
+                            }
                             rel="noopener noreferrer"
                             className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm flex items-center gap-1.5 flex-shrink-0"
                           >
@@ -431,8 +439,16 @@ function TaskCard({
           <div className="flex flex-wrap gap-2" onClick={e => e.stopPropagation()}>
             {task.LibraryContent && task.LibraryContent.url && (
               <a 
-                href={task.LibraryContent.url} 
-                target="_blank" 
+                href={
+                  task.LibraryContent.type?.toLowerCase() === 'pdf' || task.LibraryContent.url.toLowerCase().includes('.pdf')
+                    ? `/visor-pdf?url=${encodeURIComponent(task.LibraryContent.url)}`
+                    : task.LibraryContent.url
+                }
+                target={
+                  task.LibraryContent.type?.toLowerCase() === 'pdf' || task.LibraryContent.url.toLowerCase().includes('.pdf')
+                    ? "_self"
+                    : "_blank"
+                }
                 rel="noopener noreferrer" 
                 className="inline-flex items-center gap-1.5 bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-100 rounded-xl px-3 py-1.5 text-xs font-bold transition-all shadow-sm"
               >
