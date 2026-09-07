@@ -38,8 +38,8 @@ interface FooterSettings {
 }
 
 export default function AdminLandingPage() {
-  // Tabs: "texts" | "testimonials"
-  const [activeTab, setActiveTab] = useState<"texts" | "testimonials">("texts")
+  // Tabs
+  const [activeTab, setActiveTab] = useState<"hero" | "texts" | "testimonials" | "gallery" | "bio" | "methodology" | "contact">("hero")
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -78,41 +78,122 @@ export default function AdminLandingPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Load database settings & testimonials
+  // ── New CMS state ──
+  // Hero image
+  const [heroImageUrl, setHeroImageUrl] = useState<string>("")
+  const [heroImageUploading, setHeroImageUploading] = useState(false)
+  const heroImageInputRef = useRef<HTMLInputElement>(null)
+
+  // Bio
+  const [bioPhotoUrl, setBioPhotoUrl] = useState("")
+  const [bioHeadline, setBioHeadline] = useState("")
+  const [bioText, setBioText] = useState("")
+  const [bioTagsRaw, setBioTagsRaw] = useState("") // comma-separated
+  const [bioUploading, setBioUploading] = useState(false)
+  const bioPhotoInputRef = useRef<HTMLInputElement>(null)
+
+  // Gallery
+  const [galleryItems, setGalleryItems] = useState<{id:string;url:string;type:string;caption:string|null;order:number}[]>([])
+  const [galleryUploading, setGalleryUploading] = useState(false)
+  const galleryInputRef = useRef<HTMLInputElement>(null)
+
+  // Methodology
+  const [methTitle, setMethTitle] = useState("Nuestra Metodología")
+  const [methText, setMethText] = useState("")
+  const [methItems, setMethItems] = useState<{icon:string;title:string;description:string}[]>([
+    {icon:"🎯", title:"Método Progresivo", description:"Avanzamos a tu ritmo, desde tu nivel actual."},
+    {icon:"🎵", title:"Repertorio Real", description:"Aprendemos con canciones que te gustan."},
+    {icon:"📱", title:"Seguimiento Digital", description:"Accede a grabaciones y materiales desde la app."},
+  ])
+
+  // Contact
+  const [contactWhatsapp, setContactWhatsapp] = useState("+56944291538")
+  const [contactEmail, setContactEmail] = useState("")
+  const [contactInstagram, setContactInstagram] = useState("")
+
+  // Teacher id (for scoped queries)
+  const [teacherId, setTeacherId] = useState<string | null>(null)
+  const [teacherSlug, setTeacherSlug] = useState<string | null>(null)
+
+  // Load all CMS data
   useEffect(() => {
     async function loadData() {
       try {
         setLoading(true)
 
-        // 1. Fetch Landing Settings
-        const { data: settingsData, error: settingsError } = await supabase
-          .from("LandingSetting")
-          .select("*")
-        
-        if (settingsError) throw settingsError
+        // Resolve current user's teacher profile
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
+
+        const { data: profile } = await supabase
+          .from("TeacherProfile")
+          .select("id, slug")
+          .eq("user_id", user.id)
+          .maybeSingle()
+
+        const tid = profile?.id ?? null
+        setTeacherId(tid)
+        setTeacherSlug(profile?.slug ?? tid)
+
+        // 1. Landing Settings (teacher-scoped or global)
+        const settingsQuery = supabase.from("LandingSetting").select("*")
+        const { data: settingsData } = tid
+          ? await settingsQuery.or(`teacher_id.eq.${tid},teacher_id.is.null`)
+          : await settingsQuery
 
         settingsData?.forEach((row: { key: string; value: any }) => {
           if (row.key === "hero") setHero(row.value)
           if (row.key === "features") setFeatures(row.value)
           if (row.key === "cta_footer") setCtaFooter(row.value)
+          if (row.key === "hero_image") setHeroImageUrl(row.value?.url ?? "")
+          if (row.key === "methodology") {
+            setMethTitle(row.value?.title ?? "")
+            setMethText(row.value?.text ?? "")
+            if (row.value?.items?.length > 0) setMethItems(row.value.items)
+          }
+          if (row.key === "contact") {
+            setContactWhatsapp(row.value?.whatsapp ?? "+56944291538")
+            setContactEmail(row.value?.email ?? "")
+            setContactInstagram(row.value?.instagram ?? "")
+          }
         })
 
-        // 2. Fetch Testimonials
-        const { data: testData, error: testError } = await supabase
-          .from("LandingTestimonial")
-          .select("*")
-          .order("order", { ascending: true })
-
-        if (testError) throw testError
+        // 2. Testimonials
+        const testQuery = supabase.from("LandingTestimonial").select("*").order("order")
+        const { data: testData } = tid
+          ? await testQuery.or(`teacher_id.eq.${tid},teacher_id.is.null`)
+          : await testQuery
         if (testData) setTestimonials(testData)
 
+        // 3. Bio (only if new table exists)
+        if (tid) {
+          const { data: bioData } = await supabase
+            .from("LandingBio")
+            .select("*")
+            .eq("teacher_id", tid)
+            .maybeSingle()
+          if (bioData) {
+            setBioPhotoUrl(bioData.photo_url ?? "")
+            setBioHeadline(bioData.headline ?? "")
+            setBioText(bioData.bio_text ?? "")
+            setBioTagsRaw((bioData.tags ?? []).join(", "))
+          }
+
+          // 4. Gallery
+          const { data: galleryData } = await supabase
+            .from("LandingGalleryItem")
+            .select("*")
+            .eq("teacher_id", tid)
+            .order("order")
+          if (galleryData) setGalleryItems(galleryData)
+        }
+
       } catch (err: any) {
-        console.error("Error al cargar datos del CMS de la Landing:", err.message)
+        console.error("Error al cargar CMS:", err.message)
       } finally {
         setLoading(false)
       }
     }
-
     loadData()
   }, [])
 
@@ -122,19 +203,19 @@ export default function AdminLandingPage() {
       setSaving(true)
       
       const updates = [
-        { key: "hero", value: hero },
-        { key: "features", value: features },
-        { key: "cta_footer", value: ctaFooter }
+        { key: "hero", value: hero, teacher_id: teacherId },
+        { key: "features", value: features, teacher_id: teacherId },
+        { key: "cta_footer", value: ctaFooter, teacher_id: teacherId }
       ]
 
       for (const row of updates) {
         const { error } = await supabase
           .from("LandingSetting")
-          .upsert(row, { onConflict: "key" })
+          .upsert(row, { onConflict: teacherId ? "key,teacher_id" : "key" })
         if (error) throw error
       }
 
-      alert("¡Textos de la Landing actualizados exitosamente en producción!")
+      alert("¡Textos actualizados!")
     } catch (err: any) {
       console.error("Error al guardar configuraciones:", err.message)
       alert(`Error al guardar: ${err.message}`)
@@ -168,7 +249,7 @@ export default function AdminLandingPage() {
         .getPublicUrl(filePath)
 
       setFormAvatarUrl(data.publicUrl)
-      alert("¡Imagen cargada exitosamente!")
+      alert("¡Imagen cargada!")
     } catch (err: any) {
       console.error("Error al subir imagen:", err.message)
       alert(`Error al subir imagen: ${err.message}`)
@@ -279,6 +360,122 @@ export default function AdminLandingPage() {
     }
   }
 
+  // ── New save handlers ──
+  async function handleSaveHeroImage() {
+    if (!heroImageUrl) return
+    try {
+      setSaving(true)
+      await supabase.from("LandingSetting").upsert(
+        { key: "hero_image", value: { url: heroImageUrl }, teacher_id: teacherId },
+        { onConflict: teacherId ? "key,teacher_id" : "key" }
+      )
+      alert("¡Imagen hero actualizada!")
+    } finally { setSaving(false) }
+  }
+
+  async function handleUploadHeroImage(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      setHeroImageUploading(true)
+      const ext = file.name.split(".").pop()
+      const path = `hero/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
+      const { error } = await supabase.storage.from("landing").upload(path, file, { upsert: true })
+      if (error) throw error
+      const { data } = supabase.storage.from("landing").getPublicUrl(path)
+      setHeroImageUrl(data.publicUrl)
+    } catch (err: any) { alert(`Error: ${err.message}`) }
+    finally { setHeroImageUploading(false) }
+  }
+
+  async function handleSaveBio() {
+    if (!teacherId) return alert("No se encontró tu perfil de profesor.")
+    try {
+      setSaving(true)
+      await supabase.from("LandingBio").upsert({
+        teacher_id: teacherId,
+        photo_url: bioPhotoUrl || null,
+        headline: bioHeadline,
+        bio_text: bioText,
+        tags: bioTagsRaw.split(",").map(t => t.trim()).filter(Boolean),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "teacher_id" })
+      alert("¡Bio actualizada!")
+    } finally { setSaving(false) }
+  }
+
+  async function handleUploadBioPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      setBioUploading(true)
+      const ext = file.name.split(".").pop()
+      const path = `bio/${Date.now()}.${ext}`
+      const { error } = await supabase.storage.from("landing").upload(path, file, { upsert: true })
+      if (error) throw error
+      const { data } = supabase.storage.from("landing").getPublicUrl(path)
+      setBioPhotoUrl(data.publicUrl)
+    } catch (err: any) { alert(`Error: ${err.message}`) }
+    finally { setBioUploading(false) }
+  }
+
+  async function handleUploadGalleryFiles(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? [])
+    if (!files.length || !teacherId) return
+    try {
+      setGalleryUploading(true)
+      const newItems: typeof galleryItems = []
+      for (const file of files) {
+        const ext = file.name.split(".").pop()
+        const isVideo = file.type.startsWith("video")
+        const path = `gallery/${teacherId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
+        const { error } = await supabase.storage.from("landing").upload(path, file)
+        if (error) throw error
+        const { data } = supabase.storage.from("landing").getPublicUrl(path)
+        const { data: inserted } = await supabase.from("LandingGalleryItem").insert({
+          teacher_id: teacherId,
+          url: data.publicUrl,
+          type: isVideo ? "video" : "image",
+          order: galleryItems.length + newItems.length,
+        }).select().single()
+        if (inserted) newItems.push(inserted)
+      }
+      setGalleryItems(prev => [...prev, ...newItems])
+      alert(`${files.length} archivo(s) subido(s)!`)
+    } catch (err: any) { alert(`Error: ${err.message}`) }
+    finally { setGalleryUploading(false) }
+  }
+
+  async function handleDeleteGalleryItem(id: string) {
+    if (!confirm("¿Eliminar esta foto?")) return
+    await supabase.from("LandingGalleryItem").delete().eq("id", id)
+    setGalleryItems(prev => prev.filter(g => g.id !== id))
+  }
+
+  async function handleSaveMethodology() {
+    try {
+      setSaving(true)
+      const value = { title: methTitle, text: methText, items: methItems }
+      await supabase.from("LandingSetting").upsert(
+        { key: "methodology", value, teacher_id: teacherId },
+        { onConflict: teacherId ? "key,teacher_id" : "key" }
+      )
+      alert("¡Metodología guardada!")
+    } finally { setSaving(false) }
+  }
+
+  async function handleSaveContact() {
+    try {
+      setSaving(true)
+      const value = { whatsapp: contactWhatsapp, email: contactEmail, instagram: contactInstagram }
+      await supabase.from("LandingSetting").upsert(
+        { key: "contact", value, teacher_id: teacherId },
+        { onConflict: teacherId ? "key,teacher_id" : "key" }
+      )
+      alert("¡Contacto guardado!")
+    } finally { setSaving(false) }
+  }
+
   return (
     <AdminShell>
       <div className="max-w-7xl mx-auto px-6 md:px-12 py-10 pb-24 font-sans">
@@ -291,19 +488,21 @@ export default function AdminLandingPage() {
             </p>
             <h1 className="text-3xl font-black text-neutral-900 tracking-tight">Editor de Landing Page</h1>
             <p className="text-sm text-neutral-500 font-semibold mt-1">
-              Personaliza en tiempo real los textos, CTAs y recomendaciones visibles en khora.cl
+              Personaliza tu landing pública: textos, fotos, galería, testimonios y más.
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <a 
-              href="https://khora.cl" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="px-5 py-3 rounded-2xl bg-white border border-neutral-200 text-neutral-600 hover:text-neutral-900 hover:border-neutral-300 text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-sm transition-all"
-            >
-              <Globe className="w-4 h-4 text-neutral-400" />
-              Ver Sitio Público
-            </a>
+            {(teacherSlug || teacherId) && (
+              <a
+                href={`/${teacherSlug || teacherId}/landing`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-5 py-3 rounded-2xl bg-white border border-neutral-200 text-neutral-600 hover:text-neutral-900 hover:border-neutral-300 text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-sm transition-all"
+              >
+                <Eye className="w-4 h-4 text-neutral-400" />
+                Ver Landing →
+              </a>
+            )}
             {activeTab === "texts" && (
               <button
                 onClick={handleSaveTexts}
@@ -318,34 +517,262 @@ export default function AdminLandingPage() {
         </div>
 
         {/* TABS SELECTOR */}
-        <div className="flex border-b border-neutral-200 mb-8 gap-6">
-          <button
-            onClick={() => setActiveTab("texts")}
-            className={`pb-4 text-sm font-black transition-all relative ${
-              activeTab === "texts"
-                ? "text-neutral-900 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-1 after:bg-violet-500 after:rounded-full"
-                : "text-neutral-400 hover:text-neutral-600"
-            }`}
-          >
-            <span className="flex items-center gap-2">
-              <FileText className="w-4 h-4" />
-              Contenidos y Textos
-            </span>
-          </button>
-          <button
-            onClick={() => setActiveTab("testimonials")}
-            className={`pb-4 text-sm font-black transition-all relative ${
-              activeTab === "testimonials"
-                ? "text-neutral-900 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-1 after:bg-violet-500 after:rounded-full"
-                : "text-neutral-400 hover:text-neutral-600"
-            }`}
-          >
-            <span className="flex items-center gap-2">
-              <MessageSquare className="w-4 h-4" />
-              Recomendaciones de Profesores ({testimonials.length})
-            </span>
-          </button>
+        <div className="flex border-b border-neutral-200 mb-8 gap-1 overflow-x-auto">
+          {([
+            { id: "hero", icon: "🖼️", label: "Hero" },
+            { id: "gallery", icon: "📷", label: "Galería" },
+            { id: "bio", icon: "👤", label: "Bio / Perfil" },
+            { id: "texts", icon: "📝", label: "Textos" },
+            { id: "testimonials", icon: "⭐", label: "Testimonios" },
+            { id: "methodology", icon: "🎯", label: "Metodología" },
+            { id: "contact", icon: "📱", label: "Contacto" },
+          ] as const).map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`pb-4 px-3 text-sm font-black transition-all relative whitespace-nowrap ${
+                activeTab === tab.id
+                  ? "text-neutral-900 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-1 after:bg-violet-500 after:rounded-full"
+                  : "text-neutral-400 hover:text-neutral-600"
+              }`}
+            >
+              <span className="flex items-center gap-1.5">
+                <span>{tab.icon}</span>
+                {tab.label}
+              </span>
+            </button>
+          ))}
         </div>
+
+        {/* ═══ TAB: HERO ═══ */}
+        {activeTab === "hero" && (
+          <div className="space-y-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Upload */}
+              <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-7">
+                <h2 className="text-lg font-black text-neutral-900 mb-1">Imagen Hero</h2>
+                <p className="text-sm text-neutral-500 mb-5">Esta foto aparece de fondo en la sección principal de tu landing.</p>
+                <input ref={heroImageInputRef} type="file" accept="image/*" className="hidden" onChange={handleUploadHeroImage} />
+                {heroImageUrl ? (
+                  <div className="relative rounded-2xl overflow-hidden aspect-video mb-4 bg-neutral-100">
+                    <img src={heroImageUrl} alt="Hero" className="w-full h-full object-cover" />
+                    <button
+                      onClick={() => setHeroImageUrl("")}
+                      className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/60 flex items-center justify-center text-white hover:bg-black/80 transition-all"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => heroImageInputRef.current?.click()}
+                    className="border-2 border-dashed border-neutral-200 rounded-2xl aspect-video flex flex-col items-center justify-center gap-3 mb-4 cursor-pointer hover:border-violet-400 hover:bg-violet-50 transition-all"
+                  >
+                    <ImageIcon className="w-10 h-10 text-neutral-300" />
+                    <div className="text-center">
+                      <p className="text-sm font-bold text-neutral-500">Arrastrar foto o hacer clic</p>
+                      <p className="text-xs text-neutral-400">JPG, PNG, WebP · Máximo 10MB</p>
+                    </div>
+                  </div>
+                )}
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => heroImageInputRef.current?.click()}
+                    disabled={heroImageUploading}
+                    className="flex-1 py-3 px-4 rounded-2xl border border-neutral-200 text-sm font-black text-neutral-700 hover:bg-neutral-50 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    <Upload className="w-4 h-4" />
+                    {heroImageUploading ? "Subiendo..." : "Subir nueva foto"}
+                  </button>
+                  {heroImageUrl && (
+                    <button
+                      onClick={handleSaveHeroImage}
+                      disabled={saving}
+                      className="flex-1 py-3 px-4 rounded-2xl bg-violet-600 text-white text-sm font-black hover:bg-violet-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      <Save className="w-4 h-4" />
+                      {saving ? "Guardando..." : "Guardar"}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Preview */}
+              <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-7">
+                <h2 className="text-lg font-black text-neutral-900 mb-1">Vista Previa</h2>
+                <p className="text-sm text-neutral-500 mb-5">Así se verá tu hero en la landing.</p>
+                <div
+                  className="rounded-2xl overflow-hidden aspect-video flex items-end p-5"
+                  style={{
+                    background: heroImageUrl
+                      ? `linear-gradient(to right, rgba(10,10,12,0.95) 40%, rgba(10,10,12,0.4) 100%), url(${heroImageUrl}) center/cover`
+                      : "linear-gradient(135deg, #7c3aed22, #f9731622)",
+                    border: "1px solid #f0f0f0",
+                  }}
+                >
+                  <div>
+                    <p className="text-[10px] font-black text-orange-400 uppercase tracking-widest mb-1">🥁 Academia de Batería</p>
+                    <p className="text-white font-black text-sm">{hero.title || "Título del Hero"}</p>
+                    <div className="mt-2 inline-block px-3 py-1.5 rounded-xl text-[10px] font-black text-white" style={{ background: "linear-gradient(135deg, #7c3aed, #f97316)" }}>
+                      {hero.cta_text || "Reserva tu Clase"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Textos del hero dentro de este tab también */}
+            <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-7">
+              <h2 className="text-lg font-black text-neutral-900 mb-5">Textos del Hero</h2>
+              <div className="grid gap-5">
+                <div>
+                  <label className="block text-xs font-black text-neutral-600 uppercase tracking-wider mb-2">Título Principal</label>
+                  <input className="w-full px-4 py-3 rounded-2xl border border-neutral-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-violet-200" value={hero.title} onChange={e => setHero(p => ({...p, title: e.target.value}))} />
+                </div>
+                <div>
+                  <label className="block text-xs font-black text-neutral-600 uppercase tracking-wider mb-2">Subtítulo</label>
+                  <textarea rows={2} className="w-full px-4 py-3 rounded-2xl border border-neutral-200 text-sm font-medium resize-none focus:outline-none focus:ring-2 focus:ring-violet-200" value={hero.subtitle} onChange={e => setHero(p => ({...p, subtitle: e.target.value}))} />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-black text-neutral-600 uppercase tracking-wider mb-2">Texto del Botón</label>
+                    <input className="w-full px-4 py-3 rounded-2xl border border-neutral-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-violet-200" value={hero.cta_text} onChange={e => setHero(p => ({...p, cta_text: e.target.value}))} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-black text-neutral-600 uppercase tracking-wider mb-2">URL del Botón</label>
+                    <input className="w-full px-4 py-3 rounded-2xl border border-neutral-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-violet-200" value={hero.cta_url} onChange={e => setHero(p => ({...p, cta_url: e.target.value}))} />
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end mt-5">
+                <button onClick={handleSaveTexts} disabled={saving} className="px-6 py-3 rounded-2xl bg-violet-600 text-white text-xs font-black hover:bg-violet-700 transition-all flex items-center gap-2 disabled:opacity-50">
+                  <Save className="w-4 h-4" />{saving ? "Guardando..." : "Guardar Textos"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══ TAB: GALLERY ═══ */}
+        {activeTab === "gallery" && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-7">
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <h2 className="text-lg font-black text-neutral-900">Galería del Estudio</h2>
+                  <p className="text-sm text-neutral-500 mt-1">Sube fotos y videos de tu estudio, clases e instrumentos.</p>
+                </div>
+                <button
+                  onClick={() => galleryInputRef.current?.click()}
+                  disabled={galleryUploading}
+                  className="px-5 py-3 rounded-2xl bg-violet-600 text-white text-xs font-black hover:bg-violet-700 transition-all flex items-center gap-2 disabled:opacity-50"
+                >
+                  <Upload className="w-4 h-4" />
+                  {galleryUploading ? "Subiendo..." : "Subir fotos / videos"}
+                </button>
+              </div>
+              <input ref={galleryInputRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={handleUploadGalleryFiles} />
+
+              {galleryItems.length === 0 ? (
+                <div
+                  onClick={() => galleryInputRef.current?.click()}
+                  className="border-2 border-dashed border-neutral-200 rounded-2xl py-16 flex flex-col items-center gap-3 cursor-pointer hover:border-violet-400 hover:bg-violet-50 transition-all"
+                >
+                  <ImageIcon className="w-12 h-12 text-neutral-300" />
+                  <p className="text-sm font-bold text-neutral-500">Arrastra fotos aquí o haz clic para seleccionar</p>
+                  <p className="text-xs text-neutral-400">JPG, PNG, WebP, MP4, MOV</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {galleryItems.map((item) => (
+                    <div key={item.id} className="relative group rounded-2xl overflow-hidden aspect-square bg-neutral-100">
+                      {item.type === "video" ? (
+                        <video src={item.url} className="w-full h-full object-cover" muted />
+                      ) : (
+                        <img src={item.url} alt={item.caption || ""} className="w-full h-full object-cover" />
+                      )}
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+                        <button
+                          onClick={() => handleDeleteGalleryItem(item.id)}
+                          className="w-10 h-10 rounded-full bg-red-500 flex items-center justify-center text-white hover:bg-red-600 transition-all"
+                        >
+                          <Trash className="w-4 h-4" />
+                        </button>
+                      </div>
+                      {item.type === "video" && (
+                        <div className="absolute top-2 right-2 bg-black/60 rounded-full w-7 h-7 flex items-center justify-center text-xs text-white">▶</div>
+                      )}
+                    </div>
+                  ))}
+                  {/* Add more button */}
+                  <div
+                    onClick={() => galleryInputRef.current?.click()}
+                    className="aspect-square rounded-2xl border-2 border-dashed border-neutral-200 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-violet-400 hover:bg-violet-50 transition-all"
+                  >
+                    <Plus className="w-8 h-8 text-neutral-300" />
+                    <span className="text-xs font-bold text-neutral-400">Agregar más</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ═══ TAB: BIO ═══ */}
+        {activeTab === "bio" && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-7">
+              <h2 className="text-lg font-black text-neutral-900 mb-1">Bio y Perfil Público</h2>
+              <p className="text-sm text-neutral-500 mb-6">Esta información aparece en la sección &quot;Tu Profesor&quot; de la landing.</p>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Photo upload */}
+                <div>
+                  <label className="block text-xs font-black text-neutral-600 uppercase tracking-wider mb-3">Foto de Perfil</label>
+                  <input ref={bioPhotoInputRef} type="file" accept="image/*" className="hidden" onChange={handleUploadBioPhoto} />
+                  <div className="flex flex-col items-center gap-3">
+                    {bioPhotoUrl ? (
+                      <img src={bioPhotoUrl} alt="Bio" className="w-32 h-32 rounded-2xl object-cover border-4 border-violet-100" />
+                    ) : (
+                      <div className="w-32 h-32 rounded-2xl bg-neutral-100 flex items-center justify-center border-2 border-dashed border-neutral-200">
+                        <ImageIcon className="w-10 h-10 text-neutral-300" />
+                      </div>
+                    )}
+                    <button
+                      onClick={() => bioPhotoInputRef.current?.click()}
+                      disabled={bioUploading}
+                      className="px-4 py-2 rounded-xl border border-neutral-200 text-xs font-black text-neutral-600 hover:bg-neutral-50 transition-all flex items-center gap-2"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      {bioUploading ? "Subiendo..." : "Cambiar foto"}
+                    </button>
+                  </div>
+                </div>
+                {/* Text fields */}
+                <div className="lg:col-span-2 space-y-4">
+                  <div>
+                    <label className="block text-xs font-black text-neutral-600 uppercase tracking-wider mb-2">Titular (ej: &quot;Baterista Profesional · 15 años de exp.&quot;)</label>
+                    <input className="w-full px-4 py-3 rounded-2xl border border-neutral-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-violet-200" value={bioHeadline} onChange={e => setBioHeadline(e.target.value)} placeholder="Baterista Profesional · 10 años de experiencia" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-black text-neutral-600 uppercase tracking-wider mb-2">Bio / Descripción</label>
+                    <textarea rows={5} className="w-full px-4 py-3 rounded-2xl border border-neutral-200 text-sm font-medium resize-none focus:outline-none focus:ring-2 focus:ring-violet-200" value={bioText} onChange={e => setBioText(e.target.value)} placeholder="Cuéntale a tus futuros alumnos quién eres, tu trayectoria y tu estilo de enseñanza..." />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-black text-neutral-600 uppercase tracking-wider mb-2">Tags (separados por coma)</label>
+                    <input className="w-full px-4 py-3 rounded-2xl border border-neutral-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-violet-200" value={bioTagsRaw} onChange={e => setBioTagsRaw(e.target.value)} placeholder="Batería, Percusión, Online, Presencial" />
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end mt-6">
+                <button onClick={handleSaveBio} disabled={saving} className="px-6 py-3 rounded-2xl bg-violet-600 text-white text-xs font-black hover:bg-violet-700 transition-all flex items-center gap-2 disabled:opacity-50">
+                  <Save className="w-4 h-4" />{saving ? "Guardando..." : "Guardar Bio"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ─── Loading ─── */}
 
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 bg-white rounded-3xl border border-neutral-100 shadow-sm gap-3">
@@ -836,6 +1263,82 @@ export default function AdminLandingPage() {
           </div>
         </div>
       )}
+
+        {/* ═══ TAB: METHODOLOGY ═══ */}
+        {activeTab === "methodology" && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-7">
+              <h2 className="text-lg font-black text-neutral-900 mb-1">Nuestra Metodología</h2>
+              <p className="text-sm text-neutral-500 mb-6">Explica tu método de enseñanza. Aparece en la sección editorial de tu landing.</p>
+              <div className="space-y-5">
+                <div>
+                  <label className="block text-xs font-black text-neutral-600 uppercase tracking-wider mb-2">Título de la sección</label>
+                  <input className="w-full px-4 py-3 rounded-2xl border border-neutral-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-violet-200" value={methTitle} onChange={e => setMethTitle(e.target.value)} />
+                </div>
+                <div>
+                  <label className="block text-xs font-black text-neutral-600 uppercase tracking-wider mb-2">Descripción</label>
+                  <textarea rows={4} className="w-full px-4 py-3 rounded-2xl border border-neutral-200 text-sm font-medium resize-none focus:outline-none focus:ring-2 focus:ring-violet-200" value={methText} onChange={e => setMethText(e.target.value)} placeholder="Describe tu enfoque pedagógico..." />
+                </div>
+                <div>
+                  <label className="block text-xs font-black text-neutral-600 uppercase tracking-wider mb-3">Items (máx. 3)</label>
+                  <div className="space-y-3">
+                    {methItems.map((item, i) => (
+                      <div key={i} className="grid grid-cols-12 gap-3 p-4 rounded-2xl bg-neutral-50 border border-neutral-100">
+                        <div className="col-span-1">
+                          <input className="w-full px-2 py-2.5 rounded-xl border border-neutral-200 text-center text-lg focus:outline-none" value={item.icon} onChange={e => setMethItems(prev => prev.map((it, idx) => idx === i ? {...it, icon: e.target.value} : it))} />
+                        </div>
+                        <div className="col-span-4">
+                          <input placeholder="Título" className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 text-sm font-semibold focus:outline-none" value={item.title} onChange={e => setMethItems(prev => prev.map((it, idx) => idx === i ? {...it, title: e.target.value} : it))} />
+                        </div>
+                        <div className="col-span-7">
+                          <input placeholder="Descripción" className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 text-sm font-medium focus:outline-none" value={item.description} onChange={e => setMethItems(prev => prev.map((it, idx) => idx === i ? {...it, description: e.target.value} : it))} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end mt-6">
+                <button onClick={handleSaveMethodology} disabled={saving} className="px-6 py-3 rounded-2xl bg-violet-600 text-white text-xs font-black hover:bg-violet-700 transition-all flex items-center gap-2 disabled:opacity-50">
+                  <Save className="w-4 h-4" />{saving ? "Guardando..." : "Guardar Metodología"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══ TAB: CONTACT ═══ */}
+        {activeTab === "contact" && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-7">
+              <h2 className="text-lg font-black text-neutral-900 mb-1">Datos de Contacto</h2>
+              <p className="text-sm text-neutral-500 mb-6">Aparecen en el botón de WhatsApp y la sección de contacto de tu landing.</p>
+              <div className="space-y-5">
+                <div>
+                  <label className="block text-xs font-black text-neutral-600 uppercase tracking-wider mb-2">WhatsApp (con código de país)</label>
+                  <input className="w-full px-4 py-3 rounded-2xl border border-neutral-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-violet-200" value={contactWhatsapp} onChange={e => setContactWhatsapp(e.target.value)} placeholder="+56944291538" />
+                  <p className="text-xs text-neutral-400 mt-1.5">Este número se usa para el botón flotante de WhatsApp en tu landing.</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-black text-neutral-600 uppercase tracking-wider mb-2">Email de Contacto</label>
+                  <input type="email" className="w-full px-4 py-3 rounded-2xl border border-neutral-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-violet-200" value={contactEmail} onChange={e => setContactEmail(e.target.value)} placeholder="hola@musicweekchops.cl" />
+                </div>
+                <div>
+                  <label className="block text-xs font-black text-neutral-600 uppercase tracking-wider mb-2">Instagram (usuario, sin @)</label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-neutral-400 text-sm font-bold">@</span>
+                    <input className="flex-1 px-4 py-3 rounded-2xl border border-neutral-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-violet-200" value={contactInstagram} onChange={e => setContactInstagram(e.target.value)} placeholder="musicweekchops" />
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end mt-6">
+                <button onClick={handleSaveContact} disabled={saving} className="px-6 py-3 rounded-2xl bg-violet-600 text-white text-xs font-black hover:bg-violet-700 transition-all flex items-center gap-2 disabled:opacity-50">
+                  <Save className="w-4 h-4" />{saving ? "Guardando..." : "Guardar Contacto"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
     </AdminShell>
   )
