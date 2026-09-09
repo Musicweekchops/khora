@@ -21,12 +21,20 @@ export async function generateStaticParams() {
   }
 
   try {
-    const { data: teachers, error } = await supabase.from("TeacherProfile").select("slug").not("slug", "is", null)
+    const { data: teachers, error } = await supabase.from("TeacherProfile").select("id, slug")
     if (error || !teachers || teachers.length === 0) {
       console.warn("⚠️ WARNING: No teachers found or Supabase query failed. Generating a dummy page so the build doesn't crash.")
       return [{ slug: "sin-profesores" }]
     }
-    return teachers.map((t) => ({ slug: t.slug }))
+    
+    const params: { slug: string }[] = []
+    for (const t of teachers) {
+      params.push({ slug: t.id }) // Generate for UUID
+      if (t.slug) {
+        params.push({ slug: t.slug }) // Generate for custom slug
+      }
+    }
+    return params
   } catch (err) {
     console.error("❌ CRITICAL ERROR: Failed to fetch teachers for static generation.", err)
     throw err
