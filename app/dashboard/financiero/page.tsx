@@ -22,7 +22,7 @@ interface PaymentRow {
   transfer_id?: string | null
 }
 
-interface StudentRow { id: string; status: string; lifetime_value: number; created_at: string; lead_source: string; name: string }
+interface StudentRow { id: string; status: string; lifetime_value: number; created_at: string; lead_source: string; name: string; monthly_fee: number; modalidad: string }
 interface UnpaidStudent { id: string; name: string; email: string; modalidad: string }
 interface PaymentModal { 
   studentId: string
@@ -43,6 +43,8 @@ export default function FinancieroPage() {
   const [deletingPayments, setDeletingPayments] = useState(false)
   const [students, setStudents] = useState<StudentRow[]>([])
   const [unpaidStudents, setUnpaidStudents] = useState<UnpaidStudent[]>([])
+  const [feeFilter, setFeeFilter] = useState<"ALL" | "UNDER_90K" | "NO_FEE">("ALL")
+  const [editingFee, setEditingFee] = useState<{ id: string, amount: string } | null>(null)
   const [classes, setClasses] = useState<{ id: string, student_id: string, date: string }[]>([])
   const [chartMode, setChartMode] = useState<"MONTH" | "ALL">("MONTH")
   const [loading, setLoading] = useState(true)
@@ -78,7 +80,7 @@ export default function FinancieroPage() {
     }
 
     const [{ data: sp }, { data: activeStudents }] = await Promise.all([
-      supabase.from("StudentProfile").select("id, status, lifetime_value, created_at, lead_source, User ( name )").eq("teacher_id", teacherId),
+      supabase.from("StudentProfile").select("id, status, lifetime_value, created_at, lead_source, monthly_fee, modalidad, User ( name )").eq("teacher_id", teacherId),
       supabase.from("StudentProfile")
         .select("id, modalidad, User ( name, email )")
         .eq("teacher_id", teacherId)
@@ -107,6 +109,7 @@ export default function FinancieroPage() {
     if (sp) setStudents(sp.map((s: any) => ({
       id: s.id, status: s.status ?? "PROSPECT", lifetime_value: s.lifetime_value ?? 0,
       created_at: s.created_at, lead_source: s.lead_source ?? "", name: s.User?.name ?? "—",
+      monthly_fee: s.monthly_fee ?? 0, modalidad: s.modalidad ?? "online"
     })))
 
     // Alumnos activos sin pago registrado este mes
@@ -188,6 +191,16 @@ export default function FinancieroPage() {
     } finally {
       setDeletingPayments(false)
     }
+  }
+
+  async function handleUpdateFee(studentId: string, newFeeStr: string) {
+    const fee = Number(newFeeStr)
+    if (isNaN(fee)) return toast.error("Monto inválido")
+    const { error } = await supabase.from("StudentProfile").update({ monthly_fee: fee }).eq("id", studentId)
+    if (error) return toast.error("Error al actualizar la mensualidad")
+    toast.success("Mensualidad actualizada")
+    setStudents(prev => prev.map(s => s.id === studentId ? { ...s, monthly_fee: fee } : s))
+    setEditingFee(null)
   }
 
   async function handleRegisterPayment() {
@@ -633,6 +646,107 @@ export default function FinancieroPage() {
             ))}
           </div>
         )}
+      </div>
+
+      {/* ── Auditoría de Mensualidades ── */}
+      <div className="bg-white rounded-3xl border border-neutral-100 overflow-hidden">
+        <div className="p-6 border-b border-neutral-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-sky-50/40">
+          <div>
+            <h3 className="font-black text-neutral-900 flex items-center gap-2">
+              <span className="w-2 h-5 bg-sky-500 rounded-full" />
+              Auditoría de Mensualidades
+            </h3>
+            <p className="text-xs text-neutral-500 font-medium mt-0.5">
+              Revisa y ajusta los valores mensuales configurados por alumno
+            </p>
+          </div>
+          <div className="flex bg-neutral-100 p-1 rounded-xl w-full md:w-auto">
+            <button
+              onClick={() => setFeeFilter("ALL")}
+              className={`flex-1 md:flex-none px-4 py-1.5 text-xs font-bold rounded-lg transition-colors ${feeFilter === "ALL" ? "bg-white text-neutral-900 shadow" : "text-neutral-500 hover:text-neutral-700"}`}
+            >
+              Todos
+            </button>
+            <button
+              onClick={() => setFeeFilter("UNDER_90K")}
+              className={`flex-1 md:flex-none px-4 py-1.5 text-xs font-bold rounded-lg transition-colors ${feeFilter === "UNDER_90K" ? "bg-white text-neutral-900 shadow" : "text-neutral-500 hover:text-neutral-700"}`}
+            >
+              {"< $90k"}
+            </button>
+            <button
+              onClick={() => setFeeFilter("NO_FEE")}
+              className={`flex-1 md:flex-none px-4 py-1.5 text-xs font-bold rounded-lg transition-colors ${feeFilter === "NO_FEE" ? "bg-white text-neutral-900 shadow" : "text-neutral-500 hover:text-neutral-700"}`}
+            >
+              Sin Valor
+            </button>
+          </div>
+        </div>
+
+        <div className="divide-y divide-neutral-50">
+          {students
+            .filter(s => s.status === "ACTIVE")
+            .filter(s => {
+              if (feeFilter === "UNDER_90K") return s.monthly_fee > 0 && s.monthly_fee < 90000;
+              if (feeFilter === "NO_FEE") return !s.monthly_fee || s.monthly_fee === 0;
+              return true;
+            })
+            .sort((a, b) => b.monthly_fee - a.monthly_fee)
+            .map(s => (
+            <div key={s.id} className="px-6 py-4 flex items-center gap-4 hover:bg-neutral-50/50 transition-colors">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-sky-100 to-indigo-100 flex items-center justify-center text-sm font-black text-sky-600 flex-shrink-0">
+                {s.name.charAt(0).toUpperCase()}
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <Link
+                  href={`/dashboard/alumnos/detalles?id=${s.id}`}
+                  className="font-bold text-neutral-900 hover:text-violet-600 transition-colors block truncate text-sm"
+                >
+                  {s.name}
+                </Link>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-neutral-500 text-xs">{s.modalidad === "online" ? "📹 Virtual" : "🏠 Presencial"}</span>
+                  {s.monthly_fee === 0 && <span className="bg-red-100 text-red-600 px-2 py-0.5 rounded text-[10px] font-bold">Falta valor</span>}
+                  {s.monthly_fee > 0 && s.monthly_fee < 90000 && <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-[10px] font-bold">Bajo</span>}
+                </div>
+              </div>
+
+              <div className="flex-shrink-0 flex items-center gap-2">
+                {editingFee?.id === s.id ? (
+                  <div className="flex items-center gap-2 bg-neutral-100 rounded-xl p-1 pr-2">
+                    <span className="pl-2 text-xs font-bold text-neutral-400">$</span>
+                    <input
+                      type="number"
+                      autoFocus
+                      className="w-20 bg-transparent text-sm font-black text-neutral-900 outline-none"
+                      value={editingFee.amount}
+                      onChange={e => setEditingFee({ id: s.id, amount: e.target.value })}
+                      onKeyDown={e => e.key === "Enter" && handleUpdateFee(s.id, editingFee.amount)}
+                    />
+                    <button onClick={() => handleUpdateFee(s.id, editingFee.amount)} className="text-xs bg-emerald-500 text-white font-bold px-2 py-1 rounded-lg">Guardar</button>
+                    <button onClick={() => setEditingFee(null)} className="text-xs text-neutral-400 hover:text-neutral-600 font-bold px-2 py-1">✕</button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setEditingFee({ id: s.id, amount: s.monthly_fee ? String(s.monthly_fee) : "" })}
+                    className={`px-4 py-2 rounded-xl text-xs font-black transition-all border ${s.monthly_fee > 0 ? "bg-white border-neutral-200 text-neutral-700 hover:border-violet-300 hover:text-violet-600" : "bg-red-50 border-red-200 text-red-600 hover:bg-red-100"}`}
+                  >
+                    {s.monthly_fee > 0 ? formatCurrency(s.monthly_fee) : "Definir valor"}
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+          {students.filter(s => s.status === "ACTIVE").filter(s => {
+              if (feeFilter === "UNDER_90K") return s.monthly_fee > 0 && s.monthly_fee < 90000;
+              if (feeFilter === "NO_FEE") return !s.monthly_fee || s.monthly_fee === 0;
+              return true;
+            }).length === 0 && (
+            <div className="p-8 text-center text-neutral-400 text-sm font-bold">
+              No hay alumnos en esta categoría
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Historial de Cobros Registrados ── */}
