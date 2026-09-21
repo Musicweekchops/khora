@@ -23,7 +23,7 @@ interface PaymentRow {
 }
 
 interface StudentRow { id: string; status: string; lifetime_value: number; created_at: string; lead_source: string; name: string; monthly_fee: number; modalidad: string }
-interface UnpaidStudent { id: string; name: string; email: string; modalidad: string }
+interface UnpaidStudent { id: string; name: string; email: string; modalidad: string; monthly_fee: number; paid_this_month: number }
 interface PaymentModal { 
   studentId: string
   studentName: string
@@ -82,7 +82,7 @@ export default function FinancieroPage() {
     const [{ data: sp }, { data: activeStudents }] = await Promise.all([
       supabase.from("StudentProfile").select("id, status, lifetime_value, created_at, lead_source, monthly_fee, modalidad, User ( name )").eq("teacher_id", teacherId),
       supabase.from("StudentProfile")
-        .select("id, modalidad, User ( name, email )")
+        .select("id, modalidad, monthly_fee, User ( name, email )")
         .eq("teacher_id", teacherId)
         .eq("status", "ACTIVE"),
     ])
@@ -112,21 +112,30 @@ export default function FinancieroPage() {
       monthly_fee: s.monthly_fee ?? 0, modalidad: s.modalidad ?? "online"
     })))
 
-    // Alumnos activos sin pago registrado este mes
+    // Alumnos activos sin pago COMPLETO este mes
     if (activeStudents && py) {
-      const paidThisMonth = new Set(
-        py.filter((p: any) => p.date >= startOfMonth).map((p: any) => p.student_id)
-      )
-      setUnpaidStudents(
-        activeStudents
-          .filter((s: any) => !paidThisMonth.has(s.id))
-          .map((s: any) => ({
-            id: s.id,
-            name: s.User?.name ?? "—",
-            email: s.User?.email ?? "—",
-            modalidad: s.modalidad ?? "online",
-          }))
-      )
+      const paymentsThisMonth = py.filter((p: any) => p.date >= startOfMonth)
+      const paidByStudent = new Map<string, number>()
+      paymentsThisMonth.forEach((p: any) => {
+        paidByStudent.set(p.student_id, (paidByStudent.get(p.student_id) || 0) + Number(p.amount || 0))
+      })
+
+      const pendingStudents = activeStudents.map((s: any) => {
+        const paid = paidByStudent.get(s.id) || 0
+        return {
+          id: s.id,
+          name: s.User?.name ?? "—",
+          email: s.User?.email ?? "—",
+          modalidad: s.modalidad ?? "online",
+          monthly_fee: Number(s.monthly_fee || 0),
+          paid_this_month: paid
+        }
+      }).filter((s) => {
+        if (s.monthly_fee > 0) return s.paid_this_month < s.monthly_fee // Debe algo
+        return s.paid_this_month === 0 // No tiene fee, si pagó algo asumimos que pagó todo
+      })
+
+      setUnpaidStudents(pendingStudents)
     }
 
     // Cargar clases para el gráfico de días de la semana
@@ -610,7 +619,9 @@ export default function FinancieroPage() {
           </div>
         ) : (
           <div className="divide-y divide-neutral-50">
-            {unpaidStudents.map(s => (
+            {unpaidStudents.map(s => {
+              const debt = s.monthly_fee > s.paid_this_month ? s.monthly_fee - s.paid_this_month : 0;
+              return (
               <div key={s.id} className="px-6 py-4 flex items-center gap-4 hover:bg-neutral-50/50 transition-colors">
                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-red-100 to-rose-100 flex items-center justify-center text-sm font-black text-red-500 flex-shrink-0">
                   {s.name.charAt(0).toUpperCase()}
@@ -627,6 +638,18 @@ export default function FinancieroPage() {
                     <span className="text-xs text-neutral-400 truncate">{s.email}</span>
                     <span className="text-neutral-200 text-xs">·</span>
                     <span className="text-xs text-neutral-400">{s.modalidad === "online" ? "📹 Virtual" : "🏠 Presencial"}</span>
+                    {s.monthly_fee > 0 && (
+                      <>
+                        <span className="text-neutral-200 text-xs">·</span>
+                        {s.paid_this_month === 0 ? (
+                          <span className="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">Debe {formatCurrency(s.monthly_fee)}</span>
+                        ) : (
+                          <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
+                            Abonó {formatCurrency(s.paid_this_month)} / Saldo: {formatCurrency(debt)}
+                          </span>
+                        )}
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -634,7 +657,7 @@ export default function FinancieroPage() {
                   onClick={() => setModal({
                     studentId: s.id,
                     studentName: s.name,
-                    amount: "",
+                    amount: debt > 0 ? String(debt) : "",
                     method: "TRANSFER",
                     notes: "",
                   })}
@@ -643,7 +666,7 @@ export default function FinancieroPage() {
                   💳 Registrar Pago
                 </button>
               </div>
-            ))}
+            )})}
           </div>
         )}
       </div>
