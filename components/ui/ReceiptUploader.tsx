@@ -105,8 +105,8 @@ export default function ReceiptUploader({ onParsedData, currentReceiptUrl }: Pro
       if (!parsedData || (!parsedData.amount && !parsedData.date)) {
         const apiKey =
           process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
-          process.env.GEMINI_API_KEY ||
-          "AIzaSyCVNWcsGj2L3HYmlbPZ6URPvIuhH1HnDC4"
+          process.env.GEMINI_API_KEY
+
 
         if (apiKey) {
           try {
