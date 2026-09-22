@@ -1446,15 +1446,36 @@ function PublicBookingPage() {
                 {/* Back button to flow selection (only if NOT logged in) */}
                 {!profile && (
                   <button
-                    onClick={() => { /* removed setFlowType(null) to keep user in nuevo */ setError(""); }}
-                    className="inline-flex items-center gap-2 text-xs font-black text-neutral-400 hover:text-white uppercase tracking-wider transition-colors"
+                    onClick={() => { setFlowType(null); setError(""); }}
+                    className="inline-flex items-center gap-2 text-xs font-black text-neutral-400 hover:text-neutral-700 uppercase tracking-wider transition-colors mb-4"
                   >
                     <ArrowLeft className="w-4 h-4" /> Volver
                   </button>
                 )}
 
                 {/* Inline Login form for Regular Student */}
-                {!profile ? null : (
+                {!profile ? (
+                  <div className="max-w-md mx-auto bg-white border border-neutral-200 rounded-3xl p-8 shadow-md">
+                    <div className="text-center">
+                      <LogIn className="w-10 h-10 text-violet-400 mx-auto mb-3" />
+                      <h2 className="text-lg font-black text-neutral-900 uppercase tracking-wider">Acceso Alumnos</h2>
+                      <p className="text-xs text-neutral-500 mt-1">Ingresa para gestionar, re-agendar o revisar tus clases</p>
+                    </div>
+                    <form onSubmit={handleInlineLogin} className="space-y-4 mt-6">
+                      <div>
+                        <label className="kh-label block text-[10px] text-neutral-400">Nombre o Correo</label>
+                        <input type="text" required value={loginEmailOrName} onChange={e => setLoginEmailOrName(e.target.value)} className="kh-input bg-white border-neutral-200 text-neutral-900" placeholder="Tu nombre o correo" />
+                      </div>
+                      <div>
+                        <label className="kh-label block text-[10px] text-neutral-400">Contraseña</label>
+                        <input type="password" required value={loginPassword} onChange={e => setLoginPassword(e.target.value)} className="kh-input bg-white border-neutral-200 text-neutral-900" placeholder="••••••••" />
+                      </div>
+                      <button type="submit" disabled={loggingIn} className="w-full py-3.5 bg-violet-600 hover:bg-violet-750 text-white rounded-xl text-xs font-black uppercase tracking-wider border border-violet-500 flex items-center justify-center gap-2">
+                        {loggingIn ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : "Ingresar"}
+                      </button>
+                    </form>
+                  </div>
+                ) : (
                   // Logged-in regular student view
                   <div className="space-y-6 animate-in fade-in duration-300">
                     <div className="flex items-center justify-between bg-white px-5 py-3 rounded-2xl border border-neutral-200 shadow-sm">
