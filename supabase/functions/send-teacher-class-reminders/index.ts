@@ -30,6 +30,7 @@ serve(async (req) => {
         end_time,
         status,
         modalidad,
+        title,
         teacher_id,
         student_id,
         teacher_reminder_sent_at,
@@ -44,12 +45,12 @@ serve(async (req) => {
         )
       `)
       .eq("date", todayStr)
-      .in("status", ["SCHEDULED", "CONFIRMED"])
+      .in("status", ["SCHEDULED", "CONFIRMED", "BLOCKED"])
       .is("teacher_reminder_sent_at", null)
 
     if (classErr) throw classErr
     if (!classes || classes.length === 0) {
-      return new Response(JSON.stringify({ message: `No hay clases de hoy pendientes de notificar al profesor.` }), { status: 200 })
+      return new Response(JSON.stringify({ message: `No hay clases ni compromisos de hoy pendientes de notificar al profesor.` }), { status: 200 })
     }
 
     let notificationsSent = 0
@@ -89,7 +90,7 @@ serve(async (req) => {
           .select("start_time")
           .eq("teacher_id", cls.teacher_id)
           .eq("date", todayStr)
-          .in("status", ["SCHEDULED", "CONFIRMED", "COMPLETED"])
+          .in("status", ["SCHEDULED", "CONFIRMED", "COMPLETED", "BLOCKED"])
           .order("start_time", { ascending: true })
 
         const firstClassStartTime = teacherTodayClasses && teacherTodayClasses.length > 0
@@ -120,8 +121,14 @@ serve(async (req) => {
 
           let pushTitle = "⏰ Próxima Clase en 1 Hora"
           let pushBody = `Clase con ${studentName} a las ${classTimeStr} hs (${modalidadStr}).`
+          let targetUrl = `/dashboard/clases/detalles?id=${cls.id}`
 
-          if (isFirstClassOfDay) {
+          if (cls.status === "BLOCKED") {
+            const commitmentTitle = cls.title || "Compromiso / Reunión"
+            pushTitle = `⏰ Recordatorio de Compromiso (${classTimeStr} hs)`
+            pushBody = `Tienes programado: "${commitmentTitle}" a las ${classTimeStr} hs.`
+            targetUrl = `/dashboard/agenda?date=${cls.date}`
+          } else if (isFirstClassOfDay) {
             pushTitle = "🚨 ¡Atención! Tu jornada inicia en 1 hora"
             pushBody = `Primera clase del día con ${studentName} a las ${classTimeStr} hs (${modalidadStr}). ¡Hora de salir al estudio! 🚗`
           }
@@ -129,7 +136,7 @@ serve(async (req) => {
           const payload = JSON.stringify({
             title: pushTitle,
             body: pushBody,
-            url: `/dashboard/clases/detalles?id=${cls.id}`
+            url: targetUrl
           })
 
           for (const sub of subs) {

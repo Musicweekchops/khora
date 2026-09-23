@@ -15,8 +15,10 @@ interface CalendarClass {
   id: string; date: string; start_time: string; end_time: string
   status: string; modalidad: string; student_name: string
   student_id?: string | null
+  title?: string
   is_booking?: boolean; is_recurring?: boolean; is_trial?: boolean; is_recovery_pending?: boolean;
   is_recovery?: boolean; original_class_date?: string | null;
+  is_blocked?: boolean;
   counterLabel?: string; recoveryLabel?: string;
 }
 
@@ -62,7 +64,8 @@ export default function AgendaPage() {
   }, [])
 
   // Quick-add form state
-  const [quickForm, setQuickForm] = useState({ student_id: "", start_time: "10:00", end_time: "11:00", modalidad: "online" })
+  const [modalMode, setModalMode] = useState<"CLASS" | "BLOCK">("CLASS")
+  const [quickForm, setQuickForm] = useState({ student_id: "", title: "", start_time: "10:00", end_time: "11:00", modalidad: "online" })
   const [saving, setSaving] = useState(false)
 
   // Booking approval state
@@ -176,7 +179,7 @@ export default function AgendaPage() {
       // Load actual classes
       const { data: classData, error: classErr } = await supabase
         .from("Class")
-        .select("id, date, start_time, end_time, status, modalidad, is_recurring, booking_id, is_recovery_pending, is_recovery, original_class_date, student_id, StudentProfile ( status, User ( name ) )")
+        .select("id, date, start_time, end_time, status, modalidad, title, is_recurring, booking_id, is_recovery_pending, is_recovery, original_class_date, student_id, StudentProfile ( status, User ( name ) )")
         .eq("teacher_id", profile!.teacherProfileId!)
         .gte("date", start)
         .lte("date", end)
@@ -204,15 +207,17 @@ export default function AgendaPage() {
 
       const formattedClasses = (classData || []).map((c: any) => {
         const enriched = countersMap.get(c.id)
+        const isBlocked = c.status === "BLOCKED"
         return {
           id: c.id, date: c.date, start_time: c.start_time, end_time: c.end_time,
-          status: c.status, modalidad: c.modalidad, is_recurring: !!c.is_recurring,
+          status: c.status, modalidad: c.modalidad, title: c.title, is_recurring: !!c.is_recurring,
           is_recovery_pending: !!c.is_recovery_pending,
           is_recovery: !!c.is_recovery,
           original_class_date: c.original_class_date,
           student_id: c.student_id,
-          student_name: c.StudentProfile?.User?.name ?? "Sin asignar",
+          student_name: isBlocked ? (c.title || "Horario Bloqueado") : (c.StudentProfile?.User?.name ?? "Sin asignar"),
           is_booking: false,
+          is_blocked: isBlocked,
           is_trial: !!c.booking_id || c.StudentProfile?.status === "TRIAL",
           counterLabel: enriched?.counterLabel,
           recoveryLabel: enriched?.recoveryLabel,
@@ -500,8 +505,10 @@ export default function AgendaPage() {
 
   function handleSlotClick(date: Date, hour: number) {
     setSelectedSlot({ date: toDateStr(date), hour })
+    setModalMode("CLASS")
     setQuickForm({
       student_id: "",
+      title: "",
       start_time: `${String(hour).padStart(2, "0")}:00`,
       end_time: `${String(hour + 1).padStart(2, "0")}:00`,
       modalidad: "online",
@@ -546,6 +553,67 @@ export default function AgendaPage() {
     setSaving(false)
     setShowModal(false)
     loadClasses()
+  }
+
+  async function handleQuickBlock() {
+    if (!selectedSlot || !profile?.teacherProfileId) return
+    setSaving(true)
+
+    // Validar traslape
+    const hasConflict = await checkTeacherConflict(
+      profile.teacherProfileId,
+      selectedSlot.date,
+      quickForm.start_time,
+      quickForm.end_time
+    )
+
+    if (hasConflict) {
+      toast.error("El profesor ya tiene una clase o reserva programada en ese horario.")
+      setSaving(false)
+      return
+    }
+
+    const commitmentTitle = quickForm.title.trim() || "Horario Bloqueado"
+
+    const { error: insertErr } = await supabase.from("Class").insert({
+      teacher_id: profile.teacherProfileId,
+      student_id: null,
+      date: selectedSlot.date,
+      start_time: quickForm.start_time,
+      end_time: quickForm.end_time,
+      title: commitmentTitle,
+      modalidad: "bloqueado",
+      status: "BLOCKED",
+    })
+
+    if (insertErr) {
+      toast.error("Error al registrar el compromiso: " + insertErr.message)
+    } else {
+      toast.success(`Compromiso "${commitmentTitle}" agendado con éxito 🔒`)
+    }
+
+    setSaving(false)
+    setShowModal(false)
+    loadClasses()
+  }
+
+  async function handleUnblockSlot(classId: string) {
+    if (!confirm("¿Deseas desbloquear este horario? Quedará disponible nuevamente para agendar.")) return
+    try {
+      const { error } = await supabase
+        .from("Class")
+        .delete()
+        .eq("id", classId)
+
+      if (error) {
+        toast.error("Error al desbloquear el horario: " + error.message)
+      } else {
+        toast.success("Horario desbloqueado correctamente")
+        await loadClasses()
+      }
+    } catch (err: any) {
+      toast.error("Error al desbloquear: " + err.message)
+    }
   }
 
   function getClassesForSlot(dayStr: string, hour: number) {
@@ -717,6 +785,24 @@ export default function AgendaPage() {
                                 <div className="flex items-start justify-between gap-1 leading-tight">
                                   <p className="font-black truncate pr-4">{cls.student_name.replace("SOLICITUD: ", "")}</p>
                                   <span className="text-[9px] animate-pulse flex-shrink-0">🔔</span>
+                                </div>
+                                <p className="opacity-70 text-[9px] font-medium mt-auto truncate">{formatTime(cls.start_time)} - {formatTime(cls.end_time)}</p>
+                              </div>
+                            </button>
+                          ) : cls.is_blocked ? (
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                handleUnblockSlot(cls.id)
+                              }}
+                              className="block w-full h-full text-left"
+                              title="Click para eliminar este compromiso"
+                            >
+                              <div className="h-full rounded-md p-1.5 text-xs hover:shadow-lg hover:z-20 transition-all cursor-pointer overflow-hidden flex flex-col shadow-sm border bg-slate-100/95 border-slate-300 border-l-4 border-l-slate-500 text-slate-700">
+                                <div className="flex items-start justify-between gap-1 leading-tight">
+                                  <p className="font-black truncate">🔒 {cls.title || "Bloqueado"}</p>
+                                  <span className="text-[10px] text-slate-400 hover:text-red-500 transition-colors">🗑️</span>
                                 </div>
                                 <p className="opacity-70 text-[9px] font-medium mt-auto truncate">{formatTime(cls.start_time)} - {formatTime(cls.end_time)}</p>
                               </div>
@@ -912,6 +998,7 @@ export default function AgendaPage() {
                   setSelectedSlot({ date: toDateStr(mobileSelectedDate), hour: 10 })
                   setQuickForm({
                     student_id: "",
+                    title: "",
                     start_time: "10:00",
                     end_time: "11:00",
                     modalidad: "online",
@@ -927,7 +1014,10 @@ export default function AgendaPage() {
             filteredClassesForDay.map((cls) => {
               let cardBg = "bg-violet-50/90 border-violet-100 hover:border-violet-200 text-violet-900 animate-in fade-in zoom-in duration-200"
               let bulletColor = "bg-violet-500"
-              if (cls.is_recovery_pending) {
+              if (cls.is_blocked) {
+                cardBg = "bg-slate-100/90 border-slate-300 text-slate-800 animate-in fade-in zoom-in duration-200"
+                bulletColor = "bg-slate-500"
+              } else if (cls.is_recovery_pending) {
                 cardBg = "bg-amber-100/90 border-amber-300 hover:border-amber-400 text-amber-950 font-medium animate-in fade-in zoom-in duration-200"
                 bulletColor = "bg-amber-500"
               } else if (cls.status === "COMPLETED") {
@@ -972,6 +1062,28 @@ export default function AgendaPage() {
                           </div>
                         </div>
                       </button>
+                    ) : cls.is_blocked ? (
+                      <div className="flex-1 min-w-0 flex items-center gap-2">
+                        <div className={`flex-1 rounded-[24px] border p-4 shadow-sm transition-all flex items-center justify-between gap-4 ${cardBg}`}>
+                          <div className="min-w-0 flex-1">
+                            <h4 className="font-black text-sm md:text-base truncate flex items-center gap-1.5">
+                              <span>🔒 {cls.title || "Horario Bloqueado"}</span>
+                            </h4>
+                            <p className="text-[10px] font-bold opacity-75 uppercase tracking-wider mt-1 flex items-center gap-1.5">
+                              <span>🕒 {formatTime(cls.start_time)} - {formatTime(cls.end_time)}</span>
+                              <span>•</span>
+                              <span>🚫 Compromiso</span>
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleUnblockSlot(cls.id)}
+                          title="Eliminar Compromiso"
+                          className="w-12 h-12 rounded-full bg-slate-200 text-slate-700 hover:bg-red-500 hover:text-white border border-slate-300 flex items-center justify-center transition-all shadow-sm flex-shrink-0 text-sm hover:scale-105 active:scale-95"
+                        >
+                          🗑️
+                        </button>
+                      </div>
                     ) : (
                       <Link
                         href={`/dashboard/clases/detalles?id=${cls.id}`}
@@ -1038,6 +1150,7 @@ export default function AgendaPage() {
               setSelectedSlot({ date: toDateStr(mobileSelectedDate), hour: new Date().getHours() })
               setQuickForm({
                 student_id: "",
+                title: "",
                 start_time: "10:00",
                 end_time: "11:00",
                 modalidad: "online",
@@ -1071,11 +1184,36 @@ export default function AgendaPage() {
       </div>
 
       {/* Quick-Add Modal / Bottom Drawer on Mobile */}
-      <BottomSheet isOpen={showModal && selectedSlot !== null} onClose={() => setShowModal(false)} title="Crear sesión">
+      <BottomSheet isOpen={showModal && selectedSlot !== null} onClose={() => setShowModal(false)} title={modalMode === "CLASS" ? "Crear sesión" : "Bloquear Horario"}>
         {selectedSlot && (
             <div className="space-y-4">
-              <p className="text-xs text-neutral-400 font-medium -mt-2 mb-4">Asigna una nueva sesión a tu alumno</p>
-              {/* Date selection calendar inside modal */}
+              {/* Segmented Mode Selector */}
+              <div className="grid grid-cols-2 gap-2 p-1.5 bg-neutral-100 rounded-2xl border border-neutral-200/50">
+                <button
+                  type="button"
+                  onClick={() => setModalMode("CLASS")}
+                  className={`py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+                    modalMode === "CLASS"
+                      ? "bg-white text-neutral-900 shadow-sm"
+                      : "text-neutral-500 hover:text-neutral-800"
+                  }`}
+                >
+                  <span>🎓 Agendar Clase</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModalMode("BLOCK")}
+                  className={`py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+                    modalMode === "BLOCK"
+                      ? "bg-white text-red-600 shadow-sm"
+                      : "text-neutral-500 hover:text-neutral-800"
+                  }`}
+                >
+                  <span>🔒 Bloquear Horario</span>
+                </button>
+              </div>
+
+              {/* Common Date Selection Calendar */}
               <div>
                 <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-2 ml-1">Fecha de la sesión</label>
                 <div className="bg-neutral-50 border border-neutral-200/60 rounded-2xl p-3">
@@ -1142,19 +1280,7 @@ export default function AgendaPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-2 ml-1">Alumno</label>
-                <select
-                  value={quickForm.student_id}
-                  onChange={e => setQuickForm(p => ({ ...p, student_id: e.target.value }))}
-                  className="w-full px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl outline-none focus:border-violet-400 text-[16px] md:text-sm font-bold text-neutral-700 appearance-none bg-no-repeat bg-[right_1rem_center]"
-                  style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundSize: '1.25rem' }}
-                >
-                  <option value="">Sin asignar</option>
-                  {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
-
+              {/* Time inputs */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-2 ml-1">Inicio</label>
@@ -1168,30 +1294,83 @@ export default function AgendaPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 p-1.5 bg-neutral-100 rounded-2xl">
-                {(["online", "presencial"] as const).map(m => (
-                  <button key={m} type="button" onClick={() => setQuickForm(p => ({ ...p, modalidad: m }))}
-                    className={`py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${quickForm.modalidad === m ? "bg-white text-violet-600 shadow-sm" : "text-neutral-400"}`}>
-                    {m === "online" ? "📹 Virtual" : "🏠 Presencial"}
-                  </button>
-                ))}
-              </div>
+              {modalMode === "CLASS" ? (
+                <>
+                  <div>
+                    <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-2 ml-1">Alumno</label>
+                    <select
+                      value={quickForm.student_id}
+                      onChange={e => setQuickForm(p => ({ ...p, student_id: e.target.value }))}
+                      className="w-full px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl outline-none focus:border-violet-400 text-[16px] md:text-sm font-bold text-neutral-700 appearance-none bg-no-repeat bg-[right_1rem_center]"
+                      style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundSize: '1.25rem' }}
+                    >
+                      <option value="">Sin asignar</option>
+                      {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </div>
 
-              <div className="flex gap-3 pt-3">
-                <button
-                  onClick={() => setShowModal(false)}
-                  className="flex-1 py-3.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-full text-xs font-black uppercase tracking-wider transition-all"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleQuickCreate}
-                  disabled={saving}
-                  className="flex-1 py-3.5 bg-neutral-900 hover:bg-violet-600 text-white rounded-full text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50 shadow-md shadow-neutral-900/10"
-                >
-                  {saving ? "Creando..." : "Agendar"}
-                </button>
-              </div>
+                  <div className="grid grid-cols-2 gap-2 p-1.5 bg-neutral-100 rounded-2xl">
+                    {(["online", "presencial"] as const).map(m => (
+                      <button key={m} type="button" onClick={() => setQuickForm(p => ({ ...p, modalidad: m }))}
+                        className={`py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${quickForm.modalidad === m ? "bg-white text-violet-600 shadow-sm" : "text-neutral-400"}`}>
+                        {m === "online" ? "📹 Virtual" : "🏠 Presencial"}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-3 pt-3">
+                    <button
+                      onClick={() => setShowModal(false)}
+                      className="flex-1 py-3.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-full text-xs font-black uppercase tracking-wider transition-all"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={handleQuickCreate}
+                      disabled={saving}
+                      className="flex-1 py-3.5 bg-neutral-900 hover:bg-violet-600 text-white rounded-full text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50 shadow-md shadow-neutral-900/10"
+                    >
+                      {saving ? "Creando..." : "Agendar"}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-2 ml-1">Motivo / Título del compromiso</label>
+                    <input
+                      type="text"
+                      placeholder="Ej. Reunión de equipo, Ensayo, Llamada con cliente..."
+                      value={quickForm.title}
+                      onChange={e => setQuickForm(p => ({ ...p, title: e.target.value }))}
+                      className="w-full px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl outline-none focus:border-red-400 text-[16px] md:text-sm font-bold text-neutral-800 placeholder:font-normal placeholder:text-neutral-400"
+                    />
+                  </div>
+
+                  <div className="p-3.5 bg-red-50 border border-red-200/60 rounded-2xl flex items-start gap-3 text-red-900">
+                    <span className="text-sm flex-shrink-0 mt-0.5">🔔</span>
+                    <p className="text-xs font-medium leading-relaxed">
+                      El sistema de recordatorios te enviará una notificación push a tu teléfono antes de esta reunión o compromiso según tu configuración de alertas.
+                    </p>
+                  </div>
+
+                  <div className="flex gap-3 pt-3">
+                    <button
+                      onClick={() => setShowModal(false)}
+                      className="flex-1 py-3.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-full text-xs font-black uppercase tracking-wider transition-all"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={handleQuickBlock}
+                      disabled={saving}
+                      className="flex-1 py-3.5 bg-red-600 hover:bg-red-700 text-white rounded-full text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50 shadow-md shadow-red-600/20 flex items-center justify-center gap-1.5"
+                    >
+                      {saving ? "Guardando..." : "🔒 Guardar Compromiso"}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
         )}
       </BottomSheet>

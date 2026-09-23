@@ -72,12 +72,13 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
       if (todayCl.data) {
         setTodayClasses(todayCl.data.map((c: any) => {
           const enriched = countersMap.get(c.id)
+          const isBlocked = c.status === "BLOCKED"
           return {
             id: c.id, start_time: c.start_time, end_time: c.end_time,
-            student_name: c.StudentProfile?.User?.name ?? "Sin asignar",
+            student_name: isBlocked ? "🔒 Horario Bloqueado" : (c.StudentProfile?.User?.name ?? "Sin asignar"),
             status: c.status, modalidad: c.modalidad,
             is_recovery_pending: !!c.is_recovery_pending,
-            counterLabel: enriched?.counterLabel || "Clase",
+            counterLabel: isBlocked ? "Bloqueado" : (enriched?.counterLabel || "Clase"),
             isRecovery: enriched?.isRecovery || false,
             recoveryLabel: enriched?.recoveryLabel,
           }

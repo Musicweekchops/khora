@@ -18,6 +18,7 @@ interface CalendarClass {
   is_booking?: boolean
   is_recurring?: boolean
   is_trial?: boolean
+  is_blocked?: boolean
 }
 
 interface TeacherOption {
@@ -61,6 +62,7 @@ export default function AcademyCalendar({ academyId }: Props) {
   const [currentTime, setCurrentTime] = useState(() => new Date())
 
   // Quick-add form state
+  const [modalMode, setModalMode] = useState<"CLASS" | "BLOCK">("CLASS")
   const [quickForm, setQuickForm] = useState({ student_id: "", start_time: "10:00", end_time: "11:00", modalidad: "online" })
   const [saving, setSaving] = useState(false)
 
@@ -155,13 +157,17 @@ export default function AcademyCalendar({ academyId }: Props) {
 
       if (bookErr) throw bookErr
 
-      const formattedClasses = (classData || []).map((c: any) => ({
-        id: c.id, date: c.date, start_time: c.start_time, end_time: c.end_time,
-        status: c.status, modalidad: c.modalidad, is_recurring: !!c.is_recurring,
-        student_name: c.StudentProfile?.User?.name ?? "Sin asignar",
-        is_booking: false,
-        is_trial: !!c.booking_id || c.StudentProfile?.status === "TRIAL"
-      }))
+      const formattedClasses = (classData || []).map((c: any) => {
+        const isBlocked = c.status === "BLOCKED"
+        return {
+          id: c.id, date: c.date, start_time: c.start_time, end_time: c.end_time,
+          status: c.status, modalidad: c.modalidad, is_recurring: !!c.is_recurring,
+          student_name: isBlocked ? "Horario Bloqueado" : (c.StudentProfile?.User?.name ?? "Sin asignar"),
+          is_booking: false,
+          is_blocked: isBlocked,
+          is_trial: !!c.booking_id || c.StudentProfile?.status === "TRIAL"
+        }
+      })
 
       const formattedBookings = (bookingData || []).map((b: any) => ({
         id: b.id, date: b.date, start_time: b.start_time, end_time: b.end_time,
@@ -195,6 +201,7 @@ export default function AcademyCalendar({ academyId }: Props) {
   function handleSlotClick(date: Date, hour: number) {
     if (!selectedTeacherId) return
     setSelectedSlot({ date: toDateStr(date), hour })
+    setModalMode("CLASS")
     setQuickForm({
       student_id: "",
       start_time: `${String(hour).padStart(2, "0")}:00`,
@@ -241,6 +248,64 @@ export default function AcademyCalendar({ academyId }: Props) {
     setSaving(false)
     setShowModal(false)
     loadClasses()
+  }
+
+  async function handleQuickBlock() {
+    if (!selectedSlot || !selectedTeacherId) return
+    setSaving(true)
+
+    // Validar traslape
+    const hasConflict = await checkTeacherConflict(
+      selectedTeacherId,
+      selectedSlot.date,
+      quickForm.start_time,
+      quickForm.end_time
+    )
+
+    if (hasConflict) {
+      toast.error("El profesor ya tiene una clase o reserva programada en ese horario.")
+      setSaving(false)
+      return
+    }
+
+    const { error: insertErr } = await supabase.from("Class").insert({
+      teacher_id: selectedTeacherId,
+      student_id: null,
+      date: selectedSlot.date,
+      start_time: quickForm.start_time,
+      end_time: quickForm.end_time,
+      modalidad: "bloqueado",
+      status: "BLOCKED",
+    })
+
+    if (insertErr) {
+      toast.error("Error al bloquear el horario: " + insertErr.message)
+    } else {
+      toast.success("Horario bloqueado con éxito 🔒")
+    }
+
+    setSaving(false)
+    setShowModal(false)
+    loadClasses()
+  }
+
+  async function handleUnblockSlot(classId: string) {
+    if (!confirm("¿Deseas desbloquear este horario? Quedará disponible nuevamente para agendar.")) return
+    try {
+      const { error } = await supabase
+        .from("Class")
+        .delete()
+        .eq("id", classId)
+
+      if (error) {
+        toast.error("Error al desbloquear el horario: " + error.message)
+      } else {
+        toast.success("Horario desbloqueado correctamente")
+        await loadClasses()
+      }
+    } catch (err: any) {
+      toast.error("Error al desbloquear: " + err.message)
+    }
   }
 
   function getClassesForSlot(dayStr: string, hour: number) {
@@ -370,28 +435,48 @@ export default function AcademyCalendar({ academyId }: Props) {
                               }}
                               onClick={e => e.stopPropagation()}
                             >
-                              <Link
-                                href={cls.is_booking ? "#" : `/dashboard/clases/detalles?id=${cls.id}`}
-                                className="block w-full h-full"
-                              >
-                                <div
-                                  className={`h-full rounded-lg p-1.5 text-xs hover:shadow-md transition-all cursor-pointer overflow-hidden flex flex-col justify-between border ${
-                                    cls.status === "COMPLETED"
-                                      ? "bg-emerald-50 border-emerald-200 border-l-4 border-l-emerald-500 text-emerald-700"
-                                      : cls.is_booking
-                                        ? "bg-amber-50 border-amber-200 border-l-4 border-l-amber-500 text-amber-700 border-dashed"
-                                        : cls.is_trial
-                                          ? "bg-orange-50 border-orange-200 border-l-4 border-l-orange-500 text-orange-700"
-                                          : "bg-emerald-50/60 border-emerald-100 border-l-4 border-l-emerald-400 text-emerald-800"
-                                  }`}
+                              {cls.is_blocked ? (
+                                <button
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    handleUnblockSlot(cls.id)
+                                  }}
+                                  className="block w-full h-full text-left"
+                                  title="Click para desbloquear este horario"
                                 >
-                                  <div className="flex items-start justify-between leading-tight font-semibold truncate">
-                                    <span>{cls.student_name}</span>
-                                    {cls.is_recurring && <span className="text-[9px] opacity-70">↻</span>}
+                                  <div className="h-full rounded-lg p-1.5 text-xs hover:shadow-md transition-all cursor-pointer overflow-hidden flex flex-col justify-between border bg-slate-100 border-slate-300 border-l-4 border-l-slate-500 text-slate-700">
+                                    <div className="flex items-start justify-between leading-tight font-semibold truncate">
+                                      <span>🔒 Bloqueado</span>
+                                      <span className="text-[10px] text-slate-400 hover:text-red-500">🗑️</span>
+                                    </div>
+                                    <p className="opacity-75 text-[9px] font-medium mt-auto">{formatTime(cls.start_time)} - {formatTime(cls.end_time)}</p>
                                   </div>
-                                  <p className="opacity-75 text-[9px] font-medium mt-auto">{formatTime(cls.start_time)} - {formatTime(cls.end_time)}</p>
-                                </div>
-                              </Link>
+                                </button>
+                              ) : (
+                                <Link
+                                  href={cls.is_booking ? "#" : `/dashboard/clases/detalles?id=${cls.id}`}
+                                  className="block w-full h-full"
+                                >
+                                  <div
+                                    className={`h-full rounded-lg p-1.5 text-xs hover:shadow-md transition-all cursor-pointer overflow-hidden flex flex-col justify-between border ${
+                                      cls.status === "COMPLETED"
+                                        ? "bg-emerald-50 border-emerald-200 border-l-4 border-l-emerald-500 text-emerald-700"
+                                        : cls.is_booking
+                                          ? "bg-amber-50 border-amber-200 border-l-4 border-l-amber-500 text-amber-700 border-dashed"
+                                          : cls.is_trial
+                                            ? "bg-orange-50 border-orange-200 border-l-4 border-l-orange-500 text-orange-700"
+                                            : "bg-emerald-50/60 border-emerald-100 border-l-4 border-l-emerald-400 text-emerald-800"
+                                    }`}
+                                  >
+                                    <div className="flex items-start justify-between leading-tight font-semibold truncate">
+                                      <span>{cls.student_name}</span>
+                                      {cls.is_recurring && <span className="text-[9px] opacity-70">↻</span>}
+                                    </div>
+                                    <p className="opacity-75 text-[9px] font-medium mt-auto">{formatTime(cls.start_time)} - {formatTime(cls.end_time)}</p>
+                                  </div>
+                                </Link>
+                              )}
                             </div>
                           )
                         })}
@@ -411,25 +496,35 @@ export default function AcademyCalendar({ academyId }: Props) {
           <div onClick={e => e.stopPropagation()} className="bg-white w-full max-w-md rounded-2xl p-6 shadow-2xl flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-base font-semibold text-neutral-900">Crear Clase</h3>
+                <h3 className="text-base font-semibold text-neutral-900">{modalMode === "CLASS" ? "Crear Clase" : "Bloquear Horario"}</h3>
                 <p className="text-xs text-neutral-400 mt-0.5">{selectedSlot.date} a las {selectedSlot.hour}:00</p>
               </div>
               <button onClick={() => setShowModal(false)} className="w-7 h-7 rounded-full bg-neutral-100 flex items-center justify-center text-xs text-neutral-500">✕</button>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-[11px] font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">Alumno</label>
-                <select
-                  value={quickForm.student_id}
-                  onChange={e => setQuickForm(p => ({ ...p, student_id: e.target.value }))}
-                  className="w-full text-sm px-3 py-2.5 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 bg-white"
-                >
-                  <option value="">Sin asignar</option>
-                  {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
+            {/* Mode Selector Tabs */}
+            <div className="grid grid-cols-2 gap-2 p-1 bg-neutral-100 rounded-xl border border-neutral-200/50 mb-4">
+              <button
+                type="button"
+                onClick={() => setModalMode("CLASS")}
+                className={`py-2 rounded-lg text-xs font-semibold transition-all ${
+                  modalMode === "CLASS" ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500"
+                }`}
+              >
+                🎓 Agendar Clase
+              </button>
+              <button
+                type="button"
+                onClick={() => setModalMode("BLOCK")}
+                className={`py-2 rounded-lg text-xs font-semibold transition-all ${
+                  modalMode === "BLOCK" ? "bg-white text-red-600 shadow-sm" : "text-neutral-500"
+                }`}
+              >
+                🔒 Bloquear Horario
+              </button>
+            </div>
 
+            <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[11px] font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">Inicio</label>
@@ -447,31 +542,68 @@ export default function AcademyCalendar({ academyId }: Props) {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-[11px] font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">Modalidad</label>
-                <select
-                  value={quickForm.modalidad} onChange={e => setQuickForm(p => ({ ...p, modalidad: e.target.value }))}
-                  className="w-full text-sm px-3 py-2.5 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 bg-white"
-                >
-                  <option value="online">📹 Virtual / Online</option>
-                  <option value="presencial">🏠 Presencial</option>
-                </select>
-              </div>
+              {modalMode === "CLASS" ? (
+                <>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">Alumno</label>
+                    <select
+                      value={quickForm.student_id}
+                      onChange={e => setQuickForm(p => ({ ...p, student_id: e.target.value }))}
+                      className="w-full text-sm px-3 py-2.5 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 bg-white"
+                    >
+                      <option value="">Sin asignar</option>
+                      {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </div>
 
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button" onClick={() => setShowModal(false)}
-                  className="flex-1 px-4 py-2.5 text-sm font-semibold bg-neutral-100 text-neutral-600 rounded-xl hover:bg-neutral-200"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleQuickCreate} disabled={saving}
-                  className="flex-1 px-4 py-2.5 text-sm font-semibold bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-60 flex items-center justify-center gap-2"
-                >
-                  {saving ? "Creando..." : "Guardar Clase"}
-                </button>
-              </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">Modalidad</label>
+                    <select
+                      value={quickForm.modalidad} onChange={e => setQuickForm(p => ({ ...p, modalidad: e.target.value }))}
+                      className="w-full text-sm px-3 py-2.5 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 bg-white"
+                    >
+                      <option value="online">📹 Virtual / Online</option>
+                      <option value="presencial">🏠 Presencial</option>
+                    </select>
+                  </div>
+
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="button" onClick={() => setShowModal(false)}
+                      className="flex-1 px-4 py-2.5 text-sm font-semibold bg-neutral-100 text-neutral-600 rounded-xl hover:bg-neutral-200"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={handleQuickCreate} disabled={saving}
+                      className="flex-1 px-4 py-2.5 text-sm font-semibold bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-60 flex items-center justify-center gap-2"
+                    >
+                      {saving ? "Creando..." : "Guardar Clase"}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="p-3 bg-red-50 border border-red-200/60 rounded-xl text-xs text-red-900 leading-relaxed">
+                    🔒 Este horario quedará deshabilitado en la agenda del profesor. No estará disponible para agendar ni recibir solicitudes.
+                  </div>
+
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="button" onClick={() => setShowModal(false)}
+                      className="flex-1 px-4 py-2.5 text-sm font-semibold bg-neutral-100 text-neutral-600 rounded-xl hover:bg-neutral-200"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={handleQuickBlock} disabled={saving}
+                      className="flex-1 px-4 py-2.5 text-sm font-semibold bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-60 flex items-center justify-center gap-2"
+                    >
+                      {saving ? "Bloqueando..." : "🔒 Bloquear Horario"}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
