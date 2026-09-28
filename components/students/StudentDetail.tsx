@@ -299,20 +299,28 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
     setDeleting(true)
     try {
       const targetStudentId = deleteMode === "migrate" && selectedTargetId ? selectedTargetId : null
-      const rpcParams = {
-        p_source_student_id: studentId,
-        p_target_student_id: targetStudentId
-      }
-      console.log("[StudentDetail] Invoking migrate_and_delete_student:", rpcParams)
-      const { error } = await supabase.rpc("migrate_and_delete_student", rpcParams)
+
+      console.log("[StudentDetail] Invoking migrate_and_delete_student, target:", targetStudentId ?? "none (delete only)")
+
+      // PostgREST no puede inferir el tipo de `null` cuando viene de JS.
+      // Usamos la sobrecarga de 1 parámetro para borrado simple y la de 2 para migración.
+      const { error } = targetStudentId
+        ? await supabase.rpc("migrate_and_delete_student", {
+            p_source_student_id: studentId,
+            p_target_student_id: targetStudentId
+          })
+        : await supabase.rpc("migrate_and_delete_student", {
+            p_source_student_id: studentId
+          })
 
       if (error) {
-        console.error("[StudentDetail] RPC Error:", error)
+        console.error("[StudentDetail] RPC Error:", JSON.stringify(error))
         toast.error("Error al eliminar alumno: " + (error.message || error.details || "Error de servidor"))
       } else {
         toast.success(targetStudentId ? "¡Alumno eliminado e historial migrado con éxito!" : "Alumno eliminado y todo su historial borrado.")
         window.location.href = "/dashboard/alumnos"
       }
+
     } catch (err: any) {
       toast.error("Error inesperado: " + err.message)
     } finally {

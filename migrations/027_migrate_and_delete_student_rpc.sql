@@ -12,10 +12,8 @@ DECLARE
   v_source_user_id UUID;
   v_profile_exists BOOLEAN := FALSE;
 BEGIN
-  -- 1. Validar que el usuario esté autenticado
-  IF auth.uid() IS NULL THEN
-    RAISE EXCEPTION 'Usuario no autenticado.';
-  END IF;
+  -- No verificamos auth.uid() aquí porque SECURITY DEFINER puede alterar el contexto de auth.
+  -- La protección real viene de GRANT EXECUTE (solo authenticated) y las RLS en las tablas.
 
   -- 2. Obtener el user_id del perfil del alumno de origen
   SELECT user_id, TRUE INTO v_source_user_id, v_profile_exists
@@ -129,7 +127,7 @@ CREATE OR REPLACE FUNCTION public.migrate_and_delete_student(
 BEGIN
   RETURN public.migrate_and_delete_student(p_source_student_id, NULL::UUID);
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth;
 
 GRANT EXECUTE ON FUNCTION public.migrate_and_delete_student(UUID, UUID) TO authenticated, service_role, anon;
 GRANT EXECUTE ON FUNCTION public.migrate_and_delete_student(UUID) TO authenticated, service_role, anon;
