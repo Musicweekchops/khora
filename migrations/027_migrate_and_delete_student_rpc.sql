@@ -7,6 +7,7 @@ CREATE OR REPLACE FUNCTION public.migrate_and_delete_student(
 ) RETURNS BOOLEAN AS $$
 DECLARE
   v_source_user_id UUID;
+  v_profile_exists BOOLEAN := FALSE;
 BEGIN
   -- 1. Validar que el usuario que ejecuta sea un profesor (verificando JWT y tabla public.User como fallback)
   IF NOT (
@@ -19,12 +20,12 @@ BEGIN
     RAISE EXCEPTION 'Solo los profesores pueden realizar esta acción.';
   END IF;
 
-  -- 2. Obtener el user_id de la tabla de perfiles del alumno de origen
-  SELECT user_id INTO v_source_user_id
+  -- 2. Obtener el user_id del perfil del alumno de origen
+  SELECT user_id, TRUE INTO v_source_user_id, v_profile_exists
   FROM public."StudentProfile"
   WHERE id = p_source_student_id;
 
-  IF v_source_user_id IS NULL THEN
+  IF NOT v_profile_exists THEN
     RAISE EXCEPTION 'El alumno de origen no existe.';
   END IF;
 
@@ -61,44 +62,47 @@ BEGIN
     DELETE FROM public."StudentLibraryAccess"
     WHERE student_id = p_source_student_id;
 
-    -- Migrar Compras de Productos (si existe la tabla)
+    -- Migrar Compras de Productos (dinámico por si la tabla no existe)
     BEGIN
-      UPDATE public."Purchase"
-      SET student_id = p_target_student_id
-      WHERE student_id = p_source_student_id;
+      EXECUTE 'UPDATE public."Purchase" SET student_id = $1 WHERE student_id = $2'
+      USING p_target_student_id, p_source_student_id;
     EXCEPTION WHEN OTHERS THEN NULL;
     END;
 
-    -- Migrar Registros de Clases (si existe la tabla)
+    -- Migrar Registros de Clases (dinámico por si la tabla no existe)
     BEGIN
-      UPDATE public."ClassLog"
-      SET student_id = p_target_student_id
-      WHERE student_id = p_source_student_id;
+      EXECUTE 'UPDATE public."ClassLog" SET student_id = $1 WHERE student_id = $2'
+      USING p_target_student_id, p_source_student_id;
     EXCEPTION WHEN OTHERS THEN NULL;
     END;
   END IF;
 
-  -- 4. Eliminar en public."User" directamente (garantiza borrado y cascada del StudentProfile)
-  DELETE FROM public."User"
-  WHERE id = v_source_user_id;
+  -- 4. Eliminar en public."User" directamente (si el alumno tiene un user_id vinculado)
+  IF v_source_user_id IS NOT NULL THEN
+    BEGIN
+      DELETE FROM public."User"
+      WHERE id = v_source_user_id;
+    EXCEPTION WHEN OTHERS THEN NULL;
+    END;
 
-  -- Fallback por si la relación User -> StudentProfile no cascó o user_id no estaba ligado
+    -- 5. Intentar eliminar el usuario en auth.users si existe
+    BEGIN
+      DELETE FROM auth.users
+      WHERE id = v_source_user_id;
+    EXCEPTION WHEN OTHERS THEN NULL;
+    END;
+  END IF;
+
+  -- 6. Garantizar la eliminación del StudentProfile (por si no tenía user_id o no cascó)
   DELETE FROM public."StudentProfile"
   WHERE id = p_source_student_id;
-
-  -- 5. Intentar eliminar el usuario en auth.users si existe (con manejo de excepciones por restricciones de auth)
-  BEGIN
-    DELETE FROM auth.users
-    WHERE id = v_source_user_id;
-  EXCEPTION WHEN OTHERS THEN
-    NULL;
-  END;
 
   RETURN TRUE;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 GRANT EXECUTE ON FUNCTION public.migrate_and_delete_student(UUID, UUID) TO authenticated, service_role;
+
 
 
 
