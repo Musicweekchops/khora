@@ -60,17 +60,45 @@ BEGIN
     -- Limpiar accesos viejos ya migrados/excluidos
     DELETE FROM public."StudentLibraryAccess"
     WHERE student_id = p_source_student_id;
+
+    -- Migrar Compras de Productos (si existe la tabla)
+    BEGIN
+      UPDATE public."Purchase"
+      SET student_id = p_target_student_id
+      WHERE student_id = p_source_student_id;
+    EXCEPTION WHEN OTHERS THEN NULL;
+    END;
+
+    -- Migrar Registros de Clases (si existe la tabla)
+    BEGIN
+      UPDATE public."ClassLog"
+      SET student_id = p_target_student_id
+      WHERE student_id = p_source_student_id;
+    EXCEPTION WHEN OTHERS THEN NULL;
+    END;
   END IF;
 
-  -- 4. Eliminar el usuario en auth.users si existe (esto borra en cascada si tenía cuenta de login)
-  DELETE FROM auth.users
-  WHERE id = v_source_user_id;
-
-  -- 5. Eliminar en public."User" directamente (garantiza el borrado y cascada del StudentProfile en todos los casos, tenga o no cuenta auth)
+  -- 4. Eliminar en public."User" directamente (garantiza borrado y cascada del StudentProfile)
   DELETE FROM public."User"
   WHERE id = v_source_user_id;
+
+  -- Fallback por si la relación User -> StudentProfile no cascó o user_id no estaba ligado
+  DELETE FROM public."StudentProfile"
+  WHERE id = p_source_student_id;
+
+  -- 5. Intentar eliminar el usuario en auth.users si existe (con manejo de excepciones por restricciones de auth)
+  BEGIN
+    DELETE FROM auth.users
+    WHERE id = v_source_user_id;
+  EXCEPTION WHEN OTHERS THEN
+    NULL;
+  END;
 
   RETURN TRUE;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION public.migrate_and_delete_student(UUID, UUID) TO authenticated, service_role;
+
+
 

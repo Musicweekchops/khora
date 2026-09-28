@@ -298,16 +298,16 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
 
     setDeleting(true)
     try {
-      const targetId = deleteMode === "migrate" ? selectedTargetId : null
-      const { error } = await supabase.rpc("migrate_and_delete_student", {
-        p_source_student_id: studentId,
-        p_target_student_id: targetId
-      })
+      const rpcParams: Record<string, any> = { p_source_student_id: studentId }
+      if (deleteMode === "migrate" && selectedTargetId) {
+        rpcParams.p_target_student_id = selectedTargetId
+      }
+      const { error } = await supabase.rpc("migrate_and_delete_student", rpcParams)
 
       if (error) {
         toast.error("Error al eliminar alumno: " + error.message)
       } else {
-        toast.success(targetId ? "¡Alumno eliminado e historial migrado con éxito!" : "Alumno eliminado y todo su historial borrado.")
+        toast.success(rpcParams.p_target_student_id ? "¡Alumno eliminado e historial migrado con éxito!" : "Alumno eliminado y todo su historial borrado.")
         window.location.href = "/dashboard/alumnos"
       }
     } catch (err: any) {

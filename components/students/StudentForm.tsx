@@ -17,7 +17,7 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
   const [error, setError] = useState("")
   const [form, setForm] = useState({
     name: "", email: "", phone: "", password: "",
-    status: "PROSPECT", lead_source: "", modalidad: "",
+    status: "PROSPECT", lead_source: "", modalidad: "presencial",
     preferred_day: "", preferred_time: "",
     emergency_contact: "", emergency_phone: "",
     payment_frequency: "MONTHLY", payment_day: "5", monthly_fee: "0",
