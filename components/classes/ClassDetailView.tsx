@@ -32,6 +32,7 @@ import {
 import VideoPlayer from "@/components/ui/VideoPlayer"
 import { useToast } from "@/components/ui/Toast"
 import LibraryPickerModal from "@/components/ui/LibraryPickerModal"
+import TeacherSendVideoModal from "@/components/students/TeacherSendVideoModal"
 import { checkTeacherConflict, getAvailableSlots, addMinutes } from "@/lib/availability"
 import { logClassEvent } from "@/lib/classLogger"
 import { calculateClassCounters, formatSpanishShortDate } from "@/lib/classCounter"
@@ -133,6 +134,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
 
   const [confirmingAttendance, setConfirmingAttendance] = useState(false)
   const [confirmedBy, setConfirmedBy] = useState<'student' | 'teacher'>('student')
+  const [showClassVideoModal, setShowClassVideoModal] = useState(false)
 
   async function handleStudentConfirmAttendance() {
     setConfirmingAttendance(true)
@@ -1792,6 +1794,17 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                   </button>
                 )}
 
+                {profile?.role === "TEACHER" && cls?.student_id && (
+                  <button
+                    onClick={() => setShowClassVideoModal(true)}
+                    className="flex-1 sm:flex-none px-3.5 py-2 md:px-5 md:py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl md:rounded-2xl text-xs md:text-sm font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-violet-950/20"
+                    title="Grabar o dejar video de esta clase para el alumno"
+                  >
+                    <Video className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                    <span>Video de Clase</span>
+                  </button>
+                )}
+
                 {(profile?.role === "TEACHER" || profile?.role === "STUDENT") && (
                   <button onClick={() => setEditing(true)}
                     className="flex-1 sm:flex-none px-4 py-2 md:px-6 md:py-2.5 bg-neutral-900 text-white rounded-xl md:rounded-2xl text-xs md:text-sm font-bold hover:bg-violet-600 transition-all flex items-center justify-center gap-2 shadow-lg shadow-neutral-900/10">
@@ -2493,6 +2506,21 @@ export default function ClassDetailView({ classId }: { classId: string }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal Dejar Video de Clase para Alumno */}
+      {showClassVideoModal && cls?.student_id && (
+        <TeacherSendVideoModal
+          studentId={cls.student_id}
+          teacherId={cls.teacher_id}
+          studentName={cls.student_name || "Alumno"}
+          studentUserId={cls.student_user_id || undefined}
+          isOpen={showClassVideoModal}
+          onClose={() => setShowClassVideoModal(false)}
+          onSuccess={() => {
+            toast("Video de clase enviado al alumno con éxito", "success")
+          }}
+        />
       )}
     </div>
   )

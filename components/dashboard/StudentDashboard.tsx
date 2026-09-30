@@ -383,10 +383,17 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
           <h1 className="text-2xl md:text-4xl font-black tracking-tight mb-2">¡Hola, {profile.name}! 👋</h1>
           <p className="text-neutral-400 md:text-neutral-500 text-sm md:text-base font-medium max-w-md">Bienvenido a tu panel de estudio. Aquí tienes un resumen de tu progreso.</p>
           
-          <div className="mt-6 md:mt-10 flex flex-wrap gap-4">
+          <div className="mt-6 md:mt-10 flex flex-wrap items-center gap-3">
             <Link href="/dashboard/clases" className="px-5 py-2.5 md:px-6 md:py-3 bg-white text-neutral-900 rounded-xl md:rounded-2xl text-[10px] md:text-xs font-black hover:bg-neutral-100 transition-all flex items-center gap-2">
               Explorar mis clases <ChevronRight className="w-4 h-4" />
             </Link>
+            <button
+              onClick={() => { setSelectedTask(null); setShowRecorder(true); }}
+              className="px-5 py-2.5 md:px-6 md:py-3 bg-violet-600 hover:bg-violet-500 text-white rounded-xl md:rounded-2xl text-[10px] md:text-xs font-black transition-all flex items-center gap-2 shadow-lg shadow-violet-950/40 active:scale-95"
+            >
+              <Video className="w-4 h-4" />
+              <span>Grabar Video para mi Profesor</span>
+            </button>
           </div>
         </div>
         
@@ -459,6 +466,44 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
           </div>
         </div>
       )}
+
+      {/* ZONA DE PRÁCTICA Y VIDEOS DIRECTA */}
+      <div className="bg-gradient-to-br from-violet-900 via-neutral-900 to-neutral-950 rounded-3xl md:rounded-[40px] p-6 md:p-8 text-white shadow-xl shadow-violet-950/20 relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-6 border border-violet-800/40">
+        <div className="space-y-2 relative z-10 max-w-xl">
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-violet-500/30 text-violet-300 border border-violet-500/40">
+              Práctica de Instrumento
+            </span>
+            <span className="text-[10px] text-neutral-400 font-medium">720p HD · Audio sin compresión</span>
+          </div>
+          <h3 className="text-xl md:text-2xl font-black tracking-tight text-white">
+            ¿Practicando hoy? Envía un video a tu profesor
+          </h3>
+          <p className="text-xs md:text-sm text-neutral-300 leading-relaxed font-medium">
+            Graba hasta 90 segundos con tu celular o cámara. Tu profesor revisará tu técnica de agarre, rebote y tempo para dejarte correcciones al segundo exacto.
+          </p>
+        </div>
+
+        <div className="relative z-10 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+          <button
+            onClick={() => { setSelectedTask(null); setShowRecorder(true); }}
+            className="px-6 py-3.5 md:px-8 md:py-4 bg-white hover:bg-neutral-100 text-neutral-950 rounded-2xl md:rounded-3xl text-xs md:text-sm font-black transition-all flex items-center justify-center gap-2.5 shadow-lg active:scale-95"
+          >
+            <Video className="w-4 h-4 text-violet-600" />
+            <span>Grabar Video Ahora</span>
+          </button>
+          {submissions.length > 0 && (
+            <button
+              onClick={() => setSelectedSubmission(submissions[0])}
+              className="px-4 py-3.5 rounded-2xl border border-white/20 hover:bg-white/10 text-white text-xs font-bold transition-all text-center"
+            >
+              Ver Devoluciones ({submissions.length})
+            </button>
+          )}
+        </div>
+
+        <div className="absolute right-[-10%] top-[-30%] w-80 h-80 bg-violet-500/10 blur-[100px] rounded-full pointer-events-none" />
+      </div>
 
       {/* SECCIÓN DE TAREAS EN EL TOP DEL DASHBOARD */}
       <div className="bg-white rounded-3xl md:rounded-[40px] border border-neutral-100 p-6 md:p-8 shadow-sm space-y-6">
@@ -1328,12 +1373,12 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
       )}
 
       {/* Grabador de Video Modal para Alumno */}
-      {showRecorder && selectedTask && assignedTeacherId && (
+      {showRecorder && assignedTeacherId && (
         <VideoExerciseRecorder
           studentId={profile.studentProfileId!}
           teacherId={assignedTeacherId}
-          taskId={selectedTask.id}
-          taskTitle={selectedTask.title}
+          taskId={selectedTask?.id || null}
+          taskTitle={selectedTask?.title || "Práctica libre de instrumento"}
           isOpen={showRecorder}
           onClose={() => setShowRecorder(false)}
           onSuccess={() => {
@@ -1358,6 +1403,24 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
           onClose={() => setSelectedSubmission(null)}
         />
       )}
+
+      {/* Botón Flotante Permanente para Grabar Video (Acceso Inmediato) */}
+      <button
+        type="button"
+        onClick={() => {
+          setSelectedTask(null)
+          setShowRecorder(true)
+        }}
+        className="fixed bottom-24 right-4 sm:bottom-8 sm:right-8 z-40 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white p-3.5 sm:px-5 sm:py-3.5 rounded-full shadow-2xl shadow-violet-900/40 border border-white/20 flex items-center gap-2.5 transition-all transform hover:scale-105 active:scale-95 group"
+        title="Grabar video de práctica para tu profesor"
+      >
+        <span className="relative flex h-3 w-3">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
+        </span>
+        <Video className="w-5 h-5 text-white" />
+        <span className="hidden sm:inline text-xs font-black uppercase tracking-wider">Grabar para Profe</span>
+      </button>
     </div>
   )
 }

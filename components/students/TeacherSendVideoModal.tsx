@@ -7,9 +7,9 @@ import { toast } from "sonner"
 import VideoExerciseRecorder from "@/components/students/VideoExerciseRecorder"
 
 interface TeacherSendVideoModalProps {
-  studentId: string
+  studentId?: string
   teacherId: string
-  studentName: string
+  studentName?: string
   studentUserId?: string
   isOpen: boolean
   onClose: () => void
@@ -17,14 +17,20 @@ interface TeacherSendVideoModalProps {
 }
 
 export default function TeacherSendVideoModal({
-  studentId,
+  studentId: initialStudentId,
   teacherId,
-  studentName,
-  studentUserId,
+  studentName: initialStudentName,
+  studentUserId: initialStudentUserId,
   isOpen,
   onClose,
   onSuccess,
 }: TeacherSendVideoModalProps) {
+  const [selectedStudentId, setSelectedStudentId] = useState(initialStudentId || "")
+  const [selectedStudentName, setSelectedStudentName] = useState(initialStudentName || "")
+  const [selectedStudentUserId, setSelectedStudentUserId] = useState(initialStudentUserId || "")
+  const [studentsList, setStudentsList] = useState<{ id: string; name: string; userId?: string }[]>([])
+  const [loadingStudents, setLoadingStudents] = useState(false)
+
   const [title, setTitle] = useState("")
   const [instructions, setInstructions] = useState("")
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
@@ -33,15 +39,62 @@ export default function TeacherSendVideoModal({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
+  // Fetch students if not pre-provided or if empty
+  React.useEffect(() => {
+    if (!isOpen || !teacherId) return
+
+    if (initialStudentId) {
+      setSelectedStudentId(initialStudentId)
+      setSelectedStudentName(initialStudentName || "")
+      setSelectedStudentUserId(initialStudentUserId || "")
+    }
+
+    async function loadStudents() {
+      setLoadingStudents(true)
+      try {
+        const { data, error } = await supabase
+          .from("StudentProfile")
+          .select("id, user_id, User ( id, name, email )")
+          .eq("teacher_id", teacherId)
+
+        if (error) throw error
+        const mapped = (data || []).map((s: any) => ({
+          id: s.id,
+          name: s.User?.name || "Alumno sin nombre",
+          userId: s.user_id,
+        })).sort((a, b) => a.name.localeCompare(b.name))
+
+        setStudentsList(mapped)
+
+        // If no student was preselected, pick the first one
+        if (!initialStudentId && mapped.length > 0) {
+          setSelectedStudentId(mapped[0].id)
+          setSelectedStudentName(mapped[0].name)
+          setSelectedStudentUserId(mapped[0].userId || "")
+        }
+      } catch (err) {
+        console.error("Error loading students for video modal:", err)
+      } finally {
+        setLoadingStudents(false)
+      }
+    }
+
+    loadStudents()
+  }, [isOpen, teacherId, initialStudentId, initialStudentName, initialStudentUserId])
+
   if (!isOpen) return null
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    if (!selectedStudentId) {
+      toast.error("Por favor selecciona un alumno primero")
+      return
+    }
     setIsUploading(true)
     try {
       const ext = file.name.split(".").pop() || "mp4"
-      const fileName = `teacher_direct/${studentId}_${Date.now()}.${ext}`
+      const fileName = `teacher_direct/${selectedStudentId}_${Date.now()}.${ext}`
       const { data, error } = await supabase.storage.from("submissions").upload(fileName, file, {
         contentType: file.type,
       })
@@ -59,6 +112,10 @@ export default function TeacherSendVideoModal({
   }
 
   const handleSubmit = async () => {
+    if (!selectedStudentId) {
+      toast.error("Por favor selecciona un alumno")
+      return
+    }
     if (!videoUrl) {
       toast.error("Por favor graba o sube un video primero")
       return
@@ -66,13 +123,13 @@ export default function TeacherSendVideoModal({
 
     setIsSubmitting(true)
     try {
-      const finalTitle = title.trim() || `Ejercicio para ${studentName}`
+      const finalTitle = title.trim() || `Ejercicio para ${selectedStudentName}`
 
       // 1. Guardar en ExerciseSubmission
       const { error: insertErr } = await supabase
         .from("ExerciseSubmission")
         .insert({
-          student_id: studentId,
+          student_id: selectedStudentId,
           teacher_id: teacherId,
           title: finalTitle,
           video_url: videoUrl,
@@ -84,17 +141,17 @@ export default function TeacherSendVideoModal({
       if (insertErr) throw insertErr
 
       // 2. Notificar al alumno por Web Push
-      if (studentUserId) {
+      if (selectedStudentUserId) {
         try {
           await supabase.functions.invoke("notify-student-push", {
             body: {
               customParams: {
-                studentUserId,
+                studentUserId: selectedStudentUserId,
                 date: new Date().toISOString().split("T")[0],
                 time: new Date().toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }),
                 title: "🥁 Nuevo Video de tu Profesor",
                 message: `Tu profesor te envió el video "${finalTitle}". ¡Ábrelo para practicar!`,
-                url: `/dashboard`,
+                url: `/dashboard/videos`,
               },
             },
           })
@@ -103,7 +160,7 @@ export default function TeacherSendVideoModal({
         }
       }
 
-      toast.success(`Video enviado exitosamente a ${studentName}`)
+      toast.success(`Video enviado exitosamente a ${selectedStudentName}`)
       if (onSuccess) onSuccess()
       onClose()
     } catch (err: any) {
@@ -124,7 +181,7 @@ export default function TeacherSendVideoModal({
             <div>
               <h3 className="text-sm font-bold text-neutral-100 flex items-center gap-2">
                 <Video className="w-4 h-4 text-violet-400" />
-                Enviar Video a {studentName}
+                {selectedStudentName ? `Enviar Video a ${selectedStudentName}` : "Enviar Video a un Alumno"}
               </h3>
               <p className="text-[11px] text-neutral-400">Demostración técnica, ejercicio o indicación de práctica</p>
             </div>
@@ -138,6 +195,35 @@ export default function TeacherSendVideoModal({
 
           {/* Form Body */}
           <div className="p-6 space-y-4 overflow-y-auto flex-1">
+            {/* Student Selector (shown if not passed or multiple available) */}
+            {(!initialStudentId || studentsList.length > 1) && (
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-neutral-400 mb-1.5">
+                  Alumno Destinatario
+                </label>
+                <select
+                  value={selectedStudentId}
+                  onChange={(e) => {
+                    const stId = e.target.value
+                    setSelectedStudentId(stId)
+                    const st = studentsList.find(s => s.id === stId)
+                    if (st) {
+                      setSelectedStudentName(st.name)
+                      setSelectedStudentUserId(st.userId || "")
+                    }
+                  }}
+                  className="w-full bg-neutral-800 border border-neutral-700 rounded-xl p-3 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-violet-500 cursor-pointer"
+                >
+                  <option value="">-- Selecciona un alumno --</option>
+                  {studentsList.map((st) => (
+                    <option key={st.id} value={st.id}>
+                      {st.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* Title */}
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-neutral-400 mb-1.5">
@@ -256,7 +342,11 @@ export default function TeacherSendVideoModal({
               ) : (
                 <>
                   <Send className="w-4 h-4" />
-                  <span>Enviar Video a {studentName.split(" ")[0]}</span>
+                  <span>
+                    {selectedStudentName
+                      ? `Enviar Video a ${selectedStudentName.split(" ")[0]}`
+                      : "Enviar Video"}
+                  </span>
                 </>
               )}
             </button>
@@ -266,11 +356,11 @@ export default function TeacherSendVideoModal({
       </div>
 
       {/* Live Recorder para el Profesor */}
-      {showLiveRecorder && (
+      {showLiveRecorder && selectedStudentId && (
         <VideoExerciseRecorder
-          studentId={studentId}
+          studentId={selectedStudentId}
           teacherId={teacherId}
-          customTitle={`Grabar Video para ${studentName}`}
+          customTitle={`Grabar Video para ${selectedStudentName || "Alumno"}`}
           isOpen={showLiveRecorder}
           onClose={() => setShowLiveRecorder(false)}
           onRecorded={(url) => {

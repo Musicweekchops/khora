@@ -580,10 +580,10 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
 
   const tabs = [
     { key: "overview", label: "Resumen", icon: "📊" },
+    { key: "videos", label: `Videos (${submissions.length})`, icon: "🎬" },
     { key: "schedule", label: "Horario", icon: "↻" },
     { key: "classes", label: `Clases (${classes.length})`, icon: "📖" },
     { key: "tasks", label: `Tareas (${tasks.length})`, icon: "📝" },
-    { key: "videos", label: `Videos (${submissions.length})`, icon: "🎬" },
     { key: "payments", label: `Pagos (${payments.length})`, icon: "💰" },
     { key: "notes", label: `Notas (${notes.length})`, icon: "📋" },
     { key: "materiales", label: `Materiales (${accessList.length})`, icon: "📚" },
@@ -665,6 +665,15 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
               ))}
             </select>
             <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setShowSendVideoModal(true)}
+                className="px-3.5 py-2 md:px-4 md:py-2.5 rounded-xl text-xs md:text-sm font-bold bg-violet-600 hover:bg-violet-700 text-white shadow-md shadow-violet-900/10 transition-all flex items-center gap-2"
+                title="Grabar o enviar video a este alumno"
+              >
+                <Video className="w-4 h-4" />
+                <span>Enviar Video</span>
+              </button>
               <button
                 onClick={handleSendWhatsAppPaymentMessage}
                 title={student.user.phone ? "Enviar mensaje de cobro por WhatsApp" : "El alumno no tiene teléfono registrado"}

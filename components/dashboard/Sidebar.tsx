@@ -69,11 +69,18 @@ const Icons = {
       <polyline points="17 2 12 7 7 2" />
     </svg>
   ),
+  video: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m22 8-6 4 6 4V8Z" />
+      <rect width="14" height="12" x="2" y="6" rx="2" ry="2" />
+    </svg>
+  ),
 }
 
 const TEACHER_NAV = [
   { name: "Dashboard", href: "/dashboard", icon: Icons.dashboard },
   { name: "Alumnos", href: "/dashboard/alumnos", icon: Icons.students },
+  { name: "Videos", href: "/dashboard/videos", icon: Icons.video },
   { name: "CRM", href: "/dashboard/crm", icon: Icons.crm },
   { name: "Agenda", href: "/dashboard/agenda", icon: Icons.calendar },
   { name: "Roadmap LMS", href: "/dashboard/roadmap", icon: Icons.roadmap },
@@ -94,6 +101,7 @@ const TEACHER_NAV = [
 const ACADEMY_TEACHER_NAV = [
   { name: "Dashboard", href: "/dashboard", icon: Icons.dashboard },
   { name: "Mis Alumnos", href: "/dashboard/alumnos", icon: Icons.students },
+  { name: "Videos", href: "/dashboard/videos", icon: Icons.video },
   { name: "Agenda", href: "/dashboard/agenda", icon: Icons.calendar },
   { name: "Clases", href: "/dashboard/clases", icon: Icons.classes },
   { name: "Biblioteca", href: "/dashboard/biblioteca", icon: Icons.library },
@@ -123,6 +131,7 @@ const ACADEMY_NAV = [
 ]
 
 const STUDENT_NAV = [
+  { name: "Videos", href: "/dashboard/videos", icon: Icons.video },
   { name: "Agendar Clase", href: "/dashboard/agendar", icon: Icons.calendar },
   { name: "Mis Tareas", href: "/dashboard/tareas", icon: Icons.classes },
   { name: "Biblioteca", href: "/dashboard/biblioteca", icon: Icons.library },
