@@ -15,11 +15,11 @@ import {
   X, 
   Loader2, 
   Send,
-  Sparkles,
   Video,
   Upload
 } from "lucide-react"
 import { toast } from "sonner"
+import VideoExerciseRecorder from "@/components/students/VideoExerciseRecorder"
 
 export interface TimestampMarker {
   time: number
@@ -76,6 +76,7 @@ export default function ExerciseFeedbackModal({
   // Teacher Demonstration Video
   const [activeVideoTab, setActiveVideoTab] = useState<"student" | "teacher">("student")
   const [teacherVideoUrl, setTeacherVideoUrl] = useState<string | null>(submission.teacher_feedback_video_url || null)
+  const [showTeacherRecorder, setShowTeacherRecorder] = useState(false)
   const [isUploadingTeacherVideo, setIsUploadingTeacherVideo] = useState(false)
   const teacherVideoInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -517,9 +518,21 @@ export default function ExerciseFeedbackModal({
                 </div>
               )}
 
-              {/* Adjuntar o cambiar video de demostración del profesor */}
+              {/* Adjuntar o grabar video de demostración del profesor */}
               {isTeacher && (
-                <div className="pt-2">
+                <div className="pt-2 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Video className="w-3.5 h-3.5 text-emerald-400" />
+                      Demostración Técnica del Profesor
+                    </span>
+                    {teacherVideoUrl && (
+                      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-800">
+                        ✓ Video Listo
+                      </span>
+                    )}
+                  </div>
+
                   <input
                     ref={teacherVideoInputRef}
                     type="file"
@@ -527,24 +540,37 @@ export default function ExerciseFeedbackModal({
                     className="hidden"
                     onChange={handleTeacherVideoUpload}
                   />
-                  <button
-                    type="button"
-                    disabled={isUploadingTeacherVideo}
-                    onClick={() => teacherVideoInputRef.current?.click()}
-                    className="w-full py-2.5 px-3 rounded-xl border border-dashed border-emerald-500/40 bg-emerald-950/20 hover:bg-emerald-950/40 text-emerald-300 text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-98"
-                  >
-                    {isUploadingTeacherVideo ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        <span>Subiendo tu video de demostración...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Video className="w-3.5 h-3.5" />
-                        <span>{teacherVideoUrl ? "✓ Cambiar Video de Demostración" : "📹 Adjuntar Video de Demostración (Técnica / Baquetas)"}</span>
-                      </>
-                    )}
-                  </button>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      disabled={isUploadingTeacherVideo}
+                      onClick={() => setShowTeacherRecorder(true)}
+                      className="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-98 shadow-md shadow-emerald-900/20"
+                    >
+                      <Video className="w-3.5 h-3.5" />
+                      <span>{teacherVideoUrl ? "Re-grabar" : "Grabar Ahora"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={isUploadingTeacherVideo}
+                      onClick={() => teacherVideoInputRef.current?.click()}
+                      className="py-2.5 px-3 rounded-xl border border-neutral-700 bg-neutral-800 hover:bg-neutral-750 text-neutral-200 text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-98"
+                    >
+                      {isUploadingTeacherVideo ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Subiendo...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Subir Video</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -621,6 +647,22 @@ export default function ExerciseFeedbackModal({
         </div>
 
       </div>
+
+      {/* Grabador en Vivo para el Profesor */}
+      {showTeacherRecorder && (
+        <VideoExerciseRecorder
+          studentId={submission.student_id}
+          teacherId={submission.teacher_id}
+          customTitle="Grabar Demostración Técnica (Profesor)"
+          isOpen={showTeacherRecorder}
+          onClose={() => setShowTeacherRecorder(false)}
+          onRecorded={(url) => {
+            setTeacherVideoUrl(url)
+            setActiveVideoTab("teacher")
+            toast.success("Demostración grabada y lista para adjuntar")
+          }}
+        />
+      )}
     </div>
   )
 }

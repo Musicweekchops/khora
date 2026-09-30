@@ -13,6 +13,8 @@ interface VideoExerciseRecorderProps {
   isOpen: boolean
   onClose: () => void
   onSuccess?: () => void
+  onRecorded?: (videoUrl: string) => void
+  customTitle?: string
 }
 
 export default function VideoExerciseRecorder({
@@ -23,6 +25,8 @@ export default function VideoExerciseRecorder({
   isOpen,
   onClose,
   onSuccess,
+  onRecorded,
+  customTitle,
 }: VideoExerciseRecorderProps) {
   const [facingMode, setFacingMode] = useState<"user" | "environment">("user")
   const [isRecording, setIsRecording] = useState(false)
@@ -229,6 +233,14 @@ export default function VideoExerciseRecorder({
 
       const videoUrl = publicUrlData.publicUrl
 
+      // Si se proporcionó callback personalizado (ej: grabación de demostración del profesor)
+      if (onRecorded) {
+        onRecorded(videoUrl)
+        if (onSuccess) onSuccess()
+        onClose()
+        return
+      }
+
       // 2. Insertar en tabla ExerciseSubmission
       const { data: submissionData, error: insertErr } = await supabase
         .from("ExerciseSubmission")
@@ -313,7 +325,7 @@ export default function VideoExerciseRecorder({
           <div>
             <h3 className="text-sm font-bold text-neutral-100 flex items-center gap-2">
               <Video className="w-4 h-4 text-violet-400" />
-              {taskTitle ? `Grabar: ${taskTitle}` : "Grabar Ejercicio"}
+              {customTitle || (taskTitle ? `Grabar: ${taskTitle}` : "Grabar Ejercicio")}
             </h3>
             <span className="text-[11px] text-neutral-400">720p HD · Audio sin compresión</span>
           </div>
