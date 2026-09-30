@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS public."ExerciseSubmission" (
   video_url TEXT NOT NULL,
   video_duration INTEGER,
   student_notes TEXT,
+  created_by TEXT NOT NULL DEFAULT 'STUDENT' CHECK (created_by IN ('STUDENT', 'TEACHER')),
   
   status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'IN_REVIEW', 'APPROVED', 'NEEDS_WORK')),
   teacher_feedback_text TEXT,

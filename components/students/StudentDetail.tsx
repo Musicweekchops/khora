@@ -7,12 +7,13 @@ import { supabase } from "@/lib/supabase"
 import { formatCurrency, formatDate, formatTime } from "@/lib/utils"
 import ScheduleManager from "@/components/students/ScheduleManager"
 import { toast } from "sonner"
-import { Lock, Save, Trash2, Edit3, BookOpen, ExternalLink, Plus, PlayCircle, FileText } from "lucide-react"
+import { Lock, Save, Trash2, Edit3, BookOpen, ExternalLink, Plus, PlayCircle, FileText, Video } from "lucide-react"
 import LastSeenBadge from "@/components/ui/LastSeenBadge"
 import { RichText } from "@/components/ui/RichText"
 import LibraryPickerModal from "@/components/ui/LibraryPickerModal"
 import ReceiptUploader, { ParsedReceiptData } from "@/components/ui/ReceiptUploader"
 import ExerciseFeedbackModal, { SubmissionData } from "@/components/students/ExerciseFeedbackModal"
+import TeacherSendVideoModal from "@/components/students/TeacherSendVideoModal"
 
 import StudentClassReportModal from "@/components/students/StudentClassReportModal"
 import { calculateClassCounters, formatSpanishShortDate } from "@/lib/classCounter"
@@ -84,6 +85,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
   const [notes, setNotes] = useState<NoteRow[]>([])
   const [submissions, setSubmissions] = useState<SubmissionData[]>([])
   const [selectedSubmission, setSelectedSubmission] = useState<SubmissionData | null>(null)
+  const [showSendVideoModal, setShowSendVideoModal] = useState(false)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<"overview" | "schedule" | "classes" | "tasks" | "payments" | "notes" | "materiales" | "videos">("overview")
   const [newNote, setNewNote] = useState("")
@@ -1454,11 +1456,19 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
         {/* VIDEOS Y ENTREGAS DE PRÁCTICA */}
         {activeTab === "videos" && (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h3 className="kh-section-title">Videos y Entregas de Práctica</h3>
-                <p className="kh-section-desc">Videos enviados por el alumno con audio de alta fidelidad para análisis técnico y correcciones por segundo.</p>
+                <p className="kh-section-desc">Videos y demostraciones técnicas para este alumno con audio de alta fidelidad.</p>
               </div>
+              <button
+                type="button"
+                onClick={() => setShowSendVideoModal(true)}
+                className="px-4 py-2.5 rounded-2xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-violet-600/20 transition-all active:scale-95 shrink-0"
+              >
+                <Video className="w-4 h-4" />
+                <span>Grabar Video para este Alumno</span>
+              </button>
             </div>
 
             {submissions.length === 0 ? (
@@ -1677,6 +1687,33 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
           isOpen={!!selectedSubmission}
           onClose={() => setSelectedSubmission(null)}
           onUpdate={() => {
+            supabase
+              .from("ExerciseSubmission")
+              .select("*")
+              .eq("student_id", studentId)
+              .order("created_at", { ascending: false })
+              .then(({ data }) => {
+                if (data) {
+                  setSubmissions(data.map((s: any) => ({
+                    ...s,
+                    student_name: student?.user?.name || "Alumno"
+                  })))
+                }
+              })
+          }}
+        />
+      )}
+
+      {/* Modal para enviar Video Directo al Alumno */}
+      {showSendVideoModal && student && (
+        <TeacherSendVideoModal
+          studentId={studentId}
+          teacherId={student.teacher_id}
+          studentName={student.user?.name || "Alumno"}
+          studentUserId={student.user_id}
+          isOpen={showSendVideoModal}
+          onClose={() => setShowSendVideoModal(false)}
+          onSuccess={() => {
             supabase
               .from("ExerciseSubmission")
               .select("*")

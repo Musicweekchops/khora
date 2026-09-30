@@ -570,6 +570,53 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
         )}
       </div>
 
+      {/* SECCIÓN DE VIDEOS ENVIADOS POR EL PROFESOR */}
+      {submissions.some(s => s.created_by === 'TEACHER') && (
+        <div className="bg-white rounded-3xl md:rounded-[40px] border border-neutral-100 p-6 md:p-8 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-violet-100 text-violet-600 rounded-2xl flex items-center justify-center font-bold">
+                <Video className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-xl font-black text-neutral-900 tracking-tight">Videos de tu Profesor</h2>
+                <p className="text-neutral-500 text-xs font-semibold">
+                  Demostraciones técnicas y ejercicios grabados especialmente para ti.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            {submissions.filter(s => s.created_by === 'TEACHER').map(sub => (
+              <div
+                key={sub.id}
+                onClick={() => setSelectedSubmission(sub)}
+                className="p-4 rounded-2xl bg-neutral-50 hover:bg-violet-50/50 border border-neutral-100 hover:border-violet-200 transition-all cursor-pointer flex flex-col justify-between space-y-2 group"
+              >
+                <div>
+                  <span className="text-[9px] font-black uppercase tracking-wider text-violet-600 bg-violet-100/70 px-2 py-0.5 rounded-full inline-block mb-1">
+                    Demostración del Profesor
+                  </span>
+                  <h4 className="font-bold text-neutral-900 text-sm group-hover:text-violet-700 transition-colors line-clamp-1">
+                    {sub.title}
+                  </h4>
+                  {sub.teacher_feedback_text && (
+                    <p className="text-xs text-neutral-500 line-clamp-2 mt-1 italic">
+                      "{sub.teacher_feedback_text}"
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center justify-between pt-2 border-t border-neutral-200/60 text-[11px] font-bold text-violet-600">
+                  <span>Ver video y practicar</span>
+                  <span>▶</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* SECCIÓN DE PAGOS & CURSOS DE MERCADO PAGO (Pasarela Activa) */}
       {gatewayEnabled && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
