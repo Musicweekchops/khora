@@ -26,6 +26,8 @@ import {
 import Link from "next/link"
 import VideoPlayer from "@/components/ui/VideoPlayer"
 import { RichText } from "@/components/ui/RichText"
+import VideoExerciseRecorder from "@/components/students/VideoExerciseRecorder"
+import ExerciseFeedbackModal from "@/components/students/ExerciseFeedbackModal"
 
 interface StudentStats {
   upcomingClasses: number
@@ -38,6 +40,10 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
   const [nextClass, setNextClass] = useState<any>(null)
   const [tasks, setTasks] = useState<any[]>([])
   const [selectedTask, setSelectedTask] = useState<any | null>(null)
+  const [assignedTeacherId, setAssignedTeacherId] = useState<string | null>(null)
+  const [showRecorder, setShowRecorder] = useState(false)
+  const [submissions, setSubmissions] = useState<any[]>([])
+  const [selectedSubmission, setSelectedSubmission] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
 
   async function toggleTaskStatus(task: any) {
@@ -270,6 +276,14 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
       pendingTasks: pendingTasksCount,
       totalMaterials: allowedItems.size
     })
+
+    // Submissions y profesor asignado
+    const [spRes, submRes] = await Promise.all([
+      supabase.from("StudentProfile").select("teacher_id").eq("id", profile.studentProfileId!).maybeSingle(),
+      supabase.from("ExerciseSubmission").select("*").eq("student_id", profile.studentProfileId!).order("created_at", { ascending: false })
+    ])
+    if (spRes.data?.teacher_id) setAssignedTeacherId(spRes.data.teacher_id)
+    if (submRes.data) setSubmissions(submRes.data)
 
     // 4. Mercado Pago Paid Student Experience (Any Teacher)
     try {
@@ -1169,6 +1183,74 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
                   ))}
                 </div>
               </div>
+
+              {/* Sección de Video Ejercicio (720p HD) */}
+              <div className="space-y-3 pt-2 border-t border-neutral-100">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-[10px] font-black text-neutral-400 uppercase tracking-widest flex items-center gap-1.5">
+                    <Video className="w-3.5 h-3.5 text-violet-500" />
+                    Video de tu Práctica (720p HD)
+                  </h4>
+                  <span className="text-[10px] font-bold text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full">
+                    Audio Musical sin Filtros
+                  </span>
+                </div>
+
+                {(() => {
+                  const taskSubm = submissions.find(s => s.task_id === selectedTask.id)
+                  if (taskSubm) {
+                    return (
+                      <div className="p-4 rounded-2xl bg-violet-50/60 border border-violet-100 flex items-center justify-between gap-3">
+                        <div className="space-y-0.5">
+                          <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full inline-block ${
+                            taskSubm.status === "APPROVED"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : taskSubm.status === "NEEDS_WORK"
+                              ? "bg-amber-100 text-amber-700"
+                              : "bg-violet-100 text-violet-700"
+                          }`}>
+                            {taskSubm.status === "APPROVED" ? "✓ Video Aprobado" : taskSubm.status === "NEEDS_WORK" ? "⚠️ Requiere Corrección" : "⏳ Video en Revisión"}
+                          </span>
+                          <p className="text-xs font-bold text-neutral-900">
+                            {taskSubm.timestamp_markers?.length ? `${taskSubm.timestamp_markers.length} correcciones de tu profesor` : "Toca para reproducir y ver devolución"}
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedSubmission(taskSubm)}
+                            className="px-3 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs shadow-sm transition-colors"
+                          >
+                            Ver Devolución
+                          </button>
+                          {assignedTeacherId && (
+                            <button
+                              type="button"
+                              onClick={() => setShowRecorder(true)}
+                              className="px-2.5 py-1.5 rounded-xl bg-white border border-neutral-200 text-neutral-700 font-bold text-xs hover:bg-neutral-50 transition-colors"
+                              title="Subir nueva toma"
+                            >
+                              Re-grabar
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  }
+
+                  return (
+                    <button
+                      type="button"
+                      disabled={!assignedTeacherId}
+                      onClick={() => setShowRecorder(true)}
+                      className="w-full py-3.5 px-4 rounded-2xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-violet-600/20 transition-all active:scale-98 disabled:opacity-50"
+                    >
+                      <Video className="w-4 h-4" />
+                      <span>Grabar Video para mi Profesor (720p)</span>
+                    </button>
+                  )
+                })()}
+              </div>
             </div>
 
             {/* Footer Action */}
@@ -1196,6 +1278,38 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
             </div>
           </div>
         </div>
+      )}
+
+      {/* Grabador de Video Modal para Alumno */}
+      {showRecorder && selectedTask && assignedTeacherId && (
+        <VideoExerciseRecorder
+          studentId={profile.studentProfileId!}
+          teacherId={assignedTeacherId}
+          taskId={selectedTask.id}
+          taskTitle={selectedTask.title}
+          isOpen={showRecorder}
+          onClose={() => setShowRecorder(false)}
+          onSuccess={() => {
+            supabase
+              .from("ExerciseSubmission")
+              .select("*")
+              .eq("student_id", profile.studentProfileId!)
+              .order("created_at", { ascending: false })
+              .then(({ data }) => {
+                if (data) setSubmissions(data)
+              })
+          }}
+        />
+      )}
+
+      {/* Visualizador de Devolución para Alumno */}
+      {selectedSubmission && (
+        <ExerciseFeedbackModal
+          submission={selectedSubmission}
+          isTeacher={false}
+          isOpen={!!selectedSubmission}
+          onClose={() => setSelectedSubmission(null)}
+        />
       )}
     </div>
   )

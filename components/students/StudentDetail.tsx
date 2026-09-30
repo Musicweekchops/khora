@@ -12,6 +12,7 @@ import LastSeenBadge from "@/components/ui/LastSeenBadge"
 import { RichText } from "@/components/ui/RichText"
 import LibraryPickerModal from "@/components/ui/LibraryPickerModal"
 import ReceiptUploader, { ParsedReceiptData } from "@/components/ui/ReceiptUploader"
+import ExerciseFeedbackModal, { SubmissionData } from "@/components/students/ExerciseFeedbackModal"
 
 import StudentClassReportModal from "@/components/students/StudentClassReportModal"
 import { calculateClassCounters, formatSpanishShortDate } from "@/lib/classCounter"
@@ -81,8 +82,10 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
   const [showReportModal, setShowReportModal] = useState(false)
   const [enrichedMap, setEnrichedMap] = useState<Map<string, any>>(new Map())
   const [notes, setNotes] = useState<NoteRow[]>([])
+  const [submissions, setSubmissions] = useState<SubmissionData[]>([])
+  const [selectedSubmission, setSelectedSubmission] = useState<SubmissionData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<"overview" | "schedule" | "classes" | "tasks" | "payments" | "notes" | "materiales">("overview")
+  const [activeTab, setActiveTab] = useState<"overview" | "schedule" | "classes" | "tasks" | "payments" | "notes" | "materiales" | "videos">("overview")
   const [newNote, setNewNote] = useState("")
   const [addingNote, setAddingNote] = useState(false)
   const [showPreviewModal, setShowPreviewModal] = useState(false)
@@ -232,6 +235,20 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
           email: s.User?.email || "Sin email"
         })))
       }
+    }
+
+    // Exercise Video Submissions
+    const { data: subms } = await supabase
+      .from("ExerciseSubmission")
+      .select("*")
+      .eq("student_id", studentId)
+      .order("created_at", { ascending: false })
+
+    if (subms) {
+      setSubmissions(subms.map((s: any) => ({
+        ...s,
+        student_name: sp?.User?.name || "Alumno"
+      })))
     }
 
     setLoading(false)
@@ -564,6 +581,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
     { key: "schedule", label: "Horario", icon: "↻" },
     { key: "classes", label: `Clases (${classes.length})`, icon: "📖" },
     { key: "tasks", label: `Tareas (${tasks.length})`, icon: "📝" },
+    { key: "videos", label: `Videos (${submissions.length})`, icon: "🎬" },
     { key: "payments", label: `Pagos (${payments.length})`, icon: "💰" },
     { key: "notes", label: `Notas (${notes.length})`, icon: "📋" },
     { key: "materiales", label: `Materiales (${accessList.length})`, icon: "📚" },
@@ -1432,6 +1450,74 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
             </div>
           </div>
         )}
+
+        {/* VIDEOS Y ENTREGAS DE PRÁCTICA */}
+        {activeTab === "videos" && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="kh-section-title">Videos y Entregas de Práctica</h3>
+                <p className="kh-section-desc">Videos enviados por el alumno con audio de alta fidelidad para análisis técnico y correcciones por segundo.</p>
+              </div>
+            </div>
+
+            {submissions.length === 0 ? (
+              <div className="text-center py-12 bg-neutral-50/50 rounded-[32px] border border-dashed border-neutral-200">
+                <span className="text-3xl block mb-2 opacity-50">🎬</span>
+                <p className="text-sm text-neutral-400 font-bold italic">El alumno aún no ha enviado grabaciones de ejercicios.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {submissions.map(sub => (
+                  <div
+                    key={sub.id}
+                    className="p-5 bg-white rounded-3xl border border-neutral-100 shadow-sm hover:shadow-md hover:border-violet-200 transition-all flex flex-col justify-between space-y-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <span className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full inline-block ${
+                          sub.status === "APPROVED"
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                            : sub.status === "NEEDS_WORK"
+                            ? "bg-amber-50 text-amber-700 border border-amber-100"
+                            : "bg-violet-50 text-violet-700 border border-violet-100"
+                        }`}>
+                          {sub.status === "APPROVED" ? "✓ Aprobado" : sub.status === "NEEDS_WORK" ? "⚠️ Requiere Corrección" : "⏳ Pendiente"}
+                        </span>
+                        <h4 className="font-black text-neutral-900 text-base leading-snug">{sub.title}</h4>
+                        <p className="text-[11px] text-neutral-400 font-medium">
+                          Enviado el {new Date(sub.created_at).toLocaleDateString("es-CL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                          {sub.video_duration ? ` · ${sub.video_duration}s` : ""}
+                        </p>
+                      </div>
+                    </div>
+
+                    {sub.student_notes && (
+                      <p className="text-xs text-neutral-600 bg-neutral-50 p-3 rounded-2xl border border-neutral-100 italic">
+                        "{sub.student_notes}"
+                      </p>
+                    )}
+
+                    {sub.timestamp_markers && sub.timestamp_markers.length > 0 && (
+                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-violet-700 bg-violet-50 px-3 py-1.5 rounded-xl w-fit">
+                        <span>📍</span>
+                        <span>{sub.timestamp_markers.length} nota{sub.timestamp_markers.length === 1 ? "" : "s"} por segundo</span>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => setSelectedSubmission(sub)}
+                      className="w-full py-2.5 rounded-2xl bg-neutral-900 hover:bg-violet-600 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-sm"
+                    >
+                      <span>{sub.status === "PENDING" ? "Revisar y Corregir" : "Ver Devolución"}</span>
+                      <span>→</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <LibraryPickerModal
@@ -1582,6 +1668,31 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
         isOpen={showReportModal}
         onClose={() => setShowReportModal(false)}
       />
+
+      {/* Modal de Feedback y Revisión de Video de Ejercicio */}
+      {selectedSubmission && (
+        <ExerciseFeedbackModal
+          submission={selectedSubmission}
+          isTeacher={true}
+          isOpen={!!selectedSubmission}
+          onClose={() => setSelectedSubmission(null)}
+          onUpdate={() => {
+            supabase
+              .from("ExerciseSubmission")
+              .select("*")
+              .eq("student_id", studentId)
+              .order("created_at", { ascending: false })
+              .then(({ data }) => {
+                if (data) {
+                  setSubmissions(data.map((s: any) => ({
+                    ...s,
+                    student_name: student?.user?.name || "Alumno"
+                  })))
+                }
+              })
+          }}
+        />
+      )}
     </div>
   )
 }

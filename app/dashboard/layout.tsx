@@ -3,6 +3,7 @@
 import Sidebar from "@/components/dashboard/Sidebar"
 import OnboardingTour from "@/components/dashboard/OnboardingTour"
 import PushRegister from "@/components/dashboard/PushRegister"
+import MetronomeWidget from "@/components/ui/MetronomeWidget"
 import { useAuth } from "@/lib/context/AuthContext"
 import { useRouter } from "next/navigation"
 import { useEffect } from "react"
@@ -72,6 +73,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="flex min-h-screen bg-[#fafafa]">
       <OnboardingTour />
       <PushRegister />
+      <MetronomeWidget />
       <Sidebar user={{ name: profile.name, role: profile.role, is_admin: profile.is_admin }} />
       <main className="flex-1 lg:ml-[240px] min-h-screen pb-32 lg:pb-0 min-w-0 overflow-x-hidden">
         <div className="p-4 lg:p-8 max-w-[1400px] mx-auto page-enter">
