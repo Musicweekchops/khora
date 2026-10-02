@@ -117,6 +117,10 @@ export default function AcademyStudentList({ academyId }: Props) {
         throw new Error("Por favor completa los campos requeridos.")
       }
 
+      if (newForm.password.length < 6) {
+        throw new Error("La contraseña debe tener al menos 6 caracteres.")
+      }
+
       const res = await supabase.functions.invoke("create-student", {
         body: {
           email: newForm.email.trim().toLowerCase(),
@@ -129,7 +133,14 @@ export default function AcademyStudentList({ academyId }: Props) {
         },
       })
 
-      if (res.error) throw new Error(res.error.message)
+      if (res.error) {
+        let errorMsg = res.error.message
+        try {
+          const body = await (res.error as any).context?.json?.()
+          if (body?.error) errorMsg = body.error
+        } catch {}
+        throw new Error(errorMsg)
+      }
       if (res.data?.error) throw new Error(res.data.error)
 
       setShowCreate(false)

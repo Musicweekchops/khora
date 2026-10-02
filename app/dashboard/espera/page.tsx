@@ -139,19 +139,28 @@ export default function WaitingListPage() {
     if (!confirm(`¿Deseas activar e inscribir a ${lead.prospect_name} en tu panel de alumnos?`)) return
 
     try {
-      // 1. Crear al alumno en CRM (como PROSPECT o TRIAL) para que Arnaldo pueda agendarle
+      if (!profile?.teacherProfileId) {
+        throw new Error("No tienes un perfil de profesor asignado para vincular al alumno.")
+      }
+
+      // 1. Crear al alumno en CRM (como PROSPECT o TRIAL) para que el profesor pueda agendarle
       const { data: edgeRes, error: edgeErr } = await supabase.functions.invoke("create-student", {
         body: {
           email: lead.prospect_email,
           password: "student123", // Contraseña temporal
           name: lead.prospect_name,
           phone: lead.prospect_phone,
-          teacher_id: profile?.teacherProfileId
+          teacher_id: profile.teacherProfileId
         }
       })
 
       if (edgeErr || !edgeRes) {
-        throw new Error(edgeErr?.message || "Error al registrar en base de datos")
+        let errorMsg = edgeErr?.message || "Error al registrar en base de datos"
+        try {
+          const body = await (edgeErr as any)?.context?.json?.()
+          if (body?.error) errorMsg = body.error
+        } catch {}
+        throw new Error(errorMsg)
       }
 
       // 2. Cambiar su estado a prospecto de alta prioridad

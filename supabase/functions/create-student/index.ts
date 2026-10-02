@@ -27,7 +27,9 @@ serve(async (req) => {
       }
     })
 
-    // 1. Crear el usuario con la API de Administrador
+    // 1. Crear el usuario con la API de Administrador o asociarlo si ya existe
+    let finalUserId: string | null = null
+
     const { data: userData, error: createErr } = await supabaseAdmin.auth.admin.createUser({
       email: email.trim().toLowerCase(),
       password: password,
@@ -41,16 +43,80 @@ serve(async (req) => {
       }
     })
 
-    if (createErr) throw createErr
-    if (!userData.user) throw new Error("No se devolvió el usuario creado")
+    if (createErr) {
+      const isAlreadyRegistered = 
+        createErr.message?.toLowerCase().includes("already been registered") ||
+        (createErr as any).code === "email_exists"
 
-    // 2. El trigger handle_new_user ya se debió ejecutar y crear el StudentProfile.
+      if (isAlreadyRegistered) {
+        console.log(`[create-student] Usuario ${email} ya existe en Auth. Vinculando perfil de alumno...`)
+        
+        // Buscar el usuario existente en public.User
+        const { data: existingUser } = await supabaseAdmin
+          .from("User")
+          .select("id, role, name")
+          .eq("email", email.trim().toLowerCase())
+          .maybeSingle()
+
+        if (existingUser) {
+          finalUserId = existingUser.id
+        } else {
+          // Si no está en User, buscarlo en auth.admin
+          const { data: authList } = await supabaseAdmin.auth.admin.listUsers()
+          const matched = authList?.users?.find((u: any) => u.email?.toLowerCase() === email.trim().toLowerCase())
+          if (matched) {
+            finalUserId = matched.id
+            await supabaseAdmin
+              .from("User")
+              .upsert({
+                id: finalUserId,
+                email: email.trim().toLowerCase(),
+                name: name.trim(),
+                role: "STUDENT",
+              })
+          } else {
+            throw new Error("Este correo electrónico ya está registrado con otra cuenta.")
+          }
+        }
+
+        // Actualizar contraseña si se proporcionó una válida
+        if (password && password.length >= 6) {
+          try {
+            await supabaseAdmin.auth.admin.updateUserById(finalUserId, { password })
+          } catch (pErr) {
+            console.warn("No se pudo actualizar la contraseña del usuario existente:", pErr)
+          }
+        }
+      } else if (createErr.message?.toLowerCase().includes("at least 6 characters")) {
+        throw new Error("La contraseña debe tener al menos 6 caracteres.")
+      } else {
+        throw createErr
+      }
+    } else {
+      if (!userData?.user) throw new Error("No se devolvió el usuario creado")
+      finalUserId = userData.user.id
+    }
+
+    if (!finalUserId) throw new Error("No se pudo obtener el identificador del usuario")
+
+    // 2. Garantizar que StudentProfile exista con la modalidad, profesor y academia asignados
+    const { error: spErr } = await supabaseAdmin
+      .from("StudentProfile")
+      .upsert({
+        user_id: finalUserId,
+        teacher_id: teacher_id,
+        academy_id: academy_id || null,
+        modalidad: modalidad || "online",
+      }, { onConflict: "user_id" })
+
+    if (spErr) console.warn("Aviso actualizando StudentProfile:", spErr)
+
     // Opcionalmente actualizamos el teléfono en la tabla public.User si se entregó.
     if (phone && phone.trim() !== "") {
       const { error: phoneErr } = await supabaseAdmin
         .from("User")
         .update({ phone: phone.trim() })
-        .eq("id", userData.user.id)
+        .eq("id", finalUserId)
       
       if (phoneErr) console.warn("Error actualizando teléfono:", phoneErr)
     }
@@ -194,7 +260,7 @@ serve(async (req) => {
 
 
 
-    return new Response(JSON.stringify({ userId: userData.user.id }), {
+    return new Response(JSON.stringify({ userId: finalUserId }), {
       headers: { 
         "Content-Type": "application/json",
         "Access-Control-Allow-Origin": "*"
@@ -204,7 +270,15 @@ serve(async (req) => {
 
   } catch (error: any) {
     console.error("Function error:", error)
-    return new Response(JSON.stringify({ error: error.message }), {
+    let message = error.message || "Error al procesar el registro del alumno"
+    if (message.includes("Missing required fields")) {
+      message = "Faltan campos obligatorios para registrar al alumno (nombre, email, contraseña o profesor)."
+    } else if (message.includes("already been registered")) {
+      message = "Este correo electrónico ya está registrado en la plataforma."
+    } else if (message.includes("at least 6 characters")) {
+      message = "La contraseña debe tener al menos 6 caracteres."
+    }
+    return new Response(JSON.stringify({ error: message }), {
       headers: { 
         "Content-Type": "application/json",
         "Access-Control-Allow-Origin": "*"

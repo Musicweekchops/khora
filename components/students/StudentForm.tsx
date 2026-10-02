@@ -79,11 +79,13 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
         // Usamos el token ya disponible en el contexto — sin llamar a getSession() para evitar lock contention
         const token = session?.access_token
 
+        const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
         const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/create-student`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            ...(token ? { "Authorization": `Bearer ${token}` } : {})
+            "apikey": anonKey,
+            ...(token ? { "Authorization": `Bearer ${token}` } : { "Authorization": `Bearer ${anonKey}` })
           },
           body: JSON.stringify({
             email: email,
