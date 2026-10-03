@@ -1,12 +1,15 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import { useMetronome, Subdivision, SoundType } from "@/lib/hooks/useMetronome"
-import { Play, Square, Volume2, X, ChevronUp, ChevronDown, Music, Sparkles } from "lucide-react"
+import { Play, Square, Volume2, X, ChevronUp, ChevronDown, Music, Sparkles, GripHorizontal } from "lucide-react"
 
 export default function MetronomeWidget() {
   const [isOpen, setIsOpen] = useState(false)
   const [isMinimized, setIsMinimized] = useState(false)
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const widgetRef = useRef<HTMLDivElement>(null)
 
   const {
     isPlaying,
@@ -26,6 +29,72 @@ export default function MetronomeWidget() {
     tapTempo,
   } = useMetronome(100, 4)
 
+  // Drag logic for the floating window
+  const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
+    // No iniciar arrastre si se hizo clic en botones o controles
+    if ((e.target as HTMLElement).closest("button, select, input")) return
+
+    const clientX = "touches" in e ? e.touches[0].clientX : e.clientX
+    const clientY = "touches" in e ? e.touches[0].clientY : e.clientY
+
+    if (!widgetRef.current) return
+    const rect = widgetRef.current.getBoundingClientRect()
+    const offsetX = clientX - rect.left
+    const offsetY = clientY - rect.top
+
+    setIsDragging(true)
+
+    const handleMove = (moveEvent: MouseEvent | TouchEvent) => {
+      moveEvent.preventDefault()
+      const curX = "touches" in moveEvent ? moveEvent.touches[0].clientX : moveEvent.clientX
+      const curY = "touches" in moveEvent ? moveEvent.touches[0].clientY : moveEvent.clientY
+
+      const widgetWidth = rect.width
+      const widgetHeight = widgetRef.current ? widgetRef.current.offsetHeight : rect.height
+
+      const minX = 8
+      const maxX = Math.max(8, window.innerWidth - widgetWidth - 8)
+      const minY = 8
+      const maxY = Math.max(8, window.innerHeight - widgetHeight - 8)
+
+      const newX = Math.min(Math.max(curX - offsetX, minX), maxX)
+      const newY = Math.min(Math.max(curY - offsetY, minY), maxY)
+
+      setPosition({ x: newX, y: newY })
+    }
+
+    const handleEnd = () => {
+      setIsDragging(false)
+      window.removeEventListener("mousemove", handleMove)
+      window.removeEventListener("mouseup", handleEnd)
+      window.removeEventListener("touchmove", handleMove)
+      window.removeEventListener("touchend", handleEnd)
+    }
+
+    window.addEventListener("mousemove", handleMove, { passive: false })
+    window.addEventListener("mouseup", handleEnd)
+    window.addEventListener("touchmove", handleMove, { passive: false })
+    window.addEventListener("touchend", handleEnd)
+  }
+
+  // Clampear si la ventana se redimensiona
+  useEffect(() => {
+    function handleResize() {
+      if (!position || !widgetRef.current) return
+      const rect = widgetRef.current.getBoundingClientRect()
+      const maxX = Math.max(8, window.innerWidth - rect.width - 8)
+      const maxY = Math.max(8, window.innerHeight - rect.height - 8)
+      if (position.x > maxX || position.y > maxY) {
+        setPosition({
+          x: Math.min(position.x, maxX),
+          y: Math.min(position.y, maxY),
+        })
+      }
+    }
+    window.addEventListener("resize", handleResize)
+    return () => window.removeEventListener("resize", handleResize)
+  }, [position])
+
   // Get Italian tempo marking
   function getTempoMarking(val: number): string {
     if (val < 60) return "Largo"
@@ -41,7 +110,6 @@ export default function MetronomeWidget() {
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (!isOpen) return
-      // Don't trigger if user is typing in an input
       if (["INPUT", "TEXTAREA"].includes((e.target as HTMLElement)?.tagName)) return
 
       if (e.code === "Space") {
@@ -93,13 +161,33 @@ export default function MetronomeWidget() {
         )}
       </div>
 
-      {/* Floating Expanded Widget */}
+      {/* Floating Expanded Draggable Widget */}
       {isOpen && (
-        <div className="fixed bottom-20 lg:bottom-6 right-4 sm:right-6 z-50 w-[92vw] sm:w-[360px] max-w-[360px] bg-white dark:bg-neutral-900 rounded-2xl shadow-2xl border border-neutral-200/80 dark:border-neutral-800 overflow-hidden animate-in fade-in slide-in-from-bottom-5 duration-200">
+        <div
+          ref={widgetRef}
+          style={position ? {
+            left: `${position.x}px`,
+            top: `${position.y}px`,
+            bottom: "auto",
+            right: "auto",
+          } : undefined}
+          className={`fixed z-50 w-[92vw] sm:w-[360px] max-w-[360px] bg-white dark:bg-neutral-900 rounded-2xl shadow-2xl border border-neutral-200/80 dark:border-neutral-800 overflow-hidden ${
+            !position ? "bottom-20 lg:bottom-6 right-4 sm:right-6 animate-in fade-in slide-in-from-bottom-5 duration-200" : ""
+          } ${isDragging ? "ring-2 ring-violet-500/40 shadow-violet-500/25 select-none opacity-95" : ""}`}
+        >
           
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 bg-neutral-900 text-white select-none">
+          {/* Header (Drag Handle) */}
+          <div
+            onMouseDown={handleDragStart}
+            onTouchStart={handleDragStart}
+            onDoubleClick={() => setPosition(null)}
+            className={`flex items-center justify-between px-3.5 py-3 bg-neutral-900 text-white select-none cursor-grab active:cursor-grabbing transition-colors ${
+              isDragging ? "bg-neutral-950" : ""
+            }`}
+            title="Arrastra para mover · Doble clic para restablecer posición"
+          >
             <div className="flex items-center gap-2">
+              <GripHorizontal className="w-4 h-4 text-neutral-400 shrink-0" />
               <div className={`w-2.5 h-2.5 rounded-full transition-colors ${isPlaying ? (currentBeat === 0 ? "bg-emerald-400 animate-pulse" : "bg-violet-400") : "bg-neutral-500"}`} />
               <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-200">Metrónomo Khora</h3>
             </div>
