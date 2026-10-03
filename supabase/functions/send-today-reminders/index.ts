@@ -47,7 +47,7 @@ serve(async (req) => {
         )
       `)
       .eq("date", targetDate)
-      .eq("status", "SCHEDULED")
+      .in("status", ["SCHEDULED", "CONFIRMED"])
 
     if (classesError) throw classesError
 

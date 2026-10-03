@@ -61,7 +61,7 @@ serve(async (req) => {
       .eq("date", targetDate)
       .gte("start_time", startTimeLimit)
       .lte("start_time", endTimeLimit)
-      .eq("status", "SCHEDULED")
+      .in("status", ["SCHEDULED", "CONFIRMED"])
 
     if (classesError) throw classesError
 
