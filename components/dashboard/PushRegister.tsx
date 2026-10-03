@@ -23,26 +23,59 @@ export default function PushRegister() {
   const [showBanner, setShowBanner] = useState(false)
   const [loading, setLoading] = useState(false)
 
+  // Función para registrar o sincronizar la suscripción de este dispositivo en Supabase
+  const syncSubscription = async (userId: string) => {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return
+    try {
+      const registration = await navigator.serviceWorker.register("/sw.js")
+      await navigator.serviceWorker.ready
+
+      let subscription = await registration.pushManager.getSubscription()
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+        })
+      }
+
+      const subJson = subscription.toJSON()
+      if (subJson.endpoint && subJson.keys?.p256dh && subJson.keys?.auth) {
+        await supabase
+          .from("PushSubscription")
+          .upsert({
+            user_id: userId,
+            endpoint: subJson.endpoint,
+            p256dh: subJson.keys.p256dh,
+            auth: subJson.keys.auth
+          }, { onConflict: "endpoint" })
+      }
+    } catch (err) {
+      console.debug("[PushRegister] Auto-sync info:", err)
+    }
+  }
+
   useEffect(() => {
     if (!profile) return
 
-    // Si el usuario ya descartó el banner anteriormente, no molestar más
-    const dismissed = localStorage.getItem("khora-push-dismissed")
-    if (dismissed === "true") return
-
-    // 1. Detectar si es iOS y si está corriendo en modo standalone (instalado como PWA)
-    const isIOS = typeof navigator !== "undefined" && /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream
-    const isStandalone = window.matchMedia("(display-mode: standalone)").matches || 
-                         (window.navigator as any).standalone === true
-
-    // En iOS, el OS exige instalar la PWA para poder usar Web Push. 
-    // En computadoras de escritorio y Android, se puede usar directamente en el navegador.
-    if (isIOS && !isStandalone) return
-
-    // 2. Verificar permisos actuales de notificación
     if ("Notification" in window) {
+      if (Notification.permission === "granted") {
+        // Si el usuario ya dio permiso, nos aseguramos de que ESTE dispositivo esté registrado
+        syncSubscription(profile.id)
+        return
+      }
+
       if (Notification.permission === "default") {
-        // Aún no ha decidido, le mostramos la invitación
+        const dismissed = localStorage.getItem("khora-push-dismissed")
+        if (dismissed === "true") return
+
+        // 1. Detectar si es iOS y si está corriendo en modo standalone (instalado como PWA)
+        const isIOS = typeof navigator !== "undefined" && /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream
+        const isStandalone = window.matchMedia("(display-mode: standalone)").matches || 
+                             (window.navigator as any).standalone === true
+
+        // En iOS, el OS exige instalar la PWA para poder usar Web Push.
+        if (isIOS && !isStandalone) return
+
         setShowBanner(true)
       }
     }
@@ -55,52 +88,17 @@ export default function PushRegister() {
 
     setLoading(true)
     try {
-      // 1. Solicitar permiso nativo al usuario
       const permission = await Notification.requestPermission()
       if (permission !== "granted") {
         setShowBanner(false)
         return
       }
 
-      // 2. Registrar/Obtener el service worker activo
-      const registration = await navigator.serviceWorker.register("/sw.js")
-      
-      // Esperar a que el Service Worker esté listo
-      await navigator.serviceWorker.ready
+      await syncSubscription(profile.id)
 
-      // 3. Suscribirse al Push Service de Google/Apple
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
-      })
-
-      // Convertir subscription a JSON simple
-      const subJson = subscription.toJSON()
-
-      if (subJson.endpoint && subJson.keys?.p256dh && subJson.keys?.auth) {
-        // 4. Guardar la credencial en la tabla PushSubscription de Supabase
-        const { error } = await supabase
-          .from("PushSubscription")
-          .insert({
-            user_id: profile.id,
-            endpoint: subJson.endpoint,
-            p256dh: subJson.keys.p256dh,
-            auth: subJson.keys.auth
-          })
-
-        if (error) {
-          // Ignorar error de clave duplicada si ya existía
-          if (!error.message.includes("duplicate key")) {
-            console.error("Error guardando suscripción en Supabase:", error)
-          }
-        }
-      }
-
-      // Cerrar banner exitosamente y marcar como guardado
       localStorage.setItem("khora-push-dismissed", "true")
       setShowBanner(false)
       
-      // Opcional: Enviar una notificación de bienvenida inmediata local
       new Notification("🔔 Alertas Activas", {
         body: "¡Felicitaciones! Recibirás avisos instantáneos de Khora en tu pantalla de bloqueo.",
         icon: "/icon-192.png"

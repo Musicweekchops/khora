@@ -61,7 +61,7 @@ serve(async (req) => {
         finalClassId = customParams.classId
       }
 
-      if (!teacherUserId || !date || !formattedTime) {
+      if (type !== "TEST" && (!teacherUserId || !date || !formattedTime)) {
         return new Response(
           JSON.stringify({ error: "Missing required fields in customParams: teacherUserId, date, time" }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
@@ -168,6 +168,10 @@ serve(async (req) => {
       payloadUrl = finalClassId 
         ? `/dashboard/agenda?date=${date}&bookingId=${finalClassId}` 
         : `/dashboard/agenda?date=${date}`
+    } else if (type === "TEST") {
+      payloadTitle = "🔔 Prueba de Notificación"
+      payloadBody = "¡Excelente! Tu dispositivo está recibiendo alertas instantáneas de Khora correctamente."
+      payloadUrl = "/dashboard/ajustes"
     }
 
     const payload = JSON.stringify({

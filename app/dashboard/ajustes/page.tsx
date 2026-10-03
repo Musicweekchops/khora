@@ -39,7 +39,9 @@ export default function AjustesPage() {
   // Push notification state
   const [pushPermission, setPushPermission] = useState<NotificationPermission | "unsupported">("default")
   const [hasPushSub, setHasPushSub] = useState(false)
+  const [isCurrentDeviceSubscribed, setIsCurrentDeviceSubscribed] = useState(false)
   const [loadingPush, setLoadingPush] = useState(false)
+  const [testingPush, setTestingPush] = useState(false)
 
   useEffect(() => {
     if ("Notification" in window) {
@@ -52,12 +54,24 @@ export default function AjustesPage() {
 
   async function checkPushSubscription() {
     if (!profile) return
+    let currentSubscribed = false
+    try {
+      if ("serviceWorker" in navigator && "PushManager" in window) {
+        const reg = await navigator.serviceWorker.ready
+        const sub = await reg.pushManager.getSubscription()
+        if (sub) {
+          currentSubscribed = true
+        }
+      }
+    } catch {}
+
     const { data } = await supabase
       .from("PushSubscription")
       .select("id")
       .eq("user_id", profile.id)
-      .limit(1)
+    
     setHasPushSub(!!(data && data.length > 0))
+    setIsCurrentDeviceSubscribed(currentSubscribed)
   }
 
   async function handleActivatePush() {
@@ -81,19 +95,20 @@ export default function AjustesPage() {
       })
       const subJson = subscription.toJSON()
       if (subJson.endpoint && subJson.keys?.p256dh && subJson.keys?.auth) {
-        const { error } = await supabase.from("PushSubscription").insert({
+        const { error } = await supabase.from("PushSubscription").upsert({
           user_id: profile!.id,
           endpoint: subJson.endpoint,
           p256dh: subJson.keys.p256dh,
           auth: subJson.keys.auth
-        })
-        if (error && !error.message.includes("duplicate key")) {
+        }, { onConflict: "endpoint" })
+        if (error) {
           throw error
         }
       }
       localStorage.setItem("khora-push-dismissed", "true")
       setHasPushSub(true)
-      toast.success("🔔 ¡Notificaciones activadas! Recibirás alertas al instante.")
+      setIsCurrentDeviceSubscribed(true)
+      toast.success("🔔 ¡Notificaciones activadas en este dispositivo!")
     } catch (err: any) {
       toast.error("Error al activar notificaciones: " + err.message)
     } finally {
@@ -101,12 +116,43 @@ export default function AjustesPage() {
     }
   }
 
+  async function handleTestPush() {
+    if (!profile) return
+    setTestingPush(true)
+    try {
+      const res = await supabase.functions.invoke("notify-teacher-push", {
+        body: {
+          type: "TEST",
+          customParams: {
+            teacherUserId: profile.id,
+            date: new Date().toISOString().split("T")[0],
+            time: "12:00"
+          }
+        }
+      })
+      if (res.error) throw new Error(res.error.message)
+      toast.success("🔔 Alerta de prueba enviada. Deberías verla en tu pantalla.")
+    } catch (err: any) {
+      toast.error("Error al enviar prueba: " + err.message)
+    } finally {
+      setTestingPush(false)
+    }
+  }
+
   async function handleDeactivatePush() {
     if (!profile) return
     setLoadingPush(true)
     try {
+      if ("serviceWorker" in navigator && "PushManager" in window) {
+        const reg = await navigator.serviceWorker.ready
+        const sub = await reg.pushManager.getSubscription()
+        if (sub) {
+          await sub.unsubscribe()
+        }
+      }
       await supabase.from("PushSubscription").delete().eq("user_id", profile.id)
       setHasPushSub(false)
+      setIsCurrentDeviceSubscribed(false)
       toast.success("Notificaciones desactivadas")
     } catch (err: any) {
       toast.error("Error: " + err.message)
@@ -586,7 +632,7 @@ export default function AjustesPage() {
               </div>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               {!hasPushSub ? (
                 <button
                   onClick={handleActivatePush}
@@ -599,16 +645,40 @@ export default function AjustesPage() {
                   Activar Alertas Push
                 </button>
               ) : (
-                <button
-                  onClick={handleDeactivatePush}
-                  disabled={loadingPush}
-                  className="flex items-center gap-2 px-6 py-3 bg-neutral-100 text-neutral-600 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-red-50 hover:text-red-600 transition-all disabled:opacity-40"
-                >
-                  {loadingPush
-                    ? <div className="w-4 h-4 border-2 border-neutral-300 border-t-neutral-600 rounded-full animate-spin" />
-                    : <BellOff className="w-4 h-4" />}
-                  Desactivar
-                </button>
+                <>
+                  {!isCurrentDeviceSubscribed && (
+                    <button
+                      onClick={handleActivatePush}
+                      disabled={loadingPush}
+                      className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-emerald-700 transition-all disabled:opacity-40 shadow-lg shadow-emerald-100"
+                    >
+                      {loadingPush
+                        ? <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                        : <Bell className="w-4 h-4" />}
+                      Sincronizar este dispositivo
+                    </button>
+                  )}
+                  <button
+                    onClick={handleTestPush}
+                    disabled={testingPush}
+                    className="flex items-center gap-2 px-6 py-3 bg-violet-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-violet-700 transition-all disabled:opacity-40 shadow-lg shadow-violet-100"
+                  >
+                    {testingPush
+                      ? <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                      : <span>🔔</span>}
+                    {testingPush ? "Enviando..." : "Enviar Notificación de Prueba"}
+                  </button>
+                  <button
+                    onClick={handleDeactivatePush}
+                    disabled={loadingPush}
+                    className="flex items-center gap-2 px-6 py-3 bg-neutral-100 text-neutral-600 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-red-50 hover:text-red-600 transition-all disabled:opacity-40"
+                  >
+                    {loadingPush
+                      ? <div className="w-4 h-4 border-2 border-neutral-300 border-t-neutral-600 rounded-full animate-spin" />
+                      : <BellOff className="w-4 h-4" />}
+                    Desactivar
+                  </button>
+                </>
               )}
             </div>
 
