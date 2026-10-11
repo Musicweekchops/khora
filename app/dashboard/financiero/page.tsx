@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/context/AuthContext"
 import { formatCurrency } from "@/lib/utils"
 import { toast } from "sonner"
-import { Trash2 } from "lucide-react"
+import { Trash2, ChevronDown, Users, CheckCircle2, AlertCircle, Clock, ArrowUpDown, DollarSign, Wallet } from "lucide-react"
 import ReceiptUploader, { ParsedReceiptData } from "@/components/ui/ReceiptUploader"
 
 interface PaymentRow { 
@@ -22,7 +22,7 @@ interface PaymentRow {
   transfer_id?: string | null
 }
 
-interface StudentRow { id: string; status: string; lifetime_value: number; created_at: string; lead_source: string; name: string; monthly_fee: number; modalidad: string }
+interface StudentRow { id: string; status: string; lifetime_value: number; created_at: string; lead_source: string; name: string; email?: string; monthly_fee: number; modalidad: string }
 interface UnpaidStudent { id: string; name: string; email: string; modalidad: string; monthly_fee: number; paid_this_month: number }
 interface PaymentModal { 
   studentId: string
@@ -47,6 +47,8 @@ export default function FinancieroPage() {
   const [editingFee, setEditingFee] = useState<{ id: string, amount: string } | null>(null)
   const [classes, setClasses] = useState<{ id: string, student_id: string, date: string }[]>([])
   const [chartMode, setChartMode] = useState<"MONTH" | "ALL">("MONTH")
+  const [feeTierSort, setFeeTierSort] = useState<"AMOUNT_DESC" | "COUNT_DESC">("AMOUNT_DESC")
+  const [expandedTiers, setExpandedTiers] = useState<Set<number>>(new Set())
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState<PaymentModal | null>(null)
   const [saving, setSaving] = useState(false)
@@ -80,7 +82,7 @@ export default function FinancieroPage() {
     }
 
     const [{ data: sp }, { data: activeStudents }] = await Promise.all([
-      supabase.from("StudentProfile").select("id, status, lifetime_value, created_at, lead_source, monthly_fee, modalidad, User ( name )").eq("teacher_id", teacherId),
+      supabase.from("StudentProfile").select("id, status, lifetime_value, created_at, lead_source, monthly_fee, modalidad, User ( name, email )").eq("teacher_id", teacherId),
       supabase.from("StudentProfile")
         .select("id, modalidad, monthly_fee, User ( name, email )")
         .eq("teacher_id", teacherId)
@@ -106,11 +108,15 @@ export default function FinancieroPage() {
       }))
     }
 
-    if (sp) setStudents(sp.map((s: any) => ({
-      id: s.id, status: s.status ?? "PROSPECT", lifetime_value: s.lifetime_value ?? 0,
-      created_at: s.created_at, lead_source: s.lead_source ?? "", name: s.User?.name ?? "—",
-      monthly_fee: s.monthly_fee ?? 0, modalidad: s.modalidad ?? "online"
-    })))
+    if (sp) setStudents(sp.map((s: any) => {
+      const u = Array.isArray(s?.User) ? s.User[0] : s?.User
+      return {
+        id: s.id, status: s.status ?? "PROSPECT", lifetime_value: s.lifetime_value ?? 0,
+        created_at: s.created_at, lead_source: s.lead_source ?? "", name: u?.name ?? "—",
+        email: u?.email ?? "",
+        monthly_fee: Number(s.monthly_fee ?? 0), modalidad: s.modalidad ?? "online"
+      }
+    }))
 
     // Alumnos activos sin pago COMPLETO este mes
     if (activeStudents && py) {
@@ -246,9 +252,11 @@ export default function FinancieroPage() {
 
   // ── Métricas ──
   const now = new Date()
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0]
-  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split("T")[0]
-  const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split("T")[0]
+  const startOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`
+  const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const startOfLastMonth = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, "0")}-01`
+  const lastDayPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0)
+  const endOfLastMonth = `${lastDayPrevMonth.getFullYear()}-${String(lastDayPrevMonth.getMonth() + 1).padStart(2, "0")}-${String(lastDayPrevMonth.getDate()).padStart(2, "0")}`
 
   const totalRevenue = payments.reduce((s, p) => s + p.amount, 0)
   const thisMonthPayments = payments.filter(p => p.date >= startOfMonth)
@@ -324,6 +332,142 @@ export default function FinancieroPage() {
   const ticketSpark = [avgTicket*0.8, avgTicket*0.9, avgTicket, avgTicket*1.1, avgTicket*1.1, avgTicket*1.05];
   const convSpark = [conversionRate*0.9, conversionRate, conversionRate*1.1, conversionRate, conversionRate*1.05, conversionRate];
   const churnSpark = [churnRate*1.2, churnRate*1.1, churnRate, churnRate*0.9, churnRate*0.8, churnRate];
+
+  // ── Desglose de Alumnos Activos por Monto (Mes Actual) ──
+  const paidThisMonthByStudent = new Map<string, number>()
+  thisMonthPayments.forEach(p => {
+    paidThisMonthByStudent.set(p.student_id, (paidThisMonthByStudent.get(p.student_id) || 0) + Number(p.amount || 0))
+  })
+
+  interface ActiveStudentFeeInfo {
+    id: string
+    name: string
+    email?: string
+    modalidad: string
+    monthly_fee: number
+    effectiveFee: number
+    paidThisMonth: number
+    debt: number
+    paymentStatus: "PAID" | "PARTIAL" | "UNPAID" | "NO_FEE"
+  }
+
+  const activeStudentsFeeData: ActiveStudentFeeInfo[] = activeStudentsList.map(s => {
+    const fee = Number(s.monthly_fee || 0)
+    const paid = paidThisMonthByStudent.get(s.id) || 0
+    const effectiveFee = fee > 0 ? fee : (paid > 0 ? paid : 0)
+    const debt = effectiveFee > 0 ? Math.max(0, effectiveFee - paid) : 0
+
+    let paymentStatus: "PAID" | "PARTIAL" | "UNPAID" | "NO_FEE" = "UNPAID"
+    if (effectiveFee > 0) {
+      if (paid >= effectiveFee) paymentStatus = "PAID"
+      else if (paid > 0) paymentStatus = "PARTIAL"
+      else paymentStatus = "UNPAID"
+    } else {
+      paymentStatus = paid > 0 ? "PAID" : "NO_FEE"
+    }
+
+    return {
+      id: s.id,
+      name: s.name,
+      email: s.email,
+      modalidad: s.modalidad,
+      monthly_fee: fee,
+      effectiveFee,
+      paidThisMonth: paid,
+      debt,
+      paymentStatus,
+    }
+  })
+
+  const tierMap = new Map<number, ActiveStudentFeeInfo[]>()
+  activeStudentsFeeData.forEach(st => {
+    const existing = tierMap.get(st.effectiveFee) || []
+    existing.push(st)
+    tierMap.set(st.effectiveFee, existing)
+  })
+
+  interface FeeTier {
+    fee: number
+    students: ActiveStudentFeeInfo[]
+    count: number
+    percentage: number
+    totalProjected: number
+    totalCollected: number
+    totalPending: number
+    paidCount: number
+    partialCount: number
+    unpaidCount: number
+    noFeeCount: number
+  }
+
+  const feeTiers: FeeTier[] = Array.from(tierMap.entries()).map(([fee, stList]) => {
+    const count = stList.length
+    const percentage = activeStudentsList.length > 0 ? Math.round((count / activeStudentsList.length) * 100) : 0
+    const totalProjected = fee > 0 ? fee * count : stList.reduce((acc, st) => acc + st.paidThisMonth, 0)
+    const totalCollected = stList.reduce((acc, st) => acc + Math.min(st.paidThisMonth, fee > 0 ? fee : st.paidThisMonth), 0)
+    const totalPending = Math.max(0, totalProjected - totalCollected)
+    const paidCount = stList.filter(st => st.paymentStatus === "PAID").length
+    const partialCount = stList.filter(st => st.paymentStatus === "PARTIAL").length
+    const unpaidCount = stList.filter(st => st.paymentStatus === "UNPAID").length
+    const noFeeCount = stList.filter(st => st.paymentStatus === "NO_FEE").length
+
+    return {
+      fee,
+      students: stList.sort((a, b) => a.name.localeCompare(b.name)),
+      count,
+      percentage,
+      totalProjected,
+      totalCollected,
+      totalPending,
+      paidCount,
+      partialCount,
+      unpaidCount,
+      noFeeCount,
+    }
+  })
+
+  feeTiers.sort((a, b) => {
+    if (a.fee === 0) return 1
+    if (b.fee === 0) return -1
+    if (feeTierSort === "AMOUNT_DESC") return b.fee - a.fee
+    return b.count - a.count
+  })
+
+  const totalProjectedRevenue = feeTiers.reduce((acc, t) => acc + t.totalProjected, 0)
+  const totalCollectedFromActive = feeTiers.reduce((acc, t) => acc + t.totalCollected, 0)
+  const totalPendingFromActive = feeTiers.reduce((acc, t) => acc + t.totalPending, 0)
+  const totalActiveWithFee = activeStudentsList.filter(s => s.monthly_fee > 0 || (paidThisMonthByStudent.get(s.id) || 0) > 0).length
+  const avgActiveFee = totalActiveWithFee > 0 ? Math.round(totalProjectedRevenue / totalActiveWithFee) : 0
+  const totalInDebtStudents = feeTiers.reduce((acc, t) => acc + t.unpaidCount + t.partialCount, 0)
+  const totalPaidStudents = feeTiers.reduce((acc, t) => acc + t.paidCount, 0)
+
+  const TIER_COLORS = [
+    { bg: "bg-emerald-500", text: "text-emerald-700", border: "border-emerald-200", badge: "bg-emerald-50 text-emerald-700 border-emerald-200/80" },
+    { bg: "bg-violet-500", text: "text-violet-700", border: "border-violet-200", badge: "bg-violet-50 text-violet-700 border-violet-200/80" },
+    { bg: "bg-sky-500", text: "text-sky-700", border: "border-sky-200", badge: "bg-sky-50 text-sky-700 border-sky-200/80" },
+    { bg: "bg-amber-500", text: "text-amber-700", border: "border-amber-200", badge: "bg-amber-50 text-amber-700 border-amber-200/80" },
+    { bg: "bg-indigo-500", text: "text-indigo-700", border: "border-indigo-200", badge: "bg-indigo-50 text-indigo-700 border-indigo-200/80" },
+    { bg: "bg-teal-500", text: "text-teal-700", border: "border-teal-200", badge: "bg-teal-50 text-teal-700 border-teal-200/80" },
+    { bg: "bg-rose-500", text: "text-rose-700", border: "border-rose-200", badge: "bg-rose-50 text-rose-700 border-rose-200/80" },
+    { bg: "bg-purple-500", text: "text-purple-700", border: "border-purple-200", badge: "bg-purple-50 text-purple-700 border-purple-200/80" },
+  ]
+
+  function toggleTier(fee: number) {
+    setExpandedTiers(prev => {
+      const next = new Set(prev)
+      if (next.has(fee)) next.delete(fee)
+      else next.add(fee)
+      return next
+    })
+  }
+
+  function expandAllTiers() {
+    setExpandedTiers(new Set(feeTiers.map(t => t.fee)))
+  }
+
+  function collapseAllTiers() {
+    setExpandedTiers(new Set())
+  }
 
   if (loading) return <div className="space-y-4">{[1,2,3].map(i => <div key={i} className="h-32 bg-white rounded-3xl animate-pulse" />)}</div>
 
@@ -589,6 +733,393 @@ export default function FinancieroPage() {
             )
           })}
         </div>
+      </div>
+
+      {/* ── Desglose de Alumnos Activos por Monto (Mes Actual) ── */}
+      <div className="bg-white rounded-3xl border border-neutral-100 overflow-hidden shadow-xs space-y-6 p-6 md:p-8">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-neutral-100 pb-6">
+          <div>
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <span className="w-2.5 h-6 bg-gradient-to-b from-emerald-500 to-teal-500 rounded-full" />
+              <h3 className="text-xl md:text-2xl font-black text-neutral-900 tracking-tight">
+                Desglose de Alumnos por Valor
+              </h3>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Solo Activos · {currentMonthLabel}
+              </span>
+            </div>
+            <p className="text-xs md:text-sm text-neutral-500 font-medium">
+              Distribución de <strong className="text-neutral-900">{activeStudentsList.length} alumnos activos</strong> según el monto mensual que pagan (independiente de si tienen pago al día o están en deuda).
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Sort Toggle */}
+            <div className="flex items-center bg-neutral-100 p-1 rounded-xl text-xs font-bold text-neutral-600">
+              <button
+                onClick={() => setFeeTierSort("AMOUNT_DESC")}
+                className={`px-3 py-1.5 rounded-lg transition-all ${feeTierSort === "AMOUNT_DESC" ? "bg-white text-neutral-900 shadow-sm" : "hover:text-neutral-900"}`}
+                title="Ordenar por mayor valor monetario"
+              >
+                Por Valor ↓
+              </button>
+              <button
+                onClick={() => setFeeTierSort("COUNT_DESC")}
+                className={`px-3 py-1.5 rounded-lg transition-all ${feeTierSort === "COUNT_DESC" ? "bg-white text-neutral-900 shadow-sm" : "hover:text-neutral-900"}`}
+                title="Ordenar por mayor cantidad de alumnos"
+              >
+                Por Alumnos ↓
+              </button>
+            </div>
+
+            {/* Expand / Collapse All */}
+            {feeTiers.length > 0 && (
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={expandAllTiers}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-neutral-100 hover:bg-neutral-200 text-neutral-700 transition-colors"
+                >
+                  Expandir todos
+                </button>
+                <button
+                  onClick={collapseAllTiers}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-neutral-100 hover:bg-neutral-200 text-neutral-700 transition-colors"
+                >
+                  Colapsar
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {activeStudentsList.length === 0 ? (
+          <div className="p-12 text-center text-neutral-400">
+            <Users className="w-12 h-12 mx-auto mb-3 opacity-30" />
+            <p className="font-bold text-neutral-600">No hay alumnos activos registrados</p>
+            <p className="text-xs text-neutral-400 mt-1">Los alumnos en estado activo del mes aparecerán automáticamente aquí.</p>
+          </div>
+        ) : (
+          <>
+            {/* Top Stats Mini-Grid */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-gradient-to-br from-emerald-50/60 to-emerald-50/20 border border-emerald-100 rounded-2xl p-4">
+                <div className="flex items-center justify-between text-emerald-600 mb-1.5">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Facturación Proyectada</span>
+                  <Wallet className="w-4 h-4" />
+                </div>
+                <div className="text-2xl font-black text-neutral-900 tracking-tight">
+                  {formatCurrency(totalProjectedRevenue)}
+                </div>
+                <p className="text-[11px] font-medium text-neutral-400 mt-0.5">
+                  {activeStudentsList.length} aranceles activos
+                </p>
+              </div>
+
+              <div className="bg-gradient-to-br from-teal-50/60 to-teal-50/20 border border-teal-100 rounded-2xl p-4">
+                <div className="flex items-center justify-between text-teal-600 mb-1.5">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Cobrado Este Mes</span>
+                  <CheckCircle2 className="w-4 h-4" />
+                </div>
+                <div className="text-2xl font-black text-emerald-600 tracking-tight">
+                  {formatCurrency(totalCollectedFromActive)}
+                </div>
+                <p className="text-[11px] font-medium text-neutral-400 mt-0.5">
+                  {totalPaidStudents} al día · {totalProjectedRevenue > 0 ? Math.round((totalCollectedFromActive / totalProjectedRevenue) * 100) : 0}% recaudado
+                </p>
+              </div>
+
+              <div className="bg-gradient-to-br from-rose-50/60 to-rose-50/20 border border-rose-100 rounded-2xl p-4">
+                <div className="flex items-center justify-between text-rose-600 mb-1.5">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Por Cobrar / En Deuda</span>
+                  <AlertCircle className="w-4 h-4" />
+                </div>
+                <div className="text-2xl font-black text-rose-600 tracking-tight">
+                  {formatCurrency(totalPendingFromActive)}
+                </div>
+                <p className="text-[11px] font-medium text-neutral-400 mt-0.5">
+                  {totalInDebtStudents} {totalInDebtStudents === 1 ? "alumno pendiente" : "alumnos pendientes"}
+                </p>
+              </div>
+
+              <div className="bg-gradient-to-br from-sky-50/60 to-sky-50/20 border border-sky-100 rounded-2xl p-4">
+                <div className="flex items-center justify-between text-sky-600 mb-1.5">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Arancel Promedio</span>
+                  <DollarSign className="w-4 h-4" />
+                </div>
+                <div className="text-2xl font-black text-neutral-900 tracking-tight">
+                  {formatCurrency(avgActiveFee)}
+                </div>
+                <p className="text-[11px] font-medium text-neutral-400 mt-0.5">
+                  Por alumno activo con cuota
+                </p>
+              </div>
+            </div>
+
+            {/* Segmented Distribution Bar */}
+            <div className="bg-neutral-50/70 border border-neutral-100 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center justify-between text-xs font-bold text-neutral-500">
+                <span>Distribución Visual de Aranceles</span>
+                <span>{feeTiers.length} valores distintos</span>
+              </div>
+              <div className="flex h-3 w-full overflow-hidden rounded-full bg-neutral-200/60 p-0.5 gap-1">
+                {feeTiers.map((tier, idx) => {
+                  const color = tier.fee === 0 ? "bg-amber-400" : TIER_COLORS[idx % TIER_COLORS.length].bg;
+                  const widthPct = Math.max(tier.percentage, 3);
+                  return (
+                    <div
+                      key={tier.fee}
+                      style={{ width: `${widthPct}%` }}
+                      className={`${color} h-full rounded-full transition-all duration-300 hover:opacity-80 cursor-pointer`}
+                      title={`${tier.fee > 0 ? formatCurrency(tier.fee) : "Sin definir"}: ${tier.count} alumnos (${tier.percentage}%)`}
+                      onClick={() => toggleTier(tier.fee)}
+                    />
+                  );
+                })}
+              </div>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-1 text-xs font-bold text-neutral-600">
+                {feeTiers.map((tier, idx) => {
+                  const color = tier.fee === 0 ? "bg-amber-400" : TIER_COLORS[idx % TIER_COLORS.length].bg;
+                  const isExpanded = expandedTiers.has(tier.fee);
+                  return (
+                    <button
+                      key={tier.fee}
+                      onClick={() => toggleTier(tier.fee)}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-all ${isExpanded ? "bg-white border-neutral-300 shadow-xs text-neutral-900" : "border-transparent hover:bg-white/80 hover:border-neutral-200"}`}
+                    >
+                      <span className={`w-2.5 h-2.5 rounded-full ${color}`} />
+                      <span>{tier.fee > 0 ? formatCurrency(tier.fee) : "Sin arancel"}</span>
+                      <span className="text-neutral-400 text-[11px]">({tier.count} · {tier.percentage}%)</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Fee Tiers Accordion List */}
+            <div className="space-y-3">
+              {feeTiers.map((tier, idx) => {
+                const isExpanded = expandedTiers.has(tier.fee);
+                const colorObj = tier.fee === 0
+                  ? { bg: "bg-amber-400", badge: "bg-amber-50 text-amber-800 border-amber-200", border: "border-amber-200" }
+                  : TIER_COLORS[idx % TIER_COLORS.length];
+
+                return (
+                  <div
+                    key={tier.fee}
+                    className={`border rounded-2xl overflow-hidden transition-all duration-200 bg-white ${isExpanded ? "border-neutral-300 shadow-md ring-1 ring-neutral-200" : "border-neutral-100 hover:border-neutral-200 shadow-xs"}`}
+                  >
+                    {/* Header Row of Tier */}
+                    <div
+                      onClick={() => toggleTier(tier.fee)}
+                      className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer hover:bg-neutral-50/60 transition-colors select-none"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className={`w-3.5 h-3.5 rounded-full ${colorObj.bg} flex-shrink-0 shadow-xs`} />
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {tier.fee > 0 ? (
+                              <>
+                                <span className="text-xl md:text-2xl font-black text-neutral-900 tracking-tight">
+                                  {formatCurrency(tier.fee)}
+                                </span>
+                                <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">/ mes</span>
+                              </>
+                            ) : (
+                              <span className="text-lg md:text-xl font-black text-amber-700 tracking-tight flex items-center gap-1.5">
+                                ⚠️ Sin Arancel Asignado ($0)
+                              </span>
+                            )}
+                            <span className="px-2.5 py-0.5 rounded-xl text-xs font-black bg-neutral-100 text-neutral-700 flex items-center gap-1.5 ml-1">
+                              <Users className="w-3.5 h-3.5 text-neutral-400" />
+                              {tier.count} {tier.count === 1 ? "alumno" : "alumnos"}
+                              <span className="text-neutral-400 font-medium">({tier.percentage}%)</span>
+                            </span>
+                          </div>
+
+                          {/* Mini payment status indicators within this tier */}
+                          <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                            {tier.paidCount > 0 && (
+                              <span className="px-2 py-0.5 rounded-lg text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60 flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                {tier.paidCount} al día
+                              </span>
+                            )}
+                            {tier.partialCount > 0 && (
+                              <span className="px-2 py-0.5 rounded-lg text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200/60 flex items-center gap-1">
+                                <Clock className="w-3 h-3 text-amber-600" />
+                                {tier.partialCount} con abono
+                              </span>
+                            )}
+                            {tier.unpaidCount > 0 && (
+                              <span className="px-2 py-0.5 rounded-lg text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200/60 flex items-center gap-1">
+                                <AlertCircle className="w-3 h-3 text-rose-600" />
+                                {tier.unpaidCount} en deuda
+                              </span>
+                            )}
+                            {tier.noFeeCount > 0 && (
+                              <span className="px-2 py-0.5 rounded-lg text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200/60 flex items-center gap-1">
+                                ⚠️ {tier.noFeeCount} falta fijar valor
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right side: Subtotal & Expand chevron */}
+                      <div className="flex items-center justify-between md:justify-end gap-6 pt-2 md:pt-0 border-t md:border-t-0 border-neutral-100">
+                        <div className="text-left md:text-right">
+                          <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">
+                            Subtotal Proyectado
+                          </p>
+                          <p className="text-lg md:text-xl font-black text-neutral-900 tracking-tight">
+                            {formatCurrency(tier.totalProjected)}
+                          </p>
+                          {tier.totalCollected > 0 && tier.totalProjected > 0 && (
+                            <p className="text-[10px] font-bold text-emerald-600">
+                              {formatCurrency(tier.totalCollected)} cobrado ({Math.round((tier.totalCollected / tier.totalProjected) * 100)}%)
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-neutral-500 hidden sm:inline">
+                            {isExpanded ? "Ocultar" : "Ver alumnos"}
+                          </span>
+                          <div className={`w-8 h-8 rounded-xl bg-neutral-100 flex items-center justify-center text-neutral-500 transition-transform duration-200 ${isExpanded ? "rotate-180 bg-neutral-200 text-neutral-900" : ""}`}>
+                            <ChevronDown className="w-4 h-4" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Expanded Students Details */}
+                    {isExpanded && (
+                      <div className="border-t border-neutral-100 bg-neutral-50/50 p-4 md:p-6 space-y-3 animate-in fade-in duration-200">
+                        <div className="flex items-center justify-between px-2 text-[10px] font-bold text-neutral-400 uppercase tracking-wider">
+                          <span>Alumno ({tier.students.length})</span>
+                          <span>Estado en el Mes</span>
+                        </div>
+
+                        <div className="divide-y divide-neutral-100 rounded-2xl bg-white border border-neutral-100 overflow-hidden shadow-xs">
+                          {tier.students.map(st => (
+                            <div
+                              key={st.id}
+                              className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-neutral-50/50 transition-colors"
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className={`w-9 h-9 rounded-full ${colorObj.bg}/15 flex items-center justify-center text-sm font-black text-neutral-800 flex-shrink-0`}>
+                                  {st.name.charAt(0).toUpperCase()}
+                                </div>
+                                <div className="min-w-0">
+                                  <Link
+                                    href={`/dashboard/alumnos/detalles?id=${st.id}`}
+                                    className="font-bold text-neutral-900 hover:text-violet-600 transition-colors block truncate text-sm"
+                                  >
+                                    {st.name}
+                                  </Link>
+                                  <div className="flex items-center gap-2 mt-0.5 text-xs text-neutral-400">
+                                    {st.email && <span className="truncate">{st.email}</span>}
+                                    {st.email && <span className="text-neutral-200">·</span>}
+                                    <span>{st.modalidad === "online" ? "📹 Virtual" : "🏠 Presencial"}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex flex-wrap items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-neutral-50">
+                                {/* Payment Status Badge */}
+                                {st.paymentStatus === "PAID" && (
+                                  <span className="px-3 py-1 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80 flex items-center gap-1.5">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                    Al día · Pagó {formatCurrency(st.paidThisMonth)}
+                                  </span>
+                                )}
+
+                                {st.paymentStatus === "PARTIAL" && (
+                                  <span className="px-3 py-1 rounded-xl text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200/80 flex items-center gap-1.5">
+                                    <Clock className="w-3.5 h-3.5 text-amber-600" />
+                                    Abonó {formatCurrency(st.paidThisMonth)} · Saldo: {formatCurrency(st.debt)}
+                                  </span>
+                                )}
+
+                                {st.paymentStatus === "UNPAID" && (
+                                  <span className="px-3 py-1 rounded-xl text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200/80 flex items-center gap-1.5">
+                                    <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                                    En deuda · Debe {formatCurrency(st.debt)}
+                                  </span>
+                                )}
+
+                                {st.paymentStatus === "NO_FEE" && (
+                                  <span className="px-3 py-1 rounded-xl text-xs font-bold bg-neutral-100 text-neutral-600 border border-neutral-200 flex items-center gap-1.5">
+                                    ⚠️ Sin cuota definida
+                                  </span>
+                                )}
+
+                                {/* Action Buttons */}
+                                <div className="flex items-center gap-2">
+                                  {(st.debt > 0 || st.paymentStatus === "UNPAID" || st.paymentStatus === "PARTIAL") && (
+                                    <button
+                                      onClick={() => setModal({
+                                        studentId: st.id,
+                                        studentName: st.name,
+                                        amount: st.debt > 0 ? String(st.debt) : (st.effectiveFee > 0 ? String(st.effectiveFee) : ""),
+                                        method: "TRANSFER",
+                                        notes: "",
+                                      })}
+                                      className="px-3 py-1.5 bg-emerald-600 text-white rounded-xl text-xs font-black hover:bg-emerald-700 transition-colors shadow-xs flex items-center gap-1 whitespace-nowrap"
+                                    >
+                                      💳 Registrar Pago
+                                    </button>
+                                  )}
+
+                                  {/* Quick Fee Editor */}
+                                  {editingFee?.id === st.id ? (
+                                    <div className="flex items-center gap-1.5 bg-neutral-100 rounded-xl p-1 pr-2">
+                                      <span className="pl-2 text-xs font-bold text-neutral-400">$</span>
+                                      <input
+                                        type="number"
+                                        autoFocus
+                                        className="w-20 bg-transparent text-xs font-black text-neutral-900 outline-none"
+                                        value={editingFee.amount}
+                                        onChange={e => setEditingFee({ id: st.id, amount: e.target.value })}
+                                        onKeyDown={e => e.key === "Enter" && handleUpdateFee(st.id, editingFee.amount)}
+                                      />
+                                      <button
+                                        onClick={() => handleUpdateFee(st.id, editingFee.amount)}
+                                        className="text-[10px] bg-emerald-500 text-white font-bold px-2 py-1 rounded-lg"
+                                      >
+                                        ✓
+                                      </button>
+                                      <button
+                                        onClick={() => setEditingFee(null)}
+                                        className="text-[10px] text-neutral-400 hover:text-neutral-600 font-bold px-1.5 py-1"
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={() => setEditingFee({ id: st.id, amount: st.monthly_fee ? String(st.monthly_fee) : "" })}
+                                      title="Modificar valor de mensualidad"
+                                      className="px-2.5 py-1.5 text-[11px] font-bold text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 rounded-xl transition-colors whitespace-nowrap border border-neutral-200"
+                                    >
+                                      {st.monthly_fee > 0 ? "Ajustar cuota" : "Fijar cuota"}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
 
       {/* ── Unpaid Students Section ── */}
