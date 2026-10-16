@@ -7,13 +7,14 @@ import { supabase } from "@/lib/supabase"
 import { formatCurrency, formatDate, formatTime } from "@/lib/utils"
 import ScheduleManager from "@/components/students/ScheduleManager"
 import { toast } from "sonner"
-import { Lock, Save, Trash2, Edit3, BookOpen, ExternalLink, Plus, PlayCircle, FileText, Video } from "lucide-react"
+import { Lock, Save, Trash2, Edit3, BookOpen, ExternalLink, Plus, PlayCircle, FileText, Video, Mail } from "lucide-react"
 import LastSeenBadge from "@/components/ui/LastSeenBadge"
 import { RichText } from "@/components/ui/RichText"
 import LibraryPickerModal from "@/components/ui/LibraryPickerModal"
 import ReceiptUploader, { ParsedReceiptData } from "@/components/ui/ReceiptUploader"
 import ExerciseFeedbackModal, { SubmissionData } from "@/components/students/ExerciseFeedbackModal"
 import TeacherSendVideoModal from "@/components/students/TeacherSendVideoModal"
+import StudentTestEmailModal from "@/components/students/StudentTestEmailModal"
 
 import StudentClassReportModal from "@/components/students/StudentClassReportModal"
 import { calculateClassCounters, formatSpanishShortDate } from "@/lib/classCounter"
@@ -86,6 +87,8 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
   const [submissions, setSubmissions] = useState<SubmissionData[]>([])
   const [selectedSubmission, setSelectedSubmission] = useState<SubmissionData | null>(null)
   const [showSendVideoModal, setShowSendVideoModal] = useState(false)
+  const [showTestEmailModal, setShowTestEmailModal] = useState(false)
+  const [teacherName, setTeacherName] = useState("")
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<"overview" | "schedule" | "classes" | "tasks" | "payments" | "notes" | "materiales" | "videos">("overview")
   const [newNote, setNewNote] = useState("")
@@ -145,6 +148,19 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
         last_seen_at: sp.User?.last_sign_in_at ?? null,
         user: { name: sp.User?.name ?? "—", email: sp.User?.email ?? "—", phone: sp.User?.phone ?? "" },
       })
+
+      if (sp.teacher_id) {
+        supabase
+          .from("TeacherProfile")
+          .select("User ( name )")
+          .eq("id", sp.teacher_id)
+          .maybeSingle()
+          .then(({ data }) => {
+            if (data?.User) {
+              setTeacherName((data.User as any)?.name || "")
+            }
+          })
+      }
     }
 
     // Classes
@@ -646,8 +662,17 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
             </div>
             <div>
               <h1 className="text-2xl md:text-3xl font-black text-neutral-900 tracking-tight">{student.user.name}</h1>
-              <div className="flex items-center gap-3 mt-1">
+              <div className="flex items-center gap-2.5 mt-1 flex-wrap">
                 <p className="text-neutral-500 font-medium text-sm md:text-base">{student.user.email}</p>
+                <button
+                  type="button"
+                  onClick={() => setShowTestEmailModal(true)}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-700 text-xs font-bold border border-sky-200/60 transition-colors"
+                  title="Enviar correo de prueba a esta dirección"
+                >
+                  <Mail className="w-3.5 h-3.5 text-sky-600" />
+                  <span>Probar</span>
+                </button>
                 <LastSeenBadge lastSeenAt={student.last_seen_at} size="md" />
               </div>
               {student.user.phone && <p className="text-neutral-400 text-xs md:text-sm mt-0.5">📞 {student.user.phone}</p>}
@@ -664,7 +689,16 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
                 <option key={k} value={k}>{v.label}</option>
               ))}
             </select>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setShowTestEmailModal(true)}
+                className="px-3 py-2 md:px-4 md:py-2.5 rounded-xl text-xs md:text-sm font-bold bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200/80 shadow-sm transition-all flex items-center gap-2"
+                title={`Enviar correo de prueba a ${student.user.email}`}
+              >
+                <Mail className="w-4 h-4 text-sky-600" />
+                <span className="hidden sm:inline">Correo de Prueba</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setShowSendVideoModal(true)}
@@ -1737,6 +1771,17 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
                 }
               })
           }}
+        />
+      )}
+
+      {/* Modal para enviar Correo de Prueba al Alumno */}
+      {showTestEmailModal && student && (
+        <StudentTestEmailModal
+          isOpen={showTestEmailModal}
+          onClose={() => setShowTestEmailModal(false)}
+          studentName={student.user?.name || "Alumno"}
+          studentEmail={student.user?.email || ""}
+          teacherName={teacherName}
         />
       )}
     </div>

@@ -149,6 +149,7 @@ serve(async (req) => {
       STUDENT_BOOKING_REQUEST: "Solicitud de reserva recibida ⏳",
       STUDENT_CLASS_DELETED: "Tu clase de música ha sido eliminada",
       TEACHER_CLASS_CANCELLED: "✕ Clase cancelada por tu alumno",
+      TEST_EMAIL: "Correo de prueba desde Khora ✉️",
     }
 
     const finalSubject = subject || defaultSubjects[type as EmailType] || "Notificación de Khora"

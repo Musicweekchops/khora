@@ -1,4 +1,4 @@
-export type EmailType = 'WELCOME' | 'CLASS_CONFIRMATION' | 'CLASS_REMINDER' | 'TEACHER_CLASS_CONFIRMED' | 'TEACHER_NEW_STUDENT' | 'PAYMENT_CONFIRMATION' | 'STUDENT_CLASS_CONFIRMED' | 'TEACHER_CLASS_RESCHEDULED' | 'STUDENT_CLASS_CANCELLED' | 'TEACHER_NEW_BOOKING' | 'STUDENT_BOOKING_REJECTED' | 'STUDENT_CLASS_RESCHEDULED' | 'STUDENT_BOOKING_REQUEST' | 'STUDENT_CLASS_DELETED' | 'TEACHER_CLASS_CANCELLED';
+export type EmailType = 'WELCOME' | 'CLASS_CONFIRMATION' | 'CLASS_REMINDER' | 'TEACHER_CLASS_CONFIRMED' | 'TEACHER_NEW_STUDENT' | 'PAYMENT_CONFIRMATION' | 'STUDENT_CLASS_CONFIRMED' | 'TEACHER_CLASS_RESCHEDULED' | 'STUDENT_CLASS_CANCELLED' | 'TEACHER_NEW_BOOKING' | 'STUDENT_BOOKING_REJECTED' | 'STUDENT_CLASS_RESCHEDULED' | 'STUDENT_BOOKING_REQUEST' | 'STUDENT_CLASS_DELETED' | 'TEACHER_CLASS_CANCELLED' | 'TEST_EMAIL';
 
 
 interface TemplateParams {
@@ -768,6 +768,67 @@ export function getTemplate(type: EmailType, params: TemplateParams): string {
         
         <a href="https://khora.cl/dashboard/agenda" style="display: inline-block; background: linear-gradient(135deg, #5b4fcf 0%, #3d2fa8 100%); background-color: #5b4fcf; color: #ffffff !important; text-decoration: none; font-size: 15px; font-weight: 800; padding: 16px 36px; border-radius: 100px; box-shadow: 0 4px 15px rgba(91, 79, 207, 0.3); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
           Ver mi Agenda
+        </a>
+      </div>
+    `);
+  }
+
+  if (type === 'TEST_EMAIL') {
+    const teacherPhrase = params.teacherName ? ` por tu profesor/a <strong>${params.teacherName}</strong>` : '';
+    const customMessageHtml = params.customMessage ? `
+      <div style="background-color: #232332; border-left: 3px solid #5b4fcf; border-radius: 8px; padding: 16px; margin: 20px 0; text-align: left;">
+        <div style="font-size: 11px; font-weight: 700; color: #a1a1aa; text-transform: uppercase; margin-bottom: 6px;">Mensaje de prueba:</div>
+        <p style="margin: 0; font-size: 14px; color: #ffffff; line-height: 1.5; white-space: pre-wrap;">${params.customMessage}</p>
+      </div>
+    ` : '';
+
+    return getLayout(`
+      <div style="padding: 0 40px 40px 40px; text-align: center;">
+        <div style="width: 60px; height: 60px; margin: 0 auto 20px auto; background-color: rgba(91, 79, 207, 0.15); border: 1px solid rgba(91, 79, 207, 0.3); border-radius: 50%; font-size: 26px; line-height: 60px; text-align: center;">
+          ✉️
+        </div>
+        <h2 style="font-size: 24px; font-weight: 800; color: #ffffff; margin: 0 0 10px 0; letter-spacing: -0.5px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.2;">
+          Correo de Prueba 🎵
+        </h2>
+        <p style="font-size: 15px; color: #a1a1aa; margin: 0 0 24px 0; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+          ¡Hola ${params.studentName}! Este es un correo de prueba enviado desde tu ficha de alumno en Khora${teacherPhrase}.
+        </p>
+
+        ${customMessageHtml}
+        
+        <div style="background-color: #13131a; border: 1px solid #2d2d3d; border-radius: 20px; padding: 24px; margin-bottom: 28px; text-align: left;">
+          <div style="font-size: 11px; font-weight: 800; color: #10b981; margin-bottom: 16px; text-align: center; text-transform: uppercase; letter-spacing: 1.5px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+            ✓ ESTADO DE NOTIFICACIONES ACTIVO
+          </div>
+          
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 12px;">
+            <tr>
+              <td align="left" style="font-size: 13px; color: #a1a1aa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Destinatario:</td>
+              <td align="right" style="font-size: 13px; color: #ffffff; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${params.email || params.to || ''}</td>
+            </tr>
+          </table>
+          
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 12px;">
+            <tr>
+              <td align="left" style="font-size: 13px; color: #a1a1aa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Servicio:</td>
+              <td align="right" style="font-size: 13px; color: #ffffff; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Khora Notificaciones</td>
+            </tr>
+          </table>
+
+          <table width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td align="left" style="font-size: 13px; color: #a1a1aa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Fecha de envío:</td>
+              <td align="right" style="font-size: 13px; color: #ffffff; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${params.sentDate || new Date().toLocaleDateString('es-CL')}</td>
+            </tr>
+          </table>
+        </div>
+        
+        <p style="font-size: 13px; color: #71717a; margin: 0 0 24px 0; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+          Si estás viendo este mensaje, tu correo está correctamente vinculado y configurado para recibir confirmaciones de clases, tareas y recibos.
+        </p>
+        
+        <a href="https://khora.cl/login" style="display: inline-block; background: linear-gradient(135deg, #5b4fcf 0%, #3d2fa8 100%); background-color: #5b4fcf; color: #ffffff !important; text-decoration: none; font-size: 14px; font-weight: 800; padding: 14px 32px; border-radius: 100px; box-shadow: 0 4px 15px rgba(91, 79, 207, 0.3); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+          Ingresar a Khora
         </a>
       </div>
     `);
