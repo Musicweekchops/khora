@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/context/AuthContext"
 import { toast } from "sonner"
+import { uploadToStorageWithProgress, formatBytes, formatEta, type UploadProgress } from "@/lib/uploadWithProgress"
 import { 
   Plus, 
   Search, 
@@ -213,72 +214,168 @@ function ImageWithFallback({
 }
 
 // --- AUTOMATIC CLIENT-SIDE PDF FIRST-PAGE RENDERER ---
+// Los PDFs de la biblioteca pueden pesar decenas de MB. Para no saturar la red:
+//  - Se carga pdf.js una sola vez (promesa compartida).
+//  - Solo se renderiza cuando la tarjeta entra en pantalla (IntersectionObserver).
+//  - Máximo 2 renders concurrentes (cola).
+//  - Se cachea la miniatura por URL (la misma portada aparece en varias secciones).
+//  - pdf.js baja por rangos (disableAutoFetch) solo lo necesario para la página 1.
+const PDFJS_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174'
+const PDF_THUMB_TIMEOUT_MS = 20000
+const PDF_THUMB_MAX_CONCURRENT = 2
+
+const pdfThumbCache = new Map<string, string>() // url -> dataURL
+const pdfThumbFailed = new Set<string>()
+const pdfThumbPending = new Map<string, Promise<string>>() // url -> render en curso
+let pdfjsPromise: Promise<any> | null = null
+let pdfThumbActive = 0
+const pdfThumbQueue: Array<() => void> = []
+
+function loadPdfJs(): Promise<any> {
+  if (typeof window === 'undefined') return Promise.reject(new Error('no window'))
+  const existing = (window as any)['pdfjs-dist/build/pdf']
+  if (existing) {
+    existing.GlobalWorkerOptions.workerSrc = `${PDFJS_CDN}/pdf.worker.min.js`
+    return Promise.resolve(existing)
+  }
+  if (!pdfjsPromise) {
+    pdfjsPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script')
+      script.src = `${PDFJS_CDN}/pdf.min.js`
+      script.async = true
+      script.onload = () => {
+        const lib = (window as any)['pdfjs-dist/build/pdf']
+        if (!lib) {
+          pdfjsPromise = null
+          return reject(new Error('pdf.js no disponible'))
+        }
+        lib.GlobalWorkerOptions.workerSrc = `${PDFJS_CDN}/pdf.worker.min.js`
+        resolve(lib)
+      }
+      script.onerror = () => {
+        pdfjsPromise = null
+        reject(new Error('No se pudo cargar pdf.js'))
+      }
+      document.head.appendChild(script)
+    })
+  }
+  return pdfjsPromise
+}
+
+function withPdfThumbSlot<T>(task: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const run = () => {
+      pdfThumbActive++
+      task()
+        .then(resolve, reject)
+        .finally(() => {
+          pdfThumbActive--
+          const next = pdfThumbQueue.shift()
+          if (next) next()
+        })
+    }
+    if (pdfThumbActive < PDF_THUMB_MAX_CONCURRENT) run()
+    else pdfThumbQueue.push(run)
+  })
+}
+
+function renderPdfThumbnail(url: string): Promise<string> {
+  const cached = pdfThumbCache.get(url)
+  if (cached) return Promise.resolve(cached)
+  if (pdfThumbFailed.has(url)) return Promise.reject(new Error('thumbnail failed'))
+  const pending = pdfThumbPending.get(url)
+  if (pending) return pending
+
+  const promise = withPdfThumbSlot(async () => {
+    const pdfjs = await loadPdfJs()
+    const loadingTask = pdfjs.getDocument({
+      url,
+      disableAutoFetch: true, // no descargar el resto del documento
+      rangeChunkSize: 262144, // bloques de 256 KB
+    })
+    const timer = setTimeout(() => loadingTask.destroy(), PDF_THUMB_TIMEOUT_MS)
+    try {
+      const pdf = await loadingTask.promise
+      const page = await pdf.getPage(1)
+      const viewport = page.getViewport({ scale: 0.6 })
+      const canvas = document.createElement('canvas')
+      canvas.width = viewport.width
+      canvas.height = viewport.height
+      const ctx = canvas.getContext('2d')
+      if (!ctx) throw new Error('no canvas context')
+      await page.render({ canvasContext: ctx, viewport }).promise
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
+      pdfThumbCache.set(url, dataUrl)
+      return dataUrl
+    } finally {
+      clearTimeout(timer)
+      loadingTask.destroy() // libera memoria y corta descargas pendientes
+    }
+  })
+    .catch((e) => {
+      pdfThumbFailed.add(url)
+      throw e
+    })
+    .finally(() => {
+      pdfThumbPending.delete(url)
+    })
+
+  pdfThumbPending.set(url, promise)
+  return promise
+}
+
 function PdfThumbnail({ url, fallback }: { url: string; fallback: React.ReactNode }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [loaded, setLoaded] = useState(false)
-  const [error, setError] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [thumb, setThumb] = useState<string | null>(() => pdfThumbCache.get(url) ?? null)
+  const [error, setError] = useState(() => pdfThumbFailed.has(url))
+  const [visible, setVisible] = useState(() => pdfThumbCache.has(url))
+
+  // Solo empezar cuando la tarjeta entra (o está por entrar) en pantalla
+  useEffect(() => {
+    if (visible || error) return
+    const el = containerRef.current
+    if (!el) return
+    if (typeof IntersectionObserver === 'undefined') {
+      setVisible(true)
+      return
+    }
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setVisible(true)
+          obs.disconnect()
+        }
+      },
+      { rootMargin: '200px' }
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [visible, error])
 
   useEffect(() => {
+    if (!visible || thumb || error || !url) return
     let active = true
-    if (!url) return
-
-    async function loadPdf() {
-      try {
-        // Load PDF.js dynamically from CDN if not present in window
-        if (!(window as any)['pdfjs-dist/build/pdf']) {
-          const script = document.createElement('script')
-          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
-          script.async = true
-          document.head.appendChild(script)
-          await new Promise((resolve) => {
-            script.onload = resolve
-          })
-        }
-
-        const pdfjs = (window as any)['pdfjs-dist/build/pdf']
-        pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
-
-        const pdf = await pdfjs.getDocument(url).promise
-        if (!active) return
-
-        const page = await pdf.getPage(1)
-        if (!active) return
-
-        const canvas = canvasRef.current
-        if (!canvas) return
-
-        const context = canvas.getContext('2d')
-        if (!context) return
-
-        // Scale to a lightweight preview resolution
-        const viewport = page.getViewport({ scale: 0.6 })
-        canvas.height = viewport.height
-        canvas.width = viewport.width
-
-        await page.render({
-          canvasContext: context,
-          viewport: viewport
-        }).promise
-
-        if (active) setLoaded(true)
-      } catch (e) {
-        console.error("Error rendering PDF thumbnail:", e)
+    renderPdfThumbnail(url)
+      .then((dataUrl) => {
+        if (active) setThumb(dataUrl)
+      })
+      .catch((e) => {
+        console.error('Error rendering PDF thumbnail:', e)
         if (active) setError(true)
-      }
-    }
-
-    loadPdf()
+      })
     return () => {
       active = false
     }
-  }, [url])
+  }, [visible, thumb, error, url])
 
   if (error) return <>{fallback}</>
 
   return (
-    <div className="w-full h-full relative overflow-hidden bg-neutral-50 flex items-center justify-center">
-      <canvas ref={canvasRef} className="w-full h-full object-cover" style={{ display: loaded ? 'block' : 'none' }} />
-      {!loaded && (
+    <div ref={containerRef} className="w-full h-full relative overflow-hidden bg-neutral-50 flex items-center justify-center">
+      {thumb ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={thumb} alt="Vista previa del PDF" className="w-full h-full object-cover" />
+      ) : (
         <div className="w-full h-full flex items-center justify-center bg-neutral-50 animate-pulse">
           <FileText className="w-6 h-6 text-neutral-400" />
         </div>
@@ -305,6 +402,9 @@ export default function BibliotecaPage() {
   // Form submission states
   const [saving, setSaving] = useState(false)
   const [file, setFile] = useState<File | null>(null)
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null)
+  const [uploadPhase, setUploadPhase] = useState<"idle" | "uploading" | "saving">("idle")
+  const uploadAbortRef = useRef<AbortController | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [form, setForm] = useState({
     title: "",
@@ -467,16 +567,32 @@ export default function BibliotecaPage() {
         const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`
         const path = `${ownerFolder}/${fileName}`
 
-        const { error: uploadError } = await supabase.storage.from('materials').upload(path, file)
-        if (uploadError) {
+        setUploadPhase("uploading")
+        setUploadProgress({ loaded: 0, total: file.size, percent: 0, speed: 0, etaSeconds: null })
+        const controller = new AbortController()
+        uploadAbortRef.current = controller
+
+        try {
+          await uploadToStorageWithProgress({
+            bucket: 'materials',
+            path,
+            file,
+            signal: controller.signal,
+            onProgress: setUploadProgress
+          })
+        } catch (uploadError: any) {
           console.error("Error al subir archivo a Supabase Storage:", uploadError)
-          throw new Error("Fallo al subir archivo: " + uploadError.message)
+          throw new Error(uploadError.message === "Subida cancelada" ? uploadError.message : "Fallo al subir archivo: " + uploadError.message)
+        } finally {
+          uploadAbortRef.current = null
         }
 
         filePath = path
         const { data: { publicUrl } } = supabase.storage.from('materials').getPublicUrl(path)
         finalUrl = publicUrl
       }
+
+      setUploadPhase("saving")
 
       const payload: any = {
         title: form.title.trim(),
@@ -507,9 +623,15 @@ export default function BibliotecaPage() {
       }
     } catch (err: any) {
       console.error("Error general al subir recurso:", err)
-      toast.error("Error al subir el recurso: " + (err.message || err))
+      if (err.message === "Subida cancelada") {
+        toast.info("Subida cancelada")
+      } else {
+        toast.error("Error al subir el recurso: " + (err.message || err))
+      }
     } finally {
       setSaving(false)
+      setUploadPhase("idle")
+      setUploadProgress(null)
     }
   }
 
@@ -872,9 +994,50 @@ export default function BibliotecaPage() {
                   </div>
                 </div>
               </div>
+              {saving && uploadPhase !== "idle" && file && (
+                <div className="space-y-2 bg-neutral-50 border border-neutral-200 rounded-2xl p-4" role="status" aria-live="polite">
+                  <div className="flex items-center justify-between gap-3 text-xs font-bold text-neutral-700">
+                    <span className="truncate">
+                      {uploadPhase === "uploading" ? `Subiendo ${file.name}` : "Guardando en la biblioteca..."}
+                    </span>
+                    <span className="tabular-nums shrink-0">
+                      {uploadPhase === "uploading" ? `${uploadProgress?.percent ?? 0}%` : "100%"}
+                    </span>
+                  </div>
+                  <div
+                    className="h-2.5 w-full bg-neutral-200 rounded-full overflow-hidden"
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={uploadPhase === "uploading" ? (uploadProgress?.percent ?? 0) : 100}
+                  >
+                    <div
+                      className={`h-full rounded-full bg-gradient-to-r from-violet-500 to-indigo-500 transition-all duration-300 ${uploadPhase === "saving" ? "animate-pulse" : ""}`}
+                      style={{ width: `${uploadPhase === "uploading" ? (uploadProgress?.percent ?? 0) : 100}%` }}
+                    />
+                  </div>
+                  {uploadPhase === "uploading" && uploadProgress && (
+                    <p className="text-[11px] font-semibold text-neutral-500 tabular-nums">
+                      {formatBytes(uploadProgress.loaded)} de {formatBytes(uploadProgress.total)}
+                      {uploadProgress.speed > 0 && ` · ${formatBytes(uploadProgress.speed)}/s`}
+                      {` · faltan ${formatEta(uploadProgress.etaSeconds)}`}
+                    </p>
+                  )}
+                </div>
+              )}
               <div className="flex justify-end gap-2 pt-4 border-t border-neutral-100">
-                <button type="button" onClick={() => setShowForm(false)} className="px-5 py-2 bg-neutral-100 text-neutral-600 hover:bg-neutral-200 rounded-xl text-xs font-bold transition-all">Cancelar</button>
-                <button type="submit" disabled={saving} className="px-7 py-2 bg-neutral-900 hover:bg-neutral-800 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-sm transition-all">{saving ? "Guardando..." : "Subir Recurso"}</button>
+                <button
+                  type="button"
+                  disabled={saving && uploadPhase === "saving"}
+                  onClick={() => {
+                    if (saving && uploadAbortRef.current) uploadAbortRef.current.abort()
+                    else setShowForm(false)
+                  }}
+                  className="px-5 py-2 bg-neutral-100 text-neutral-600 hover:bg-neutral-200 disabled:opacity-50 rounded-xl text-xs font-bold transition-all"
+                >
+                  {saving && uploadPhase === "uploading" ? "Cancelar subida" : "Cancelar"}
+                </button>
+                <button type="submit" disabled={saving} className="px-7 py-2 bg-neutral-900 hover:bg-neutral-800 disabled:opacity-60 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-sm transition-all">{saving ? (uploadPhase === "uploading" ? `Subiendo ${uploadProgress?.percent ?? 0}%` : "Guardando...") : "Subir Recurso"}</button>
               </div>
             </form>
           )}
