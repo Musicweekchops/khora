@@ -40,7 +40,7 @@ export default function ClasesPage() {
     setLoading(true)
     const { data, error } = await supabase
       .from("Class")
-      .select(`id, date, start_time, end_time, status, modalidad, is_recovery_pending, is_recovery, original_class_date, student_id, StudentProfile(User(name))`)
+      .select(`id, date, start_time, end_time, status, modalidad, is_recovery_pending, is_recovery, original_class_date, is_special, special_note, student_id, StudentProfile(User(name))`)
       .eq("teacher_id", teacherId)
       .order("date", { ascending: true })
       .limit(100)
@@ -79,7 +79,7 @@ export default function ClasesPage() {
     setLoading(true)
     const { data, error } = await supabase
       .from("Class")
-      .select(`id, date, start_time, end_time, status, modalidad, is_recovery_pending, is_recovery, original_class_date, student_id, TeacherProfile(User(name))`)
+      .select(`id, date, start_time, end_time, status, modalidad, is_recovery_pending, is_recovery, original_class_date, is_special, special_note, student_id, TeacherProfile(User(name))`)
       .eq("student_id", studentId)
       .order("date", { ascending: true })
       .limit(100)

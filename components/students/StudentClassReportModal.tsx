@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { formatCurrency, formatDate } from "@/lib/utils"
-import { calculateClassCounters, formatSpanishShortDate } from "@/lib/classCounter"
+import { calculateClassCounters, formatSpanishShortDate, getClassUnits, getClassDurationMinutes } from "@/lib/classCounter"
 import { toast } from "sonner"
 import { 
   X, 
@@ -150,7 +150,11 @@ export default function StudentClassReportModal({
   const recoveryPendingClasses = filteredClasses.filter(c => c.is_recovery_pending)
   const recoveryTakenClasses = filteredClasses.filter(c => c.is_recovery || c.original_class_date)
 
-  const classesUsedCount = completedClasses.length + scheduledClasses.length
+  // Unidades reales ponderadas (cada hora cuenta como 1 clase; bloques dobles = 2 clases)
+  const completedClassesUnits = completedClasses.reduce((acc, c) => acc + getClassUnits(c), 0)
+  const scheduledClassesUnits = scheduledClasses.reduce((acc, c) => acc + getClassUnits(c), 0)
+
+  const classesUsedCount = completedClassesUnits + scheduledClassesUnits
   const balanceClasses = totalClassesPaid - classesUsedCount
 
   const getBalanceStatus = () => {
@@ -177,8 +181,8 @@ export default function StudentClassReportModal({
     text += `💵 *RESUMEN DEL PERÍODO:*
 • Total Abonado: ${formatCurrency(totalPaidAmount)} CLP
 • Clases Pagadas/Cubiertas: ${totalClassesPaid} clases
-• Clases Realizadas: ${completedClasses.length}
-• Clases Programadas: ${scheduledClasses.length}
+• Clases Realizadas: ${completedClassesUnits} clases${completedClasses.length !== completedClassesUnits ? ` (${completedClasses.length} sesiones)` : ''}
+• Clases Programadas: ${scheduledClassesUnits} clases
 • Clases Pendientes por Recuperar: ${recoveryPendingClasses.length}
 📌 *BALANCE:* ${balanceBadge.label}\n\n`
 
@@ -338,8 +342,10 @@ export default function StudentClassReportModal({
                 <span className="text-xs font-medium">Realizadas</span>
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 print:text-emerald-700" />
               </div>
-              <p className="text-lg font-bold text-emerald-400 print:text-emerald-700">{completedClasses.length}</p>
-              <span className="text-[10px] text-zinc-500 print:text-gray-500">Clases impartidas</span>
+              <p className="text-lg font-bold text-emerald-400 print:text-emerald-700">{completedClassesUnits}</p>
+              <span className="text-[10px] text-zinc-500 print:text-gray-500">
+                {completedClasses.length !== completedClassesUnits ? `${completedClasses.length} sesiones (${completedClassesUnits} hrs)` : "Clases impartidas"}
+              </span>
             </div>
 
             <div className="bg-zinc-950/60 print:bg-gray-100 border border-zinc-800 print:border-gray-300 rounded-xl p-3">
@@ -347,8 +353,10 @@ export default function StudentClassReportModal({
                 <span className="text-xs font-medium">Programadas</span>
                 <Clock className="w-4 h-4 text-blue-400 print:text-blue-700" />
               </div>
-              <p className="text-lg font-bold text-blue-400 print:text-blue-700">{scheduledClasses.length}</p>
-              <span className="text-[10px] text-zinc-500 print:text-gray-500">Horario agendado</span>
+              <p className="text-lg font-bold text-blue-400 print:text-blue-700">{scheduledClassesUnits}</p>
+              <span className="text-[10px] text-zinc-500 print:text-gray-500">
+                {scheduledClasses.length !== scheduledClassesUnits ? `${scheduledClasses.length} sesiones (${scheduledClassesUnits} hrs)` : "Horario agendado"}
+              </span>
             </div>
 
             <div className="bg-zinc-950/60 print:bg-gray-100 border border-zinc-800 print:border-gray-300 rounded-xl p-3">
@@ -460,10 +468,14 @@ export default function StudentClassReportModal({
                             )}
                           </td>
                           <td className="p-3">
-                            {isRecovery ? (
+                            {enriched?.isSpecial ? (
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-violet-500/15 text-violet-300 print:bg-transparent print:text-black border border-violet-500/30 print:border-none">
+                                ⭐ {enriched.specialLabel || "Clase Especial"}
+                              </span>
+                            ) : isRecovery ? (
                               <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-500/15 text-amber-300 print:bg-transparent print:text-black border border-amber-500/30 print:border-none">
                                 <RefreshCw className="w-3 h-3 text-amber-400 print:text-black shrink-0" />
-                                Recuperación del día {formatSpanishShortDate(c.original_class_date)}
+                                {enriched?.recoveryLabel || `Recuperación del día ${formatSpanishShortDate(c.original_class_date)}`}
                               </span>
                             ) : c.is_recovery_pending ? (
                               <span className="text-amber-400 text-[11px] font-medium">⚠️ Pendiente por recuperar</span>

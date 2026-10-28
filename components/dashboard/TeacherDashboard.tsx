@@ -50,13 +50,13 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
 
       const [students, todayCl, bookings, payments, availCheck, classTypesCheck, teacherProf, monthClassesReq] = await Promise.all([
         supabase.from("StudentProfile").select("id", { count: "exact", head: true }).eq("teacher_id", teacherId),
-        supabase.from("Class").select("id, start_time, end_time, status, modalidad, is_recovery_pending, is_recovery, original_class_date, StudentProfile ( User ( name ) )").eq("teacher_id", teacherId).eq("date", today).neq("status", "CANCELLED").order("start_time"),
+        supabase.from("Class").select("id, start_time, end_time, status, modalidad, is_recovery_pending, is_recovery, original_class_date, is_special, special_note, StudentProfile ( User ( name ) )").eq("teacher_id", teacherId).eq("date", today).neq("status", "CANCELLED").order("start_time"),
         supabase.from("Booking").select("id, date").eq("teacher_id", teacherId).eq("status", "PENDING").order("date", { ascending: true }),
         supabase.from("Payment").select("amount").eq("teacher_id", teacherId).gte("date", startOfMonth),
         supabase.from("Availability").select("id", { count: "exact", head: true }).eq("teacher_id", teacherId),
         supabase.from("ClassType").select("id", { count: "exact", head: true }).eq("teacher_id", teacherId),
         supabase.from("TeacherProfile").select("slug").eq("id", teacherId).maybeSingle(),
-        supabase.from("Class").select("id, student_id, date, start_time, status, is_recovery, original_class_date, is_recovery_pending").eq("teacher_id", teacherId).gte("date", startOfMonth).lte("date", endOfMonth)
+        supabase.from("Class").select("id, student_id, date, start_time, end_time, status, is_recovery, original_class_date, is_recovery_pending, is_special, special_note").eq("teacher_id", teacherId).gte("date", startOfMonth).lte("date", endOfMonth)
       ])
 
       setStats({

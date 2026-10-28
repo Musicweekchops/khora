@@ -17,7 +17,7 @@ import TeacherSendVideoModal from "@/components/students/TeacherSendVideoModal"
 import StudentTestEmailModal from "@/components/students/StudentTestEmailModal"
 
 import StudentClassReportModal from "@/components/students/StudentClassReportModal"
-import { calculateClassCounters, formatSpanishShortDate } from "@/lib/classCounter"
+import { calculateClassCounters, formatSpanishShortDate, getClassUnits } from "@/lib/classCounter"
 import { logClassEvent } from "@/lib/classLogger"
 
 interface StudentData {
@@ -32,11 +32,14 @@ interface ClassRow {
   date: string; 
   start_time: string; 
   end_time: string; 
+  duration?: number;
   status: string; 
   modalidad: string; 
   is_recovery_pending?: boolean;
   is_recovery?: boolean;
   original_class_date?: string | null;
+  is_special?: boolean;
+  special_note?: string | null;
 }
 interface TaskRow { 
   id: string; 
@@ -166,7 +169,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
     // Classes
     const { data: cl } = await supabase
       .from("Class")
-      .select("id, date, start_time, end_time, status, modalidad, is_recovery_pending, is_recovery, original_class_date")
+      .select("id, date, start_time, end_time, duration, status, modalidad, is_recovery_pending, is_recovery, original_class_date, is_special, special_note")
       .eq("student_id", studentId)
       .order("date", { ascending: false })
 
@@ -581,7 +584,7 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
   const sc = statusConfig[student.status] ?? statusConfig.PROSPECT
 
   const daysSinceJoined = Math.floor((Date.now() - new Date(student.created_at).getTime()) / (1000 * 60 * 60 * 24))
-  const completedClasses = classes.filter(c => c.status === "COMPLETED").length
+  const completedClasses = classes.filter(c => c.status === "COMPLETED").reduce((acc, c) => acc + getClassUnits(c), 0)
   const completedTasks = tasks.filter(t => t.completed).length
   const totalPaid = payments.reduce((s, p) => s + p.amount, 0)
 
@@ -591,8 +594,8 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
   const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0)
   const thisMonthEndStr = `${thisMonthEnd.getFullYear()}-${String(thisMonthEnd.getMonth() + 1).padStart(2, "0")}-${String(thisMonthEnd.getDate()).padStart(2, "0")}`
   const monthClasses = classes.filter(c => c.date >= thisMonthStart && c.date <= thisMonthEndStr)
-  const monthCompleted = monthClasses.filter(c => c.status === "COMPLETED").length
-  const monthTotal = monthClasses.length
+  const monthCompleted = monthClasses.filter(c => c.status === "COMPLETED").reduce((acc, c) => acc + getClassUnits(c), 0)
+  const monthTotal = monthClasses.reduce((acc, c) => acc + (c.status === "CANCELLED" ? 0 : getClassUnits(c)), 0)
 
   const tabs = [
     { key: "overview", label: "Resumen", icon: "📊" },
@@ -881,9 +884,18 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
                           />
                         </td>
                         <td className="px-6 py-4 font-black text-violet-600">
-                          <span className="px-2.5 py-1 rounded-xl bg-violet-50 border border-violet-100 text-xs font-black">
+                          <span className={`px-2.5 py-1 rounded-xl text-xs font-black ${
+                            enriched?.isSpecial
+                              ? "bg-purple-100 text-purple-900 border border-purple-200"
+                              : "bg-violet-50 border border-violet-100"
+                          }`}>
                             {counter}
                           </span>
+                          {enriched?.durationMinutes && enriched.durationMinutes >= 90 && !enriched.isSpecial && (
+                            <span className="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-bold tracking-tight">
+                              2 hrs
+                            </span>
+                          )}
                         </td>
                         <td className="px-6 py-4 font-bold text-neutral-900 flex flex-col justify-center">
                           <span>{new Date(c.date + "T12:00").toLocaleDateString("es-CL", { weekday: "short", day: "numeric", month: "short" })}</span>

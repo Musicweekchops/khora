@@ -179,7 +179,7 @@ export default function AgendaPage() {
       // Load actual classes
       const { data: classData, error: classErr } = await supabase
         .from("Class")
-        .select("id, date, start_time, end_time, status, modalidad, title, is_recurring, booking_id, is_recovery_pending, is_recovery, original_class_date, student_id, StudentProfile ( status, User ( name ) )")
+        .select("id, date, start_time, end_time, status, modalidad, title, is_recurring, booking_id, is_recovery_pending, is_recovery, original_class_date, is_special, special_note, student_id, StudentProfile ( status, User ( name ) )")
         .eq("teacher_id", profile!.teacherProfileId!)
         .gte("date", start)
         .lte("date", end)

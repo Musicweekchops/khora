@@ -27,7 +27,10 @@ import {
   FileText,
   PlayCircle,
   BookOpen,
-  Forward
+  Forward,
+  Star,
+  Sparkles,
+  RefreshCw
 } from "lucide-react"
 import VideoPlayer from "@/components/ui/VideoPlayer"
 import { useToast } from "@/components/ui/Toast"
@@ -35,7 +38,7 @@ import LibraryPickerModal from "@/components/ui/LibraryPickerModal"
 import TeacherSendVideoModal from "@/components/students/TeacherSendVideoModal"
 import { checkTeacherConflict, getAvailableSlots, addMinutes } from "@/lib/availability"
 import { logClassEvent } from "@/lib/classLogger"
-import { calculateClassCounters, formatSpanishShortDate } from "@/lib/classCounter"
+import { calculateClassCounters, formatSpanishShortDate, getClassDurationMinutes, getClassUnits } from "@/lib/classCounter"
 
 interface ClassData {
   id: string; date: string; start_time: string; end_time: string
@@ -47,9 +50,13 @@ interface ClassData {
   teacher_user_id?: string | null
   preferred_day?: string | null
   is_recovery_pending?: boolean
+  is_recovery?: boolean
   counterLabel?: string
   isRecovery?: boolean
   recoveryLabel?: string
+  is_special?: boolean
+  special_note?: string | null
+  original_class_date?: string | null
 }
 interface Note { 
   id: string; content: string; created_at: string; content_id?: string | null; playlist_id?: string | null;
@@ -136,6 +143,13 @@ export default function ClassDetailView({ classId }: { classId: string }) {
   const [confirmedBy, setConfirmedBy] = useState<'student' | 'teacher'>('student')
   const [showClassVideoModal, setShowClassVideoModal] = useState(false)
 
+  // Clases especiales y recuperaciones
+  const [pendingRecoveries, setPendingRecoveries] = useState<any[]>([])
+  const [showSpecialModal, setShowSpecialModal] = useState(false)
+  const [specialNoteInput, setSpecialNoteInput] = useState("")
+  const [savingSpecial, setSavingSpecial] = useState(false)
+  const [linkingRecovery, setLinkingRecovery] = useState(false)
+
   async function handleStudentConfirmAttendance() {
     setConfirmingAttendance(true)
     setConfirmedBy('student')
@@ -211,6 +225,102 @@ export default function ClassDetailView({ classId }: { classId: string }) {
     }
   }
 
+  async function handleSaveSpecial(isSpecial: boolean, note: string) {
+    if (!cls) return
+    setSavingSpecial(true)
+    try {
+      const { error } = await supabase
+        .from("Class")
+        .update({ is_special: isSpecial, special_note: isSpecial ? (note || "Clase Especial") : null })
+        .eq("id", classId)
+      if (error) throw error
+
+      if (cls.student_id) {
+        await logClassEvent({
+          student_id: cls.student_id,
+          class_id: classId,
+          teacher_id: cls.teacher_id,
+          action_type: "STATUS_CHANGED",
+          description: isSpecial ? `Clase marcada como especial: ${note || "Sin detalle"}` : "Marca de clase especial removida"
+        })
+      }
+
+      toast(isSpecial ? "Clase marcada como especial" : "Marca especial removida", "success")
+      setShowSpecialModal(false)
+      await loadAll()
+    } catch (err: any) {
+      toast("Error al actualizar clase especial: " + err.message, "error")
+    } finally {
+      setSavingSpecial(false)
+    }
+  }
+
+  async function handleLinkRecovery(pendingClassId: string, pendingDate: string) {
+    if (!cls) return
+    setLinkingRecovery(true)
+    try {
+      // 1. Marcar clase actual como recuperación de esa fecha
+      const { error: currErr } = await supabase
+        .from("Class")
+        .update({ is_recovery: true, original_class_date: pendingDate })
+        .eq("id", classId)
+      if (currErr) throw currErr
+
+      // 2. Marcar clase previa como ya no pendiente por recuperar
+      const { error: pendErr } = await supabase
+        .from("Class")
+        .update({ is_recovery_pending: false })
+        .eq("id", pendingClassId)
+      if (pendErr) throw pendErr
+
+      if (cls.student_id) {
+        await logClassEvent({
+          student_id: cls.student_id,
+          class_id: classId,
+          teacher_id: cls.teacher_id,
+          action_type: "RECOVERY_SCHEDULED",
+          description: `Clase vinculada como recuperación de la fecha ${pendingDate}`
+        })
+      }
+
+      toast(`¡Recuperación del día ${formatSpanishShortDate(pendingDate)} vinculada con éxito!`, "success")
+      await loadAll()
+    } catch (err: any) {
+      toast("Error al vincular recuperación: " + err.message, "error")
+    } finally {
+      setLinkingRecovery(false)
+    }
+  }
+
+  async function handleUnlinkRecovery() {
+    if (!cls) return
+    setLinkingRecovery(true)
+    try {
+      const prevDate = cls.original_class_date
+
+      const { error } = await supabase
+        .from("Class")
+        .update({ is_recovery: false, original_class_date: null })
+        .eq("id", classId)
+      if (error) throw error
+
+      if (prevDate && cls.student_id) {
+        await supabase
+          .from("Class")
+          .update({ is_recovery_pending: true })
+          .eq("student_id", cls.student_id)
+          .eq("date", prevDate)
+      }
+
+      toast("Vinculación de recuperación eliminada", "success")
+      await loadAll()
+    } catch (err: any) {
+      toast("Error al desvincular recuperación: " + err.message, "error")
+    } finally {
+      setLinkingRecovery(false)
+    }
+  }
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search)
@@ -266,7 +376,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
     try {
       const { data: c } = await supabase
         .from("Class")
-        .select("id, date, start_time, end_time, status, modalidad, duration, student_id, teacher_id, schedule_id, is_recurring, is_recovery_pending, StudentProfile ( id, preferred_day, user_id, User ( name, email ) ), TeacherProfile ( user_id, User ( name, email ) )")
+        .select("id, date, start_time, end_time, status, modalidad, duration, student_id, teacher_id, schedule_id, is_recurring, is_recovery_pending, is_recovery, original_class_date, is_special, special_note, StudentProfile ( id, preferred_day, user_id, User ( name, email ) ), TeacherProfile ( user_id, User ( name, email ) )")
         .eq("id", classId).maybeSingle()
 
       if (c) {
@@ -281,7 +391,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
 
           const { data: monthClassesReq } = await supabase
              .from("Class")
-             .select("id, student_id, date, start_time, status, is_recovery, original_class_date, is_recovery_pending")
+             .select("id, student_id, date, start_time, end_time, duration, status, is_recovery, original_class_date, is_recovery_pending, is_special, special_note")
              .eq("student_id", c.student_id)
              .gte("date", startOfMonth)
              .lte("date", endOfMonth)
@@ -295,11 +405,21 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                recoveryLabel = enriched.recoveryLabel || ""
             }
           }
+
+          // Cargar clases pendientes por recuperar de este alumno
+          const { data: recs } = await supabase
+            .from("Class")
+            .select("id, date, start_time, end_time, is_recovery_pending")
+            .eq("student_id", c.student_id)
+            .eq("is_recovery_pending", true)
+            .neq("id", classId)
+            .order("date", { ascending: false })
+          setPendingRecoveries(recs || [])
         }
 
         const classData: ClassData = {
           id: c.id, date: c.date, start_time: c.start_time, end_time: c.end_time,
-          status: c.status, modalidad: c.modalidad, duration: c.duration ?? 60,
+          status: c.status, modalidad: c.modalidad, duration: getClassDurationMinutes(c),
           student_name: (c as any).StudentProfile?.User?.name ?? "Sin asignar",
           student_email: (c as any).StudentProfile?.User?.email,
           student_id: c.student_id, teacher_id: c.teacher_id,
@@ -310,6 +430,10 @@ export default function ClassDetailView({ classId }: { classId: string }) {
           teacher_user_id: (c as any).TeacherProfile?.user_id,
           preferred_day: (c as any).StudentProfile?.preferred_day ?? null,
           is_recovery_pending: (c as any).is_recovery_pending ?? false,
+          is_recovery: (c as any).is_recovery ?? false,
+          original_class_date: (c as any).original_class_date ?? null,
+          is_special: (c as any).is_special ?? false,
+          special_note: (c as any).special_note ?? null,
           counterLabel, isRecovery, recoveryLabel
         }
         setCls(classData)
@@ -1794,6 +1918,24 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                   </button>
                 )}
 
+                {profile?.role === "TEACHER" && (
+                  <button
+                    onClick={() => {
+                      setSpecialNoteInput(cls.special_note || "")
+                      setShowSpecialModal(true)
+                    }}
+                    className={`px-3 py-2 md:px-4 md:py-2.5 rounded-xl md:rounded-2xl text-[9px] md:text-xs font-black uppercase tracking-wider border transition-all flex items-center gap-1.5 ${
+                      cls.is_special
+                        ? "bg-purple-100 text-purple-900 border-purple-300 hover:bg-purple-200 shadow-xs"
+                        : "bg-neutral-100 text-neutral-600 border-neutral-200 hover:bg-neutral-200"
+                    }`}
+                    title="Anotar como clase especial (ej. masterclass, preparación concierto o ensayo)"
+                  >
+                    <Star className={`w-3.5 h-3.5 ${cls.is_special ? "fill-purple-600 text-purple-600" : "text-neutral-400"}`} />
+                    {cls.is_special ? "Especial" : "Marcar Especial"}
+                  </button>
+                )}
+
                 {profile?.role === "TEACHER" && cls?.student_id && (
                   <button
                     onClick={() => setShowClassVideoModal(true)}
@@ -1854,6 +1996,73 @@ export default function ClassDetailView({ classId }: { classId: string }) {
           </div>
         )}
       </div>
+
+      {/* BANNER CLASE DOBLE (2 HORAS) O ESPECIAL */}
+      {cls && (cls.duration >= 90 || cls.is_special || cls.isRecovery || pendingRecoveries.length > 0) && profile?.role === "TEACHER" && (
+        <div className="bg-gradient-to-r from-purple-50 via-indigo-50 to-blue-50 border border-indigo-100 rounded-3xl p-5 md:p-6 shadow-sm space-y-3">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-white border border-indigo-100 flex items-center justify-center text-xl shadow-xs shrink-0">
+                {cls.is_special ? "⭐" : cls.isRecovery ? "🔄" : "⏱️"}
+              </div>
+              <div>
+                <h4 className="font-black text-sm md:text-base text-neutral-900 flex items-center gap-2 flex-wrap">
+                  {cls.is_special ? (
+                    <>Clase Especial Anotada <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">{cls.special_note || "Sin detalle"}</span></>
+                  ) : cls.isRecovery ? (
+                    <>Clase de Recuperación Vinculada <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">Rec. del {formatSpanishShortDate(cls.original_class_date)}</span></>
+                  ) : cls.duration >= 90 ? (
+                    <>Sesión Doble ({cls.duration} min) <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">Cada hora cuenta como 1 clase</span></>
+                  ) : (
+                    <>Gestión de Sesión</>
+                  )}
+                </h4>
+                <p className="text-xs text-neutral-500 mt-1">
+                  {cls.is_special
+                    ? "Esta sesión está catalogada como especial por el profesor y se destaca en el historial del alumno."
+                    : cls.isRecovery
+                    ? "Esta sesión absorbe la recuperación pendiente del alumno sin generar descuadre en los reportes de pago."
+                    : cls.duration >= 90
+                    ? "Esta clase de 2 horas avanza automáticamente 2 posiciones en el contador del plan del alumno."
+                    : ""}
+                </p>
+              </div>
+            </div>
+
+            {/* Acciones contextuales */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {cls.isRecovery ? (
+                <button
+                  onClick={handleUnlinkRecovery}
+                  disabled={linkingRecovery}
+                  className="px-3.5 py-2 text-xs font-bold text-neutral-600 bg-white hover:bg-neutral-100 rounded-xl border border-neutral-200 transition-all shadow-xs"
+                >
+                  Desvincular Recuperación
+                </button>
+              ) : pendingRecoveries.length > 0 && cls.duration >= 90 ? (
+                <button
+                  onClick={() => handleLinkRecovery(pendingRecoveries[0].id, pendingRecoveries[0].date)}
+                  disabled={linkingRecovery}
+                  className="px-4 py-2 text-xs font-black text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md shadow-indigo-950/20 transition-all flex items-center gap-1.5"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Saldar pendiente del {formatSpanishShortDate(pendingRecoveries[0].date)}
+                </button>
+              ) : null}
+
+              <button
+                onClick={() => {
+                  setSpecialNoteInput(cls.special_note || "")
+                  setShowSpecialModal(true)
+                }}
+                className="px-3.5 py-2 text-xs font-bold text-purple-700 bg-white hover:bg-purple-50 rounded-xl border border-purple-200 transition-all shadow-xs"
+              >
+                {cls.is_special ? "Editar Nota Especial" : "⭐ Anotar como Especial"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* CONTENT: Notes & Tasks */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -2502,6 +2711,72 @@ export default function ClassDetailView({ classId }: { classId: string }) {
                 {isLessThan24Hours(cls.date, cls.start_time) 
                   ? "Confirmar Cancelación Tardía" 
                   : "Sí, cancelar clase"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Anotar Clase Especial */}
+      {showSpecialModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-neutral-950/70 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 md:p-8 shadow-2xl border border-neutral-100 space-y-6 relative animate-in zoom-in-95 duration-200 font-sans">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center text-2xl shadow-xs">
+                  ⭐
+                </div>
+                <div>
+                  <h3 className="font-black text-lg text-neutral-900">Anotar Clase Especial</h3>
+                  <p className="text-xs text-neutral-400 font-medium">Define si esta sesión es una clase especial o intensiva</p>
+                </div>
+              </div>
+              <button onClick={() => setShowSpecialModal(false)} className="text-neutral-400 hover:text-neutral-600 font-bold p-1">✕</button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-neutral-500 uppercase tracking-widest mb-1.5">
+                  Motivo o Detalle de la Clase Especial
+                </label>
+                <input
+                  type="text"
+                  value={specialNoteInput}
+                  onChange={e => setSpecialNoteInput(e.target.value)}
+                  placeholder="Ej: Preparación concierto, Masterclass, Ensayo..."
+                  className="input-field w-full text-sm"
+                  maxLength={60}
+                  autoFocus
+                />
+                <p className="text-[11px] text-neutral-400 mt-1">Este detalle se mostrará visiblemente en la agenda y reportes del alumno.</p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              {cls?.is_special && (
+                <button
+                  type="button"
+                  disabled={savingSpecial}
+                  onClick={() => handleSaveSpecial(false, "")}
+                  className="px-4 py-2.5 rounded-xl border border-red-200 text-red-600 font-bold text-xs hover:bg-red-50 transition-all mr-auto"
+                >
+                  Quitar Especial
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowSpecialModal(false)}
+                className="px-4 py-2.5 rounded-xl border border-neutral-200 text-neutral-600 font-bold text-xs hover:bg-neutral-50 transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={savingSpecial}
+                onClick={() => handleSaveSpecial(true, specialNoteInput)}
+                className="px-6 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-md shadow-purple-950/20 transition-all"
+              >
+                {savingSpecial ? "Guardando..." : "✓ Guardar Especial"}
               </button>
             </div>
           </div>
