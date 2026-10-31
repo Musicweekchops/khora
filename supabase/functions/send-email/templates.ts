@@ -1,4 +1,4 @@
-export type EmailType = 'WELCOME' | 'CLASS_CONFIRMATION' | 'CLASS_REMINDER' | 'TEACHER_CLASS_CONFIRMED' | 'TEACHER_NEW_STUDENT' | 'PAYMENT_CONFIRMATION' | 'STUDENT_CLASS_CONFIRMED' | 'TEACHER_CLASS_RESCHEDULED' | 'STUDENT_CLASS_CANCELLED' | 'TEACHER_NEW_BOOKING' | 'STUDENT_BOOKING_REJECTED' | 'STUDENT_CLASS_RESCHEDULED' | 'STUDENT_BOOKING_REQUEST' | 'STUDENT_CLASS_DELETED' | 'TEACHER_CLASS_CANCELLED' | 'TEST_EMAIL';
+export type EmailType = 'WELCOME' | 'CLASS_CONFIRMATION' | 'CLASS_REMINDER' | 'TEACHER_CLASS_CONFIRMED' | 'TEACHER_NEW_STUDENT' | 'PAYMENT_CONFIRMATION' | 'STUDENT_CLASS_CONFIRMED' | 'TEACHER_CLASS_RESCHEDULED' | 'STUDENT_CLASS_CANCELLED' | 'TEACHER_NEW_BOOKING' | 'STUDENT_BOOKING_REJECTED' | 'STUDENT_CLASS_RESCHEDULED' | 'STUDENT_BOOKING_REQUEST' | 'STUDENT_CLASS_DELETED' | 'TEACHER_CLASS_CANCELLED' | 'TEST_EMAIL' | 'NURTURE_STEP';
 
 
 interface TemplateParams {
@@ -842,6 +842,92 @@ export function getTemplate(type: EmailType, params: TemplateParams): string {
         </a>
       </div>
     `);
+  }
+
+  if (type === 'NURTURE_STEP') {
+    const studentName = params.studentName || 'Alumno';
+    const content = params.content || '';
+    const libraryTitle = params.libraryTitle;
+    const libraryType = params.libraryType;
+
+    let libraryHtml = '';
+    if (libraryTitle) {
+      libraryHtml = `
+        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 16px; padding: 20px; margin: 24px 0; text-align: left;">
+          <div style="font-size: 11px; font-weight: 800; color: #7c3aed; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">
+            ${libraryType === "video" ? "📹 VIDEO DE PRÁCTICA" : "📄 PARTITURA / PDF"}
+          </div>
+          <h4 style="font-size: 15px; font-weight: 800; color: #0f172a; margin: 0 0 12px 0;">
+            ${libraryTitle}
+          </h4>
+          <a href="https://khora.cl/login" style="display: inline-block; background-color: #7c3aed; color: #ffffff !important; text-decoration: none; font-size: 13px; font-weight: 700; padding: 10px 22px; border-radius: 10px; box-shadow: 0 2px 8px rgba(124, 58, 237, 0.25);">
+            Ver Material en Khora
+          </a>
+        </div>
+      `;
+    }
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Khora</title>
+      </head>
+      <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; -webkit-font-smoothing: antialiased;">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f8fafc; padding: 36px 12px; width: 100%;">
+          <tr>
+            <td align="center">
+              <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 540px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.04);">
+                <tr>
+                  <td>
+                    <!-- HEADER -->
+                    <div style="text-align: center; padding: 28px 0 20px 0; border-bottom: 1px solid #f1f5f9;">
+                      <h1 style="margin: 0; font-size: 24px; font-weight: 900; color: #0f172a; letter-spacing: -0.5px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                        Khora<span style="color: #7c3aed;">.</span>
+                      </h1>
+                    </div>
+                    
+                    <!-- CONTENT -->
+                    <div style="padding: 32px 32px 24px 32px; font-size: 15px; color: #334155; line-height: 1.65;">
+                      <p style="font-size: 16px; color: #0f172a; font-weight: 700; margin: 0 0 16px 0;">
+                        ¡Hola ${studentName}!
+                      </p>
+                      <div style="color: #334155; line-height: 1.7;">
+                        ${content}
+                      </div>
+                      ${libraryHtml}
+                      <div style="margin-top: 32px; padding-top: 20px; border-top: 1px solid #f1f5f9; font-size: 14px; color: #64748b;">
+                        <p style="margin: 0;">Un abrazo,<br><strong style="color: #0f172a;">Arnaldo Allende</strong></p>
+                      </div>
+                    </div>
+                    
+                    <!-- FOOTER -->
+                    <div style="padding: 24px 32px; text-align: center; background-color: #f8fafc; border-top: 1px solid #e2e8f0;">
+                      <p style="font-size: 11px; color: #64748b; margin: 0 0 8px 0; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                        Recibes este correo porque eres alumno o tienes una cuenta en Khora.
+                      </p>
+                      <p style="font-size: 11px; color: #64748b; margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                        <a href="https://khora.cl/terminos" style="color: #7c3aed; text-decoration: underline;">Términos</a>
+                        &nbsp;•&nbsp;
+                        <a href="https://khora.cl/privacidad" style="color: #7c3aed; text-decoration: underline;">Privacidad</a>
+                        &nbsp;•&nbsp;
+                        <a href="mailto:hola@khora.cl" style="color: #7c3aed; text-decoration: underline;">Contacto</a>
+                      </p>
+                      <p style="font-size: 11px; color: #94a3b8; margin: 12px 0 0 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                        © 2026 Khora • Arnaldo Allende.
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
+    `;
   }
 
   return '';

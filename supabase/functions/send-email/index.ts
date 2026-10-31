@@ -115,20 +115,20 @@ serve(async (req) => {
   }
 
   try {
-    const { to, type, params, subject } = await req.json()
+    const { to, type, params, subject, customHtml, html } = await req.json()
 
-    if (!to || !type || !params) {
+    if (!to || (!type && !customHtml && !html)) {
       return new Response(
-        JSON.stringify({ error: "Missing required fields: to, type, params" }),
+        JSON.stringify({ error: "Missing required fields: to, and either type or customHtml" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
       )
     }
 
-    const htmlContent = getTemplate(type as EmailType, params)
+    const htmlContent = customHtml || html || (type ? getTemplate(type as EmailType, params || {}) : null)
 
     if (!htmlContent) {
       return new Response(
-        JSON.stringify({ error: "Invalid email type" }),
+        JSON.stringify({ error: "Invalid email type or empty html" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
       )
     }
