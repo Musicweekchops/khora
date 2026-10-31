@@ -456,7 +456,7 @@ export default function FunnelPage() {
         body: {
           to: profile.email,
           subject: cleanSubject,
-          type: "TEST_EMAIL",
+          type: "NURTURE_STEP",
           customHtml: fullWhiteHtml,
           html: fullWhiteHtml,
           params: {
