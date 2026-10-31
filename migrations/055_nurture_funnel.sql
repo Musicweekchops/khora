@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS public."NurtureStep" (
   delay_days INTEGER NOT NULL DEFAULT 7,
   target_audiences TEXT[] NOT NULL DEFAULT ARRAY['PROSPECT', 'TRIAL', 'PAUSED', 'INACTIVE'],
   library_content_id UUID REFERENCES public."LibraryContent"(id) ON DELETE SET NULL,
+  header_image_url TEXT,
   is_active BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()

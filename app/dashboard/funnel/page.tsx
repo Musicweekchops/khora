@@ -26,7 +26,9 @@ import {
   HelpCircle,
   AlertCircle,
   Copy,
-  RefreshCw
+  RefreshCw,
+  Image as ImageIcon,
+  Upload
 } from "lucide-react"
 
 interface NurtureStep {
@@ -37,6 +39,7 @@ interface NurtureStep {
   delay_days: number
   target_audiences: string[]
   library_content_id: string | null
+  header_image_url?: string | null
   is_active: boolean
   created_at: string
   // Virtual joined fields
@@ -138,6 +141,9 @@ export default function FunnelPage() {
   const [formDelay, setFormDelay] = useState(7)
   const [formAudiences, setFormAudiences] = useState<string[]>(["PROSPECT", "TRIAL", "PAUSED", "INACTIVE"])
   const [formLibraryId, setFormLibraryId] = useState<string>("")
+  const [formHeaderImageUrl, setFormHeaderImageUrl] = useState<string>("")
+  const [uploadingHeader, setUploadingHeader] = useState(false)
+  const [globalDefaultHeader, setGlobalDefaultHeader] = useState<string>("")
   const [formIsActive, setFormIsActive] = useState(true)
   const [editorTab, setEditorTab] = useState<"text" | "html" | "preview">("text")
 
@@ -188,6 +194,7 @@ export default function FunnelPage() {
           delay_days,
           target_audiences,
           library_content_id,
+          header_image_url,
           is_active,
           created_at,
           LibraryContent ( id, title, type )
@@ -268,6 +275,7 @@ export default function FunnelPage() {
     setFormDelay(7)
     setFormAudiences(["PROSPECT", "TRIAL", "PAUSED", "INACTIVE"])
     setFormLibraryId("")
+    setFormHeaderImageUrl(globalDefaultHeader || "")
     setFormIsActive(true)
     setEditorTab("text")
     setShowModal(true)
@@ -280,9 +288,34 @@ export default function FunnelPage() {
     setFormDelay(step.delay_days)
     setFormAudiences(step.target_audiences || ["PROSPECT", "TRIAL", "PAUSED", "INACTIVE"])
     setFormLibraryId(step.library_content_id || "")
+    setFormHeaderImageUrl(step.header_image_url || globalDefaultHeader || "")
     setFormIsActive(step.is_active)
     setEditorTab("text")
     setShowModal(true)
+  }
+
+  async function handleUploadHeaderImage(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      setUploadingHeader(true)
+      const ext = file.name.split(".").pop() || "png"
+      const path = `funnel/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
+      const { error: uploadErr } = await supabase.storage.from("landing").upload(path, file, { upsert: true })
+      if (uploadErr) throw uploadErr
+      const { data } = supabase.storage.from("landing").getPublicUrl(path)
+      if (data?.publicUrl) {
+        setFormHeaderImageUrl(data.publicUrl)
+        setGlobalDefaultHeader(data.publicUrl)
+        if (typeof window !== "undefined") {
+          localStorage.setItem("khora_funnel_default_header", data.publicUrl)
+        }
+      }
+    } catch (err: any) {
+      alert("Error al subir imagen de cabecera: " + err.message)
+    } finally {
+      setUploadingHeader(false)
+    }
   }
 
   function toggleAudience(key: string) {
@@ -299,7 +332,7 @@ export default function FunnelPage() {
     try {
       const nextOrder = editingStep ? editingStep.step_order : steps.length + 1
 
-      const payload = {
+      const payload: any = {
         teacher_id: profile.teacherProfileId,
         step_order: nextOrder,
         subject: formSubject.trim(),
@@ -307,6 +340,7 @@ export default function FunnelPage() {
         delay_days: Number(formDelay) || 7,
         target_audiences: formAudiences,
         library_content_id: formLibraryId || null,
+        header_image_url: formHeaderImageUrl.trim() || null,
         is_active: formIsActive,
         updated_at: new Date().toISOString()
       }
@@ -362,6 +396,23 @@ export default function FunnelPage() {
       .replace(/{{nombre}}/g, firstName)
       .replace(/\n/g, "<br>")
 
+    const headerImg = step.header_image_url || formHeaderImageUrl || globalDefaultHeader
+
+    let headerHtml = `
+      <div style="text-align: center; padding: 24px 0 16px 0; border-bottom: 1px solid #f1f5f9;">
+        <h2 style="margin: 0; font-size: 20px; font-weight: 800; color: #0f172a; letter-spacing: -0.3px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+          Arnaldo Allende
+        </h2>
+      </div>
+    `
+    if (headerImg) {
+      headerHtml = `
+        <div style="text-align: center; padding: 0; overflow: hidden; border-bottom: 1px solid #f1f5f9; background-color: #ffffff;">
+          <img src="${headerImg}" alt="Cabecera" style="width: 100%; max-width: 540px; height: auto; max-height: 220px; object-fit: cover; display: block; margin: 0 auto;" />
+        </div>
+      `
+    }
+
     let libraryHtml = ""
     if (step.library_content) {
       const mat = step.library_content
@@ -396,11 +447,7 @@ export default function FunnelPage() {
                 <tr>
                   <td>
                     <!-- HEADER -->
-                    <div style="text-align: center; padding: 28px 0 20px 0; border-bottom: 1px solid #f1f5f9;">
-                      <h1 style="margin: 0; font-size: 24px; font-weight: 900; color: #0f172a; letter-spacing: -0.5px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-                        Khora<span style="color: #7c3aed;">.</span>
-                      </h1>
-                    </div>
+                    ${headerHtml}
                     
                     <!-- CONTENT -->
                     <div style="padding: 32px 32px 24px 32px; font-size: 15px; color: #334155; line-height: 1.65;">
@@ -462,6 +509,7 @@ export default function FunnelPage() {
           params: {
             studentName: firstName,
             teacherName: "Arnaldo Allende",
+            headerImageUrl: step.header_image_url || formHeaderImageUrl || globalDefaultHeader,
             customMessage: `${step.content_html.replace(/{{nombre}}/g, firstName)}${
               step.library_content ? `\n\n[Material adjunto: ${step.library_content.title}]` : ''
             }`,
@@ -762,6 +810,13 @@ export default function FunnelPage() {
                         </div>
                       )}
 
+                      {/* Custom Header Badge */}
+                      {step.header_image_url && (
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-neutral-100 rounded-lg text-[11px] font-medium text-neutral-600 border border-neutral-200/60">
+                          <ImageIcon className="w-3 h-3 text-neutral-400" /> Cabecera personalizada cargada
+                        </div>
+                      )}
+
                       {/* Target Audiences Badges */}
                       <div className="pt-2 flex flex-wrap items-center gap-1.5">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mr-1">Se envía a:</span>
@@ -860,6 +915,68 @@ export default function FunnelPage() {
                 <p className="text-[10px] text-neutral-400 mt-1">
                   💡 Tip: Puedes usar <code className="bg-neutral-100 px-1 py-0.5 rounded font-bold">{"{{nombre}}"}</code> para insertar el nombre del alumno automáticamente.
                 </p>
+              </div>
+
+              {/* CABECERA PERSONALIZADA (BANNER / LOGO) */}
+              <div className="bg-neutral-50/80 border border-neutral-200/80 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-neutral-800 flex items-center gap-1.5 uppercase tracking-wider">
+                    <ImageIcon className="w-4 h-4 text-violet-600" /> Cabecera Personalizada (Banner / Logo)
+                  </label>
+                  {formHeaderImageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setFormHeaderImageUrl("")}
+                      className="text-[11px] text-red-600 hover:text-red-700 font-semibold"
+                    >
+                      ✕ Quitar cabecera
+                    </button>
+                  )}
+                </div>
+
+                {formHeaderImageUrl ? (
+                  <div className="relative rounded-xl overflow-hidden border border-neutral-200 bg-white max-h-36 flex items-center justify-center shadow-sm">
+                    <img 
+                      src={formHeaderImageUrl} 
+                      alt="Vista previa cabecera" 
+                      className="w-full h-auto max-h-36 object-cover" 
+                    />
+                  </div>
+                ) : (
+                  <div className="p-3 bg-white rounded-xl border border-dashed border-neutral-300 text-center">
+                    <p className="text-xs text-neutral-500 font-medium">
+                      Sin imagen cargada. Se mostrará únicamente tu nombre <strong>&quot;Arnaldo Allende&quot;</strong> (sin logotipo de Khora).
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
+                  <label className="cursor-pointer kh-btn-secondary py-2 px-3 text-xs flex items-center justify-center gap-2 w-full sm:w-auto font-bold">
+                    <Upload className="w-3.5 h-3.5 text-neutral-500" />
+                    {uploadingHeader ? "Subiendo imagen..." : (formHeaderImageUrl ? "Cambiar Imagen / Banner" : "Cargar Mi Cabecera / Banner")}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleUploadHeaderImage}
+                      disabled={uploadingHeader}
+                      className="hidden"
+                    />
+                  </label>
+                  <div className="text-neutral-300 text-xs hidden sm:block">o</div>
+                  <input
+                    type="url"
+                    value={formHeaderImageUrl}
+                    onChange={(e) => {
+                      setFormHeaderImageUrl(e.target.value)
+                      if (e.target.value && typeof window !== "undefined") {
+                        localStorage.setItem("khora_funnel_default_header", e.target.value)
+                        setGlobalDefaultHeader(e.target.value)
+                      }
+                    }}
+                    placeholder="Pegar URL directa de la imagen (https://...)"
+                    className="kh-input text-xs py-2 px-3 flex-1 w-full"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1010,9 +1127,19 @@ export default function FunnelPage() {
                   <div className="bg-neutral-100 p-4 sm:p-6 rounded-2xl border border-neutral-200/80 max-h-80 overflow-y-auto">
                     <div className="max-w-md mx-auto bg-white border border-neutral-200 rounded-2xl overflow-hidden shadow-md text-neutral-800">
                       {/* Email Header */}
-                      <div className="text-center py-5 border-b border-neutral-100 bg-white">
-                        <span className="text-xl font-black text-neutral-900 tracking-tight">Khora<span className="text-violet-600">.</span></span>
-                      </div>
+                      {formHeaderImageUrl ? (
+                        <div className="w-full bg-white border-b border-neutral-100 overflow-hidden">
+                          <img 
+                            src={formHeaderImageUrl} 
+                            alt="Cabecera del correo" 
+                            className="w-full max-h-36 object-cover object-center" 
+                          />
+                        </div>
+                      ) : (
+                        <div className="text-center py-4 border-b border-neutral-100 bg-white">
+                          <span className="text-base font-extrabold text-neutral-900 tracking-tight">Arnaldo Allende</span>
+                        </div>
+                      )}
                       {/* Email Content Body */}
                       <div className="p-5 text-xs text-neutral-700 leading-relaxed space-y-3">
                         <p className="text-sm font-bold text-neutral-900">¡Hola Alumno!</p>
