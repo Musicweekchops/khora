@@ -23,7 +23,10 @@ import {
   Play, 
   FileText, 
   X,
-  HelpCircle
+  HelpCircle,
+  AlertCircle,
+  Copy,
+  RefreshCw
 } from "lucide-react"
 
 interface NurtureStep {
@@ -66,6 +69,56 @@ const AUDIENCE_OPTIONS = [
   { key: "ACTIVE", label: "Activos", desc: "Alumnos vigentes (desmarcado por defecto)", icon: "✅", color: "text-emerald-600 bg-emerald-50 border-emerald-200" },
 ]
 
+const SQL_MIGRATION_SNIPPET = `-- Migración 055: Tablas de Funnel de Alumnos
+CREATE TABLE IF NOT EXISTS public."NurtureStep" (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  teacher_id UUID NOT NULL REFERENCES public."TeacherProfile"(id) ON DELETE CASCADE,
+  step_order INTEGER NOT NULL,
+  subject TEXT NOT NULL,
+  content_html TEXT NOT NULL,
+  delay_days INTEGER NOT NULL DEFAULT 7,
+  target_audiences TEXT[] NOT NULL DEFAULT ARRAY['PROSPECT', 'TRIAL', 'PAUSED', 'INACTIVE'],
+  library_content_id UUID REFERENCES public."LibraryContent"(id) ON DELETE SET NULL,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public."NurtureLog" (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  teacher_id UUID NOT NULL REFERENCES public."TeacherProfile"(id) ON DELETE CASCADE,
+  step_id UUID NOT NULL REFERENCES public."NurtureStep"(id) ON DELETE CASCADE,
+  student_profile_id UUID REFERENCES public."StudentProfile"(id) ON DELETE SET NULL,
+  email TEXT NOT NULL,
+  sent_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  opened_at TIMESTAMPTZ,
+  clicked_at TIMESTAMPTZ,
+  converted_at TIMESTAMPTZ,
+  conversion_details TEXT
+);
+
+ALTER TABLE public."StudentProfile" ADD COLUMN IF NOT EXISTS nurture_step INTEGER DEFAULT 0;
+ALTER TABLE public."StudentProfile" ADD COLUMN IF NOT EXISTS nurture_last_sent_at TIMESTAMPTZ;
+ALTER TABLE public."StudentProfile" ADD COLUMN IF NOT EXISTS converted_from_step_id UUID REFERENCES public."NurtureStep"(id) ON DELETE SET NULL;
+
+ALTER TABLE public."NurtureStep" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public."NurtureLog" ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "teacher_manages_own_nurture_steps" ON public."NurtureStep";
+CREATE POLICY "teacher_manages_own_nurture_steps" ON public."NurtureStep"
+  FOR ALL USING (
+    teacher_id IN (SELECT id FROM public."TeacherProfile" WHERE user_id = auth.uid())
+  );
+
+DROP POLICY IF EXISTS "teacher_manages_own_nurture_logs" ON public."NurtureLog";
+CREATE POLICY "teacher_manages_own_nurture_logs" ON public."NurtureLog"
+  FOR ALL USING (
+    teacher_id IN (SELECT id FROM public."TeacherProfile" WHERE user_id = auth.uid())
+  );
+
+CREATE INDEX IF NOT EXISTS idx_nurture_step_teacher_order ON public."NurtureStep"(teacher_id, step_order);
+CREATE INDEX IF NOT EXISTS idx_nurture_log_teacher_email ON public."NurtureLog"(teacher_id, email);`
+
 export default function FunnelPage() {
   const { profile } = useAuth()
   const isArnaldo = profile?.email === "arnaldoallende@hotmail.com"
@@ -98,6 +151,8 @@ export default function FunnelPage() {
   const [kpiContactsCount, setKpiContactsCount] = useState(0)
   const [kpiConversionsTotal, setKpiConversionsTotal] = useState(0)
   const [testingSend, setTestingSend] = useState<string | null>(null)
+  const [tableMissing, setTableMissing] = useState(false)
+  const [copiedSql, setCopiedSql] = useState(false)
 
   useEffect(() => {
     if (isArnaldo && profile?.teacherProfileId) {
@@ -142,6 +197,19 @@ export default function FunnelPage() {
 
       if (stepErr) {
         console.error("Error cargando pasos:", stepErr)
+        // PostgREST 404 o PGRST205 significa que la tabla aún no se ha creado
+        if (
+          stepErr.code === "PGRST205" || 
+          stepErr.code === "42P01" || 
+          stepErr.message?.includes("does not exist") || 
+          (stepErr as any).status === 404
+        ) {
+          setTableMissing(true)
+          setLoading(false)
+          return
+        }
+      } else {
+        setTableMissing(false)
       }
 
       // 2. Cargar Logs de reportería
@@ -386,6 +454,57 @@ export default function FunnelPage() {
           <Plus className="w-4 h-4" /> Agregar Siguiente Correo
         </button>
       </div>
+
+      {/* MIGRATION NEEDED ALERT */}
+      {tableMissing && (
+        <div className="bg-amber-50/90 border border-amber-200 rounded-2xl p-6 text-amber-900 shadow-sm space-y-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <h3 className="font-bold text-base text-amber-950">
+                Paso pendiente: Crear las tablas del Funnel en Supabase
+              </h3>
+              <p className="text-sm text-amber-800 leading-relaxed">
+                El código del Funnel está listo, pero la base de datos de Supabase aún no tiene creadas las tablas <code>NurtureStep</code> y <code>NurtureLog</code> (por eso la consola muestra error 404).
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-white/80 border border-amber-200/80 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="text-xs text-amber-900 font-mono">
+              Script: <strong>migrations/055_nurture_funnel.sql</strong>
+            </div>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(SQL_MIGRATION_SNIPPET)
+                  setCopiedSql(true)
+                  setTimeout(() => setCopiedSql(false), 3000)
+                }}
+                className="kh-btn-secondary py-2 px-3 text-xs flex items-center justify-center gap-1.5 w-full sm:w-auto font-medium"
+              >
+                {copiedSql ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-600" /> ¡SQL Copiado!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-neutral-500" /> Copiar SQL
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => {
+                  if (profile?.teacherProfileId) loadFunnelData(profile.teacherProfileId)
+                }}
+                className="kh-btn-primary py-2 px-3 text-xs flex items-center justify-center gap-1.5 w-full sm:w-auto font-medium"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Reintentar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* KPI METRICS BAR */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
