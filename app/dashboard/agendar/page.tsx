@@ -508,6 +508,8 @@ export default function StudentBookingDashboardPage() {
         end_time: endTime,
         total_price: selectedClass.price,
         status: "PENDING",
+        terms_accepted_at: new Date().toISOString(),
+        marketing_consent: true,
       })
 
       if (insertErr) throw insertErr

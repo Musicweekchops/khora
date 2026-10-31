@@ -133,6 +133,7 @@ function PublicBookingPage() {
   // Alternative recommendations
   const [alternativeDateMsg, setAlternativeDateMsg] = useState<string | null>(null)
   const [alternativeDateStr, setAlternativeDateStr] = useState<string | null>(null)
+  const [termsAccepted, setTermsAccepted] = useState(false)
 
   const currentStepNum = useMemo(() => {
     if (success) return 4
@@ -1055,6 +1056,10 @@ function PublicBookingPage() {
         throw new Error(slotValidation.reason || "El horario seleccionado no está disponible.")
       }
 
+      if (!profile && !termsAccepted) {
+        throw new Error("Debes aceptar los Términos del Servicio y la Política de Privacidad para continuar.")
+      }
+
       // If it is a trial class, redirect to Mercado Pago instead of inserting booking directly
       if (newClassCategory === "prueba") {
         let targetStudentProfileId = profile?.studentProfileId
@@ -1123,6 +1128,8 @@ function PublicBookingPage() {
         end_time: endTime,
         total_price: selectedClass.price,
         status: "PENDING",
+        terms_accepted_at: new Date().toISOString(),
+        marketing_consent: true,
       }).select("id").single()
 
       if (insertErr) throw insertErr
@@ -2238,12 +2245,38 @@ function PublicBookingPage() {
                               </div>
                             )}
 
+                            {/* MANDATORY CONSENT CHECKBOX (FOR GUEST / NEW BOOKINGS) */}
+                            {selectedSlot && !profile && (
+                              <div className="pt-3">
+                                <label className="flex items-start gap-2.5 text-[11px] text-neutral-600 cursor-pointer select-none">
+                                  <input
+                                    type="checkbox"
+                                    required
+                                    checked={termsAccepted}
+                                    onChange={e => setTermsAccepted(e.target.checked)}
+                                    className="mt-0.5 rounded border-neutral-300 text-violet-600 focus:ring-violet-500 flex-shrink-0"
+                                  />
+                                  <span>
+                                    Acepto los{" "}
+                                    <a href="/terminos" target="_blank" className="underline font-semibold text-neutral-900">
+                                      Términos del Servicio
+                                    </a>{" "}
+                                    y la{" "}
+                                    <a href="/privacidad" target="_blank" className="underline font-semibold text-neutral-900">
+                                      Política de Privacidad
+                                    </a>
+                                    , y autorizo el envío de recordatorios y notificaciones de clase vía correo y WhatsApp.
+                                  </span>
+                                </label>
+                              </div>
+                            )}
+
                             {/* Submission Button */}
                             {(!profile ? selectedSlot : true) && (
                               <button
                                 type="submit"
-                                disabled={submitting || !selectedSlot}
-                                className="w-full kh-btn-primary py-4 text-sm font-black uppercase tracking-wider bg-violet-600 hover:bg-violet-750 text-white border border-violet-500 shadow-lg"
+                                disabled={submitting || !selectedSlot || (!profile && !termsAccepted)}
+                                className="w-full kh-btn-primary py-4 text-sm font-black uppercase tracking-wider bg-violet-600 hover:bg-violet-750 text-white border border-violet-500 shadow-lg disabled:opacity-50"
                               >
                                 {submitting ? "Procesando..." : "🎵 Confirmar y Solicitar Reserva"}
                               </button>

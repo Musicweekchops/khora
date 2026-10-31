@@ -34,7 +34,17 @@ export function getLayout(contentHtml: string) {
                   
                   <!-- FOOTER -->
                   <div style="padding: 24px; text-align: center; background-color: #13131a; border-top: 1px solid #2d2d3d;">
-                    <p style="font-size: 12px; color: #71717a; margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                    <p style="font-size: 11px; color: #71717a; margin: 0 0 8px 0; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                      Recibes este correo porque eres alumno activo o tienes una clase programada en Khora.
+                    </p>
+                    <p style="font-size: 11px; color: #71717a; margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                      <a href="https://khora.cl/terminos" style="color: #9d8df1; text-decoration: underline;">Términos del Servicio</a>
+                      &nbsp;•&nbsp;
+                      <a href="https://khora.cl/privacidad" style="color: #9d8df1; text-decoration: underline;">Política de Privacidad</a>
+                      &nbsp;•&nbsp;
+                      <a href="mailto:hola@khora.cl" style="color: #9d8df1; text-decoration: underline;">Contacto</a>
+                    </p>
+                    <p style="font-size: 11px; color: #52525b; margin: 12px 0 0 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
                       © 2026 Khora. Hecho con ♥ en Chile.
                     </p>
                   </div>

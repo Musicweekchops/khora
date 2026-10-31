@@ -4,6 +4,7 @@ import Sidebar from "@/components/dashboard/Sidebar"
 import OnboardingTour from "@/components/dashboard/OnboardingTour"
 import PushRegister from "@/components/dashboard/PushRegister"
 import MetronomeWidget from "@/components/ui/MetronomeWidget"
+import TermsUpdateModal from "@/components/legal/TermsUpdateModal"
 import { useAuth } from "@/lib/context/AuthContext"
 import { useRouter } from "next/navigation"
 import { useEffect } from "react"
@@ -71,6 +72,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen bg-[#fafafa]">
+      <TermsUpdateModal />
       <OnboardingTour />
       <PushRegister />
       <MetronomeWidget />

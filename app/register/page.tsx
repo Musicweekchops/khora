@@ -15,6 +15,7 @@ export default function RegisterPage() {
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [termsAccepted, setTermsAccepted] = useState(false)
 
   // Obtener comunas basadas en la región seleccionada
   const selectedRegionData = CHILE_REGIONS.find(r => r.region === form.region)
@@ -25,6 +26,7 @@ export default function RegisterPage() {
     setError("")
     if (!form.region || form.region.trim() === "") return setError("Por favor, selecciona una región")
     if (!form.comuna || form.comuna.trim() === "") return setError("Por favor, selecciona una comuna")
+    if (!termsAccepted) return setError("Debes aceptar los Términos del Servicio y la Política de Privacidad")
     setLoading(true)
 
     // Guardamos la combinación como 'Comuna, Región' para no alterar la base de datos
@@ -33,7 +35,15 @@ export default function RegisterPage() {
     const { error: err, data } = await supabase.auth.signUp({
       email: form.email,
       password: form.password,
-      options: { data: { name: form.name, role: "TEACHER", region: fullLocation, instrumento: form.instrumento } },
+      options: { 
+        data: { 
+          name: form.name, 
+          role: "TEACHER", 
+          region: fullLocation, 
+          instrumento: form.instrumento,
+          terms_accepted_at: new Date().toISOString()
+        } 
+      },
     })
 
     if (err) {
@@ -219,7 +229,30 @@ export default function RegisterPage() {
                 </select>
               </div>
 
-              <button type="submit" disabled={loading} className="kh-btn-primary w-full py-2.5 mt-2">
+              <div className="pt-2">
+                <label className="flex items-start gap-2.5 text-xs text-neutral-600 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    required
+                    checked={termsAccepted}
+                    onChange={e => setTermsAccepted(e.target.checked)}
+                    className="mt-0.5 rounded border-neutral-300 text-violet-600 focus:ring-violet-500 flex-shrink-0"
+                  />
+                  <span>
+                    Acepto los{" "}
+                    <Link href="/terminos" target="_blank" className="underline font-semibold text-neutral-900">
+                      Términos del Servicio
+                    </Link>{" "}
+                    y la{" "}
+                    <Link href="/privacidad" target="_blank" className="underline font-semibold text-neutral-900">
+                      Política de Privacidad
+                    </Link>
+                    , y consiento el tratamiento de datos y notificaciones operativas de Khora.
+                  </span>
+                </label>
+              </div>
+
+              <button type="submit" disabled={loading || !termsAccepted} className="kh-btn-primary w-full py-2.5 mt-2">
                 {loading ? (
                   <span className="flex items-center gap-2">
                     <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />

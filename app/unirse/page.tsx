@@ -53,6 +53,7 @@ function RegistrationForm() {
     password: "",
     modalidad: "",
   })
+  const [termsAccepted, setTermsAccepted] = useState(false)
 
   // Lista de Espera Modal / Drawer
   const [showWaitlistForm, setShowWaitlistForm] = useState(false)
@@ -178,6 +179,10 @@ function RegistrationForm() {
     }
     if (!form.modalidad) {
       toast("Por favor selecciona si prefieres modalidad Presencial u Online", "error")
+      return
+    }
+    if (!termsAccepted) {
+      toast("Debes aceptar los Términos del Servicio y la Política de Privacidad", "error")
       return
     }
 
@@ -324,7 +329,9 @@ function RegistrationForm() {
         start_time: selectedSlot,
         end_time: endTimeStr,
         total_price: 0,
-        status: "PENDING"
+        status: "PENDING",
+        terms_accepted_at: new Date().toISOString(),
+        marketing_consent: true,
       })
 
       trackMetaLead()
@@ -351,6 +358,10 @@ function RegistrationForm() {
   const handleJoinWaitlist = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.name || !form.email || !teacherId) return
+    if (!termsAccepted) {
+      toast("Debes aceptar los Términos del Servicio y la Política de Privacidad", "error")
+      return
+    }
 
     setSubmitting(true)
     setError("")
@@ -788,9 +799,32 @@ function RegistrationForm() {
 
                       {error && <div className="bg-red-950/20 border border-red-800 text-red-400 p-3 rounded-xl text-xs font-bold">⚠️ {error}</div>}
 
+                      <div className="pt-2">
+                        <label className="flex items-start gap-2.5 text-[11px] text-neutral-400 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            required
+                            checked={termsAccepted}
+                            onChange={e => setTermsAccepted(e.target.checked)}
+                            className="mt-0.5 rounded border-neutral-700 bg-neutral-900 text-blue-500 focus:ring-blue-500 flex-shrink-0"
+                          />
+                          <span>
+                            Acepto los{" "}
+                            <a href="/terminos" target="_blank" className="underline font-semibold text-neutral-200">
+                              Términos del Servicio
+                            </a>{" "}
+                            y la{" "}
+                            <a href="/privacidad" target="_blank" className="underline font-semibold text-neutral-200">
+                              Política de Privacidad
+                            </a>
+                            , autorizando notificaciones y avisos de clase por correo y WhatsApp.
+                          </span>
+                        </label>
+                      </div>
+
                       <button
                         type="submit"
-                        disabled={submitting}
+                        disabled={submitting || !termsAccepted}
                         className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-blue-900/10 transition-all active:scale-95 disabled:opacity-50"
                       >
                         {submitting ? "Procesando..." : (gatewayEnabled ? "💳 Pagar y Confirmar Reserva" : "🎵 Solicitar Reserva y Abrir WhatsApp")}
@@ -872,6 +906,29 @@ function RegistrationForm() {
 
                   {error && <div className="bg-red-950/20 border border-red-800 text-red-400 p-3 rounded-xl text-xs font-bold">⚠️ {error}</div>}
 
+                  <div className="pt-2">
+                    <label className="flex items-start gap-2.5 text-[11px] text-neutral-400 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        required
+                        checked={termsAccepted}
+                        onChange={e => setTermsAccepted(e.target.checked)}
+                        className="mt-0.5 rounded border-neutral-700 bg-neutral-900 text-amber-500 focus:ring-amber-500 flex-shrink-0"
+                      />
+                      <span>
+                        Acepto los{" "}
+                        <a href="/terminos" target="_blank" className="underline font-semibold text-neutral-200">
+                          Términos del Servicio
+                        </a>{" "}
+                        y la{" "}
+                        <a href="/privacidad" target="_blank" className="underline font-semibold text-neutral-200">
+                          Política de Privacidad
+                        </a>
+                        , autorizando notificaciones cuando se libere un cupo.
+                      </span>
+                    </label>
+                  </div>
+
                   <div className="flex gap-2 pt-2">
                     <button
                       type="button"
@@ -882,7 +939,7 @@ function RegistrationForm() {
                     </button>
                     <button
                       type="submit"
-                      disabled={submitting}
+                      disabled={submitting || !termsAccepted}
                       className="flex-1 py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-neutral-950 rounded-xl text-xs font-black uppercase tracking-wider transition-all active:scale-95 disabled:opacity-50"
                     >
                       {submitting ? "Procesando..." : "Inscribirme en Espera"}

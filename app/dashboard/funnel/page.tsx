@@ -1,0 +1,823 @@
+"use client"
+
+import { useEffect, useState, useMemo } from "react"
+import Link from "next/link"
+import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/lib/context/AuthContext"
+import { 
+  Mail, 
+  Plus, 
+  Send, 
+  Clock, 
+  Users, 
+  CheckCircle2, 
+  TrendingUp, 
+  Sparkles, 
+  Trash2, 
+  Edit3, 
+  BookOpen, 
+  Eye, 
+  MousePointer, 
+  ShieldAlert, 
+  Check, 
+  Play, 
+  FileText, 
+  X,
+  HelpCircle
+} from "lucide-react"
+
+interface NurtureStep {
+  id: string
+  step_order: number
+  subject: string
+  content_html: string
+  delay_days: number
+  target_audiences: string[]
+  library_content_id: string | null
+  is_active: boolean
+  created_at: string
+  // Virtual joined fields
+  library_content?: {
+    id: string
+    title: string
+    type: string
+  } | null
+  stats?: {
+    sent: number
+    opened: number
+    clicked: number
+    converted: number
+  }
+}
+
+interface ConvertedStudent {
+  id: string
+  name: string
+  email: string
+  converted_at: string
+  details?: string
+}
+
+const AUDIENCE_OPTIONS = [
+  { key: "PROSPECT", label: "Prospectos", desc: "Leads de landing o registros sin agendar", icon: "🎯", color: "text-amber-600 bg-amber-50 border-amber-200" },
+  { key: "TRIAL", label: "Clase de Prueba", desc: "Realizaron prueba pero no contrataron", icon: "🧪", color: "text-sky-600 bg-sky-50 border-sky-200" },
+  { key: "PAUSED", label: "Pausados", desc: "Alumnos regulares que congelaron", icon: "⏸️", color: "text-neutral-600 bg-neutral-100 border-neutral-300" },
+  { key: "INACTIVE", label: "Ex-alumnos", desc: "Alumnos inactivos que dejaron de tomar clases", icon: "❌", color: "text-red-600 bg-red-50 border-red-200" },
+  { key: "ACTIVE", label: "Activos", desc: "Alumnos vigentes (desmarcado por defecto)", icon: "✅", color: "text-emerald-600 bg-emerald-50 border-emerald-200" },
+]
+
+export default function FunnelPage() {
+  const { profile } = useAuth()
+  const isArnaldo = profile?.email === "arnaldoallende@hotmail.com"
+
+  const [steps, setSteps] = useState<NurtureStep[]>([])
+  const [loading, setLoading] = useState(true)
+  const [libraryMaterials, setLibraryMaterials] = useState<any[]>([])
+
+  // Modal Crear / Editar
+  const [showModal, setShowModal] = useState(false)
+  const [editingStep, setEditingStep] = useState<NurtureStep | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  // Form State
+  const [formSubject, setFormSubject] = useState("")
+  const [formContent, setFormContent] = useState("")
+  const [formDelay, setFormDelay] = useState(7)
+  const [formAudiences, setFormAudiences] = useState<string[]>(["PROSPECT", "TRIAL", "PAUSED", "INACTIVE"])
+  const [formLibraryId, setFormLibraryId] = useState<string>("")
+  const [formIsActive, setFormIsActive] = useState(true)
+
+  // Modal Ver Conversiones
+  const [conversionModalOpen, setConversionModalOpen] = useState(false)
+  const [selectedStepForConversions, setSelectedStepForConversions] = useState<NurtureStep | null>(null)
+  const [convertedStudents, setConvertedStudents] = useState<ConvertedStudent[]>([])
+  const [loadingConversions, setLoadingConversions] = useState(false)
+
+  // Global KPIs
+  const [kpiContactsCount, setKpiContactsCount] = useState(0)
+  const [kpiConversionsTotal, setKpiConversionsTotal] = useState(0)
+  const [testingSend, setTestingSend] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (isArnaldo && profile?.teacherProfileId) {
+      loadFunnelData(profile.teacherProfileId)
+      loadLibrary(profile.teacherProfileId)
+    }
+  }, [isArnaldo, profile?.teacherProfileId])
+
+  async function loadLibrary(teacherId: string) {
+    try {
+      const { data } = await supabase
+        .from("LibraryContent")
+        .select("id, title, type")
+        .eq("teacher_id", teacherId)
+        .order("created_at", { ascending: false })
+      if (data) setLibraryMaterials(data)
+    } catch (e) {
+      console.error("Error cargando biblioteca:", e)
+    }
+  }
+
+  async function loadFunnelData(teacherId: string) {
+    setLoading(true)
+    try {
+      // 1. Cargar Pasos
+      const { data: stepsData, error: stepErr } = await supabase
+        .from("NurtureStep")
+        .select(`
+          id,
+          step_order,
+          subject,
+          content_html,
+          delay_days,
+          target_audiences,
+          library_content_id,
+          is_active,
+          created_at,
+          LibraryContent ( id, title, type )
+        `)
+        .eq("teacher_id", teacherId)
+        .order("step_order", { ascending: true })
+
+      if (stepErr) {
+        console.error("Error cargando pasos:", stepErr)
+      }
+
+      // 2. Cargar Logs de reportería
+      const { data: logsData } = await supabase
+        .from("NurtureLog")
+        .select("step_id, opened_at, clicked_at, converted_at")
+        .eq("teacher_id", teacherId)
+
+      const statsMap: Record<string, { sent: number; opened: number; clicked: number; converted: number }> = {}
+      let totalConversions = 0
+
+      for (const log of logsData || []) {
+        if (!statsMap[log.step_id]) {
+          statsMap[log.step_id] = { sent: 0, opened: 0, clicked: 0, converted: 0 }
+        }
+        statsMap[log.step_id].sent++
+        if (log.opened_at) statsMap[log.step_id].opened++
+        if (log.clicked_at) statsMap[log.step_id].clicked++
+        if (log.converted_at) {
+          statsMap[log.step_id].converted++
+          totalConversions++
+        }
+      }
+
+      setKpiConversionsTotal(totalConversions)
+
+      // 3. Mapear pasos formateados
+      const mapped = (stepsData || []).map((s: any) => ({
+        ...s,
+        library_content: s.LibraryContent,
+        stats: statsMap[s.id] || { sent: 0, opened: 0, clicked: 0, converted: 0 }
+      }))
+
+      setSteps(mapped)
+
+      // 4. Contar contactos elegibles en el embudo (no activos con marketing_consent)
+      const { count } = await supabase
+        .from("StudentProfile")
+        .select("id", { count: "exact", head: true })
+        .eq("teacher_id", teacherId)
+        .neq("status", "ACTIVE")
+
+      setKpiContactsCount(count || 0)
+
+    } catch (err) {
+      console.error("Error cargando funnel:", err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function openCreateModal() {
+    setEditingStep(null)
+    setFormSubject("")
+    setFormContent("")
+    setFormDelay(7)
+    setFormAudiences(["PROSPECT", "TRIAL", "PAUSED", "INACTIVE"])
+    setFormLibraryId("")
+    setFormIsActive(true)
+    setShowModal(true)
+  }
+
+  function openEditModal(step: NurtureStep) {
+    setEditingStep(step)
+    setFormSubject(step.subject)
+    setFormContent(step.content_html)
+    setFormDelay(step.delay_days)
+    setFormAudiences(step.target_audiences || ["PROSPECT", "TRIAL", "PAUSED", "INACTIVE"])
+    setFormLibraryId(step.library_content_id || "")
+    setFormIsActive(step.is_active)
+    setShowModal(true)
+  }
+
+  function toggleAudience(key: string) {
+    setFormAudiences(prev => 
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    )
+  }
+
+  async function handleSaveStep(e: React.FormEvent) {
+    e.preventDefault()
+    if (!profile?.teacherProfileId) return
+    setSaving(true)
+
+    try {
+      const nextOrder = editingStep ? editingStep.step_order : steps.length + 1
+
+      const payload = {
+        teacher_id: profile.teacherProfileId,
+        step_order: nextOrder,
+        subject: formSubject.trim(),
+        content_html: formContent.trim(),
+        delay_days: Number(formDelay) || 7,
+        target_audiences: formAudiences,
+        library_content_id: formLibraryId || null,
+        is_active: formIsActive,
+        updated_at: new Date().toISOString()
+      }
+
+      if (editingStep) {
+        const { error } = await supabase
+          .from("NurtureStep")
+          .update(payload)
+          .eq("id", editingStep.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase
+          .from("NurtureStep")
+          .insert(payload)
+        if (error) throw error
+      }
+
+      setShowModal(false)
+      loadFunnelData(profile.teacherProfileId)
+    } catch (err: any) {
+      alert("Error guardando correo del funnel: " + err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDeleteStep(id: string) {
+    if (!confirm("¿Seguro que deseas eliminar este paso de la secuencia?")) return
+    try {
+      await supabase.from("NurtureStep").delete().eq("id", id)
+      if (profile?.teacherProfileId) loadFunnelData(profile.teacherProfileId)
+    } catch (err: any) {
+      alert("Error al eliminar: " + err.message)
+    }
+  }
+
+  async function handleToggleActive(step: NurtureStep) {
+    try {
+      await supabase
+        .from("NurtureStep")
+        .update({ is_active: !step.is_active })
+        .eq("id", step.id)
+      if (profile?.teacherProfileId) loadFunnelData(profile.teacherProfileId)
+    } catch (err: any) {
+      alert("Error al actualizar: " + err.message)
+    }
+  }
+
+  async function handleSendTest(step: NurtureStep) {
+    if (!profile?.email) return
+    setTestingSend(step.id)
+    try {
+      const res = await supabase.functions.invoke("send-email", {
+        body: {
+          to: profile.email,
+          type: "TEST_EMAIL",
+          params: {
+            subject: `[PRUEBA FUNNEL PASO #${step.step_order}] ${step.subject}`,
+            content: step.content_html,
+            studentName: profile.name || "Arnaldo"
+          }
+        }
+      })
+      alert(`Correo de prueba enviado con éxito a ${profile.email} 📬`)
+    } catch (err: any) {
+      alert("Error enviando prueba: " + err.message)
+    } finally {
+      setTestingSend(null)
+    }
+  }
+
+  async function openConversionsModal(step: NurtureStep) {
+    setSelectedStepForConversions(step)
+    setConversionModalOpen(true)
+    setLoadingConversions(true)
+
+    try {
+      const { data } = await supabase
+        .from("NurtureLog")
+        .select(`
+          id,
+          email,
+          converted_at,
+          conversion_details,
+          StudentProfile ( User ( name, email ) )
+        `)
+        .eq("step_id", step.id)
+        .not("converted_at", "is", null)
+        .order("converted_at", { ascending: false })
+
+      if (data) {
+        setConvertedStudents(data.map((d: any) => ({
+          id: d.id,
+          name: d.StudentProfile?.User?.name || d.email,
+          email: d.email,
+          converted_at: d.converted_at,
+          details: d.conversion_details || "Plan mensual contratado"
+        })))
+      } else {
+        setConvertedStudents([])
+      }
+    } catch (e) {
+      console.error("Error cargando conversiones:", e)
+    } finally {
+      setLoadingConversions(false)
+    }
+  }
+
+  // Si no es Arnaldo Allende, no mostrar nada
+  if (!isArnaldo) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 text-center space-y-4">
+        <ShieldAlert className="w-12 h-12 text-neutral-400" />
+        <h2 className="text-lg font-bold text-neutral-900">Módulo No Disponible</h2>
+        <p className="text-sm text-neutral-500 max-w-md">
+          Este módulo de automatización avanzada está reservado exclusivamente para la administración principal de Khora.
+        </p>
+        <Link href="/dashboard" className="kh-btn-secondary py-2 px-4 text-xs">
+          Volver al Dashboard
+        </Link>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-8 pb-16">
+      {/* HEADER */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-neutral-200/80 pb-6">
+        <div>
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-violet-50 text-violet-700 text-xs font-bold uppercase tracking-wider mb-2">
+            <Sparkles className="w-3.5 h-3.5" /> Funnel
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-neutral-950 tracking-tight">
+            Funnel de Alumnos
+          </h1>
+          <p className="text-sm text-neutral-500 mt-1">
+            Secuencia automática de ejercicios y valor para prospectos, pausados y ex-alumnos.
+          </p>
+        </div>
+
+        <button
+          onClick={openCreateModal}
+          className="kh-btn-primary py-3 px-5 text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-violet-500/10"
+        >
+          <Plus className="w-4 h-4" /> Agregar Siguiente Correo
+        </button>
+      </div>
+
+      {/* KPI METRICS BAR */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white border border-neutral-200/80 rounded-2xl p-5 shadow-sm space-y-1">
+          <div className="flex items-center justify-between text-neutral-500 text-xs font-semibold">
+            <span>Contactos en el Funnel</span>
+            <Users className="w-4 h-4 text-violet-500" />
+          </div>
+          <div className="text-3xl font-extrabold text-neutral-900">{kpiContactsCount}</div>
+          <p className="text-[11px] text-neutral-400">Prospectos y alumnos pausados recibiendo la secuencia</p>
+        </div>
+
+        <div className="bg-white border border-emerald-200/80 rounded-2xl p-5 shadow-sm space-y-1 bg-gradient-to-br from-emerald-50/40 to-white">
+          <div className="flex items-center justify-between text-emerald-700 text-xs font-bold uppercase tracking-wider">
+            <span>Alumnos Convertidos a Plan</span>
+            <TrendingUp className="w-4 h-4 text-emerald-600" />
+          </div>
+          <div className="text-3xl font-extrabold text-emerald-950 flex items-center gap-2">
+            <span>{kpiConversionsTotal}</span>
+            <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">🎉 Ventas</span>
+          </div>
+          <p className="text-[11px] text-emerald-600/80">Alumnos que contrataron plan tras recibir correos del funnel</p>
+        </div>
+
+        <div className="bg-white border border-neutral-200/80 rounded-2xl p-5 shadow-sm space-y-1">
+          <div className="flex items-center justify-between text-neutral-500 text-xs font-semibold">
+            <span>Pasos en la Secuencia</span>
+            <Mail className="w-4 h-4 text-indigo-500" />
+          </div>
+          <div className="text-3xl font-extrabold text-neutral-900">{steps.length}</div>
+          <p className="text-[11px] text-neutral-400">
+            {steps.length > 0 ? `Cubre ${steps.reduce((acc, s) => acc + s.delay_days, 0)} días de seguimiento continuo` : "Sin correos aún"}
+          </p>
+        </div>
+      </div>
+
+      {/* TIMELINE / PIPELINE CONTAINER */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-neutral-900 flex items-center gap-2">
+            <span>Línea de Tiempo de la Secuencia</span>
+            <span className="text-xs font-semibold text-neutral-400">({steps.length} correos)</span>
+          </h2>
+        </div>
+
+        {loading ? (
+          <div className="bg-white border border-neutral-200 rounded-3xl p-12 text-center text-neutral-400 text-sm font-semibold animate-pulse">
+            Cargando secuencia de correos...
+          </div>
+        ) : steps.length === 0 ? (
+          <div className="bg-white border-2 border-dashed border-neutral-200 rounded-3xl p-12 text-center space-y-4">
+            <div className="w-12 h-12 bg-violet-50 text-violet-600 rounded-2xl flex items-center justify-center mx-auto text-xl">
+              ✉️
+            </div>
+            <div className="space-y-1">
+              <h3 className="font-bold text-neutral-900">Tu funnel aún no tiene correos</h3>
+              <p className="text-xs text-neutral-500 max-w-md mx-auto">
+                Crea tu primer correo (Paso 1) con un ejercicio o tip de tu biblioteca. Los alumnos nuevos y pausados empezarán a recibirlo automáticamente.
+              </p>
+            </div>
+            <button
+              onClick={openCreateModal}
+              className="kh-btn-primary py-2.5 px-4 text-xs font-bold"
+            >
+              Crear Paso #1
+            </button>
+          </div>
+        ) : (
+          <div className="relative pl-6 sm:pl-8 border-l-2 border-violet-200/80 space-y-8 ml-2 sm:ml-4">
+            {steps.map((step, idx) => {
+              const conversionCount = step.stats?.converted || 0
+              return (
+                <div key={step.id} className="relative group">
+                  {/* Bullet Marker on Timeline */}
+                  <div className="absolute -left-[33px] sm:-left-[41px] top-6 w-6 h-6 rounded-full bg-white border-4 border-violet-600 shadow-sm flex items-center justify-center text-[10px] font-bold text-violet-800">
+                    {idx + 1}
+                  </div>
+
+                  {/* Step Card */}
+                  <div className={`bg-white border rounded-3xl p-5 sm:p-6 transition-all shadow-sm ${
+                    step.is_active ? "border-neutral-200/80 hover:border-violet-300" : "border-neutral-200/50 opacity-60 bg-neutral-50"
+                  }`}>
+                    {/* Header Row */}
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-neutral-100 pb-4">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-black uppercase tracking-wider text-violet-700 bg-violet-50 px-3 py-1 rounded-full border border-violet-200/50">
+                          Paso #{step.step_order}
+                        </span>
+                        <span className="flex items-center gap-1.5 text-xs text-neutral-500 font-medium">
+                          <Clock className="w-3.5 h-3.5 text-neutral-400" />
+                          Se envía {step.delay_days} días después del anterior
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleToggleActive(step)}
+                          className={`text-xs font-bold px-3 py-1 rounded-xl transition-colors ${
+                            step.is_active 
+                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60" 
+                              : "bg-neutral-100 text-neutral-500 border border-neutral-200"
+                          }`}
+                        >
+                          {step.is_active ? "🟢 Activo" : "⏸️ Pausado"}
+                        </button>
+                        <button
+                          onClick={() => handleSendTest(step)}
+                          disabled={testingSend === step.id}
+                          className="text-xs text-neutral-600 hover:text-neutral-900 border border-neutral-200 hover:bg-neutral-50 px-3 py-1 rounded-xl transition-colors font-medium flex items-center gap-1"
+                          title="Enviarme una prueba a mi correo"
+                        >
+                          <Send className="w-3 h-3 text-neutral-400" />
+                          {testingSend === step.id ? "Enviando..." : "Probar"}
+                        </button>
+                        <button
+                          onClick={() => openEditModal(step)}
+                          className="p-1.5 text-neutral-400 hover:text-neutral-900 rounded-lg hover:bg-neutral-100 transition-colors"
+                          title="Editar correo"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteStep(step.id)}
+                          className="p-1.5 text-neutral-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                          title="Eliminar paso"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Content Row */}
+                    <div className="py-4 space-y-3">
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block mb-0.5">Asunto:</span>
+                        <h3 className="text-base font-bold text-neutral-900">{step.subject}</h3>
+                      </div>
+
+                      {/* Content Preview */}
+                      <p className="text-xs text-neutral-600 line-clamp-2 leading-relaxed bg-neutral-50 p-3 rounded-2xl border border-neutral-100 font-mono">
+                        {step.content_html}
+                      </p>
+
+                      {/* Attached Library Material Badge */}
+                      {step.library_content && (
+                        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-violet-50/70 border border-violet-200/60 rounded-xl text-xs text-violet-800 font-medium">
+                          {step.library_content.type === "video" ? <Play className="w-3.5 h-3.5 text-violet-600" /> : <FileText className="w-3.5 h-3.5 text-violet-600" />}
+                          <span>Material adjunto de Biblioteca: <strong>{step.library_content.title}</strong></span>
+                        </div>
+                      )}
+
+                      {/* Target Audiences Badges */}
+                      <div className="pt-2 flex flex-wrap items-center gap-1.5">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mr-1">Se envía a:</span>
+                        {AUDIENCE_OPTIONS.map(opt => {
+                          const isIncluded = (step.target_audiences || []).includes(opt.key)
+                          if (!isIncluded) return null
+                          return (
+                            <span key={opt.key} className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-lg border ${opt.color}`}>
+                              <span>{opt.icon}</span> {opt.label}
+                            </span>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Footer / Attribution Metrics */}
+                    <div className="pt-4 border-t border-neutral-100 flex flex-wrap items-center justify-between gap-4">
+                      <div className="flex items-center gap-4 text-xs text-neutral-500">
+                        <span className="flex items-center gap-1 font-semibold text-neutral-700">
+                          <Send className="w-3.5 h-3.5 text-neutral-400" /> {step.stats?.sent || 0} enviados
+                        </span>
+                        <span className="flex items-center gap-1 font-semibold text-neutral-700">
+                          <Eye className="w-3.5 h-3.5 text-neutral-400" /> 
+                          {step.stats?.sent ? Math.round(((step.stats?.opened || 0) / step.stats.sent) * 100) : 0}% apertura
+                        </span>
+                        <span className="flex items-center gap-1 font-semibold text-neutral-700">
+                          <MousePointer className="w-3.5 h-3.5 text-neutral-400" /> 
+                          {step.stats?.sent ? Math.round(((step.stats?.clicked || 0) / step.stats.sent) * 100) : 0}% clics
+                        </span>
+                      </div>
+
+                      {/* CONVERSION TAG BADGE */}
+                      <button
+                        onClick={() => openConversionsModal(step)}
+                        className={`text-xs font-black px-3 py-1.5 rounded-xl border flex items-center gap-2 transition-all ${
+                          conversionCount > 0 
+                            ? "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 shadow-sm"
+                            : "bg-neutral-50 text-neutral-400 border-neutral-200"
+                        }`}
+                      >
+                        <span>🎉 {conversionCount} {conversionCount === 1 ? "alumno se unió a plan" : "alumnos se unieron a plan"}</span>
+                        {conversionCount > 0 && <span className="underline text-[10px] font-bold">Ver quiénes</span>}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+
+            {/* Bottom Add Step Button in Timeline */}
+            <div className="pt-4">
+              <button
+                onClick={openCreateModal}
+                className="w-full py-4 border-2 border-dashed border-violet-300 hover:border-violet-500 rounded-3xl text-violet-700 hover:text-violet-900 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 bg-violet-50/30 hover:bg-violet-50/70 transition-all"
+              >
+                <Plus className="w-4 h-4" /> Agregar Paso #{steps.length + 1} a la Secuencia
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* MODAL CREAR / EDITAR CORREO */}
+      {showModal && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl border border-neutral-200 shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-neutral-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-extrabold text-neutral-900 text-lg">
+                  {editingStep ? `Editar Paso #${editingStep.step_order}` : `Crear Paso #${steps.length + 1} del Funnel`}
+                </h3>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  Este correo se enviará en automático siguiendo el orden de la secuencia infinita.
+                </p>
+              </div>
+              <button onClick={() => setShowModal(false)} className="p-2 text-neutral-400 hover:text-neutral-900 rounded-xl">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <form onSubmit={handleSaveStep} className="p-6 overflow-y-auto space-y-5 flex-1">
+              <div>
+                <label className="kh-label block text-xs font-bold text-neutral-700 mb-1">
+                  Asunto del Correo
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formSubject}
+                  onChange={e => setFormSubject(e.target.value)}
+                  placeholder="Ej: Te desbloqueé este ejercicio de independencia 🥁"
+                  className="kh-input w-full font-medium"
+                />
+                <p className="text-[10px] text-neutral-400 mt-1">
+                  💡 Tip: Puedes usar <code className="bg-neutral-100 px-1 py-0.5 rounded font-bold">{"{{nombre}}"}</code> para insertar el nombre del alumno automáticamente.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="kh-label block text-xs font-bold text-neutral-700 mb-1">
+                    Tiempo de Espera (Días)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={60}
+                    required
+                    value={formDelay}
+                    onChange={e => setFormDelay(parseInt(e.target.value) || 7)}
+                    className="kh-input w-full font-bold"
+                  />
+                  <p className="text-[10px] text-neutral-400 mt-1">
+                    Días a esperar tras el correo anterior (Recomendado: 7 días).
+                  </p>
+                </div>
+
+                <div>
+                  <label className="kh-label block text-xs font-bold text-neutral-700 mb-1">
+                    Adjuntar de mi Biblioteca de Khora (Opcional)
+                  </label>
+                  <select
+                    value={formLibraryId}
+                    onChange={e => setFormLibraryId(e.target.value)}
+                    className="kh-input w-full text-xs font-medium bg-white"
+                  >
+                    <option value="">Ninguno (Solo texto/enlaces)</option>
+                    {libraryMaterials.map(mat => (
+                      <option key={mat.id} value={mat.id}>
+                        {mat.type === "video" ? "📹 Video: " : "📄 PDF: "} {mat.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* AUDIENCE SELECTOR (CHECKBOXES) */}
+              <div className="space-y-2 pt-2 border-t border-neutral-100">
+                <label className="kh-label block text-xs font-bold text-neutral-700">
+                  ¿A qué listas o audiencias enviar este correo?
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {AUDIENCE_OPTIONS.map(opt => {
+                    const isChecked = formAudiences.includes(opt.key)
+                    return (
+                      <div
+                        key={opt.key}
+                        onClick={() => toggleAudience(opt.key)}
+                        className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-3 ${
+                          isChecked 
+                            ? "bg-violet-50/60 border-violet-300 text-neutral-900" 
+                            : "bg-neutral-50/60 border-neutral-200 text-neutral-500 opacity-70"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {}} // handled by div
+                          className="mt-1 rounded text-violet-600 focus:ring-violet-500"
+                        />
+                        <div className="space-y-0.5">
+                          <div className="text-xs font-bold flex items-center gap-1.5">
+                            <span>{opt.icon}</span>
+                            <span>{opt.label}</span>
+                          </div>
+                          <p className="text-[10px] text-neutral-400 leading-tight">{opt.desc}</p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* CONTENT EDITOR */}
+              <div className="space-y-1 pt-2 border-t border-neutral-100">
+                <label className="kh-label block text-xs font-bold text-neutral-700">
+                  Cuerpo del Mensaje
+                </label>
+                <textarea
+                  rows={8}
+                  required
+                  value={formContent}
+                  onChange={e => setFormContent(e.target.value)}
+                  placeholder="¡Hola {{nombre}}!&#10;&#10;Hoy quiero compartirte un ejercicio clave que suelo darle a mis alumnos para soltar las manos...&#10;&#10;Un abrazo,&#10;Arnaldo"
+                  className="kh-input w-full text-xs font-sans leading-relaxed"
+                />
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-neutral-700">
+                  <input
+                    type="checkbox"
+                    checked={formIsActive}
+                    onChange={e => setFormIsActive(e.target.checked)}
+                    className="rounded text-violet-600 focus:ring-violet-500"
+                  />
+                  <span>Dejar este correo activo inmediatamente</span>
+                </label>
+              </div>
+
+              {/* Submit Button */}
+              <div className="pt-4 border-t border-neutral-100 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="kh-btn-secondary py-2.5 px-4 text-xs font-bold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="kh-btn-primary py-2.5 px-5 text-xs font-bold uppercase tracking-wider"
+                >
+                  {saving ? "Guardando..." : "Guardar Paso del Funnel"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL VER ALUMNOS CONVERTIDOS */}
+      {conversionModalOpen && selectedStepForConversions && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl border border-neutral-200 shadow-2xl w-full max-w-lg p-6 flex flex-col gap-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-neutral-100 pb-4">
+              <div>
+                <h3 className="text-base font-extrabold text-neutral-900 flex items-center gap-2">
+                  <span>🎉 Conversiones Atribuidas</span>
+                </h3>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  Paso #{selectedStepForConversions.step_order}: &quot;{selectedStepForConversions.subject}&quot;
+                </p>
+              </div>
+              <button onClick={() => setConversionModalOpen(false)} className="p-1.5 text-neutral-400 hover:text-neutral-900 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {loadingConversions ? (
+              <div className="py-8 text-center text-xs text-neutral-400 font-semibold animate-pulse">
+                Cargando alumnos convertidos...
+              </div>
+            ) : convertedStudents.length === 0 ? (
+              <div className="py-8 text-center space-y-2">
+                <p className="text-sm font-bold text-neutral-900">Aún no hay compras atribuidas a este correo</p>
+                <p className="text-xs text-neutral-500 max-w-xs mx-auto">
+                  En cuanto un alumno que recibió este correo contrate un plan, aparecerá listado aquí automáticamente con su fecha de compra.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                {convertedStudents.map(c => (
+                  <div key={c.id} className="p-3 bg-emerald-50/50 border border-emerald-200/60 rounded-2xl flex items-center justify-between text-xs">
+                    <div>
+                      <h4 className="font-bold text-neutral-900">{c.name}</h4>
+                      <p className="text-[11px] text-neutral-500">{c.email}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="inline-block text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
+                        {c.details}
+                      </span>
+                      <p className="text-[10px] text-neutral-400 mt-0.5">
+                        {new Date(c.converted_at).toLocaleDateString("es-CL", { day: "numeric", month: "short", year: "numeric" })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button
+              onClick={() => setConversionModalOpen(false)}
+              className="w-full kh-btn-secondary py-2.5 text-xs font-bold mt-2"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
