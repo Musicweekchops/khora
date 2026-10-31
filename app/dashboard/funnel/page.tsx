@@ -86,6 +86,7 @@ export default function FunnelPage() {
   const [formAudiences, setFormAudiences] = useState<string[]>(["PROSPECT", "TRIAL", "PAUSED", "INACTIVE"])
   const [formLibraryId, setFormLibraryId] = useState<string>("")
   const [formIsActive, setFormIsActive] = useState(true)
+  const [editorTab, setEditorTab] = useState<"text" | "html" | "preview">("text")
 
   // Modal Ver Conversiones
   const [conversionModalOpen, setConversionModalOpen] = useState(false)
@@ -200,6 +201,7 @@ export default function FunnelPage() {
     setFormAudiences(["PROSPECT", "TRIAL", "PAUSED", "INACTIVE"])
     setFormLibraryId("")
     setFormIsActive(true)
+    setEditorTab("text")
     setShowModal(true)
   }
 
@@ -211,6 +213,7 @@ export default function FunnelPage() {
     setFormAudiences(step.target_audiences || ["PROSPECT", "TRIAL", "PAUSED", "INACTIVE"])
     setFormLibraryId(step.library_content_id || "")
     setFormIsActive(step.is_active)
+    setEditorTab("text")
     setShowModal(true)
   }
 
@@ -709,19 +712,118 @@ export default function FunnelPage() {
                 </div>
               </div>
 
-              {/* CONTENT EDITOR */}
-              <div className="space-y-1 pt-2 border-t border-neutral-100">
-                <label className="kh-label block text-xs font-bold text-neutral-700">
-                  Cuerpo del Mensaje
-                </label>
-                <textarea
-                  rows={8}
-                  required
-                  value={formContent}
-                  onChange={e => setFormContent(e.target.value)}
-                  placeholder="¡Hola {{nombre}}!&#10;&#10;Hoy quiero compartirte un ejercicio clave que suelo darle a mis alumnos para soltar las manos...&#10;&#10;Un abrazo,&#10;Arnaldo"
-                  className="kh-input w-full text-xs font-sans leading-relaxed"
-                />
+              {/* CONTENT EDITOR TABS (TEXT / HTML / LIVE PREVIEW) */}
+              <div className="space-y-2 pt-2 border-t border-neutral-100">
+                <div className="flex items-center justify-between">
+                  <label className="kh-label block text-xs font-bold text-neutral-700">
+                    Cuerpo del Mensaje
+                  </label>
+                  <div className="flex items-center p-0.5 bg-neutral-100 rounded-xl border border-neutral-200 text-xs font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setEditorTab("text")}
+                      className={`px-3 py-1 rounded-lg transition-all ${
+                        editorTab === "text" ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500 hover:text-neutral-900"
+                      }`}
+                    >
+                      ✍️ Texto
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditorTab("html")}
+                      className={`px-3 py-1 rounded-lg transition-all ${
+                        editorTab === "html" ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500 hover:text-neutral-900"
+                      }`}
+                    >
+                      &lt;&gt; Código HTML
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditorTab("preview")}
+                      className={`px-3 py-1 rounded-lg transition-all ${
+                        editorTab === "preview" ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500 hover:text-neutral-900"
+                      }`}
+                    >
+                      👁️ Vista Previa
+                    </button>
+                  </div>
+                </div>
+
+                {editorTab === "text" && (
+                  <div>
+                    <textarea
+                      rows={8}
+                      required
+                      value={formContent}
+                      onChange={e => setFormContent(e.target.value)}
+                      placeholder="¡Hola {{nombre}}!&#10;&#10;Hoy quiero compartirte un ejercicio clave que suelo darle a mis alumnos para soltar las manos...&#10;&#10;Un abrazo,&#10;Arnaldo"
+                      className="kh-input w-full text-xs font-sans leading-relaxed"
+                    />
+                    <p className="text-[10px] text-neutral-400 mt-1">
+                      Los saltos de línea se formatearán automáticamente en párrafos HTML limpios al enviarse.
+                    </p>
+                  </div>
+                )}
+
+                {editorTab === "html" && (
+                  <div>
+                    <textarea
+                      rows={10}
+                      required
+                      value={formContent}
+                      onChange={e => setFormContent(e.target.value)}
+                      placeholder="<p>¡Hola <strong>{{nombre}}</strong>!</p>&#10;<p>Aquí tienes el ejercicio exclusivo de esta semana...</p>"
+                      className="w-full p-3 bg-neutral-950 text-emerald-400 font-mono text-xs rounded-2xl border border-neutral-800 outline-none focus:border-violet-500 leading-relaxed"
+                    />
+                    <p className="text-[10px] text-neutral-400 mt-1">
+                      Puedes usar etiquetas HTML personalizadas: <code className="bg-neutral-100 px-1 py-0.5 rounded font-mono text-neutral-800">&lt;p&gt;</code>, <code className="bg-neutral-100 px-1 py-0.5 rounded font-mono text-neutral-800">&lt;strong&gt;</code>, <code className="bg-neutral-100 px-1 py-0.5 rounded font-mono text-neutral-800">&lt;a href=&quot;...&quot;&gt;</code>, <code className="bg-neutral-100 px-1 py-0.5 rounded font-mono text-neutral-800">&lt;img&gt;</code>, botones con estilos inline, etc.
+                    </p>
+                  </div>
+                )}
+
+                {editorTab === "preview" && (
+                  <div className="bg-neutral-100 p-4 sm:p-6 rounded-2xl border border-neutral-200/80 max-h-80 overflow-y-auto">
+                    <div className="max-w-md mx-auto bg-white border border-neutral-200 rounded-2xl overflow-hidden shadow-md text-neutral-800">
+                      {/* Email Header */}
+                      <div className="text-center py-5 border-b border-neutral-100 bg-white">
+                        <span className="text-xl font-black text-neutral-900 tracking-tight">Khora<span className="text-violet-600">.</span></span>
+                      </div>
+                      {/* Email Content Body */}
+                      <div className="p-5 text-xs text-neutral-700 leading-relaxed space-y-3">
+                        <p className="text-sm font-bold text-neutral-900">¡Hola Alumno!</p>
+                        <div 
+                          className="prose prose-xs max-w-none text-neutral-700 leading-relaxed"
+                          dangerouslySetInnerHTML={{ 
+                            __html: formContent.includes("<") ? formContent.replace(/{{nombre}}/g, "Alumno") : formContent.replace(/{{nombre}}/g, "Alumno").replace(/\n/g, "<br />") 
+                          }}
+                        />
+
+                        {formLibraryId && (
+                          <div className="p-3 bg-neutral-50 border border-neutral-200/80 rounded-xl text-left space-y-1 mt-3">
+                            <span className="text-[10px] font-black text-violet-700 uppercase tracking-widest">
+                              📁 Material Adjunto
+                            </span>
+                            <p className="font-bold text-neutral-900 text-xs">
+                              {libraryMaterials.find(m => m.id === formLibraryId)?.title || "Ejercicio de la Biblioteca"}
+                            </p>
+                            <span className="inline-block bg-violet-600 text-white text-[10px] font-bold px-3 py-1 rounded-lg mt-1 shadow-sm">
+                              Ver en Khora
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="pt-3 border-t border-neutral-100 text-neutral-500 text-[11px]">
+                          Un abrazo,<br /><strong className="text-neutral-900">Arnaldo Allende</strong>
+                        </div>
+                      </div>
+                      {/* Email Footer */}
+                      <div className="p-3 bg-neutral-50 text-center border-t border-neutral-100 text-[9px] text-neutral-400 space-y-1">
+                        <p>Recibes este correo porque eres alumno o tienes una cuenta en Khora.</p>
+                        <p className="text-violet-600 underline">Términos • Privacidad • Cancelar suscripción</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-3 pt-2">
