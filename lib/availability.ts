@@ -22,9 +22,145 @@ export function timesOverlap(start1: string, end1: string, start2: string, end2:
 }
 
 /**
- * Obtiene todos los slots disponibles para un profesor en una fecha específica.
+ * Convierte "HH:mm" o "HH:mm:ss" a minutos transcurridos desde las 00:00.
  */
-export async function getAvailableSlots(date: string, teacherId: string, durationMinutes: number) {
+export function timeToMinutes(timeStr: string): number {
+  if (!timeStr) return 0
+  const [h, m] = timeStr.split(":").map(Number)
+  return (h || 0) * 60 + (m || 0)
+}
+
+/**
+ * Convierte minutos desde las 00:00 a string "HH:mm:00".
+ */
+export function minutesToTime(mins: number): string {
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`
+}
+
+export interface TimeInterval {
+  start: number
+  end: number
+}
+
+/**
+ * Obtiene los bloques continuos de tiempo libre dentro de un rango de disponibilidad,
+ * restando todos los intervalos ocupados (clases activas y reservas pendientes).
+ */
+export function getContinuousFreeWindows(
+  rangeStartMin: number,
+  rangeEndMin: number,
+  occupiedMin: TimeInterval[]
+): TimeInterval[] {
+  // 1. Filtrar los ocupados que caigan dentro del rango y recortarlos a los bordes
+  const clipped: TimeInterval[] = []
+  for (const occ of occupiedMin) {
+    const s = Math.max(rangeStartMin, occ.start)
+    const e = Math.min(rangeEndMin, occ.end)
+    if (s < e) {
+      clipped.push({ start: s, end: e })
+    }
+  }
+
+  // 2. Ordenar por tiempo de inicio
+  clipped.sort((a, b) => a.start - b.start)
+
+  // 3. Fusionar bloques ocupados continuos o solapados
+  const merged: TimeInterval[] = []
+  for (const item of clipped) {
+    if (merged.length === 0) {
+      merged.push({ ...item })
+    } else {
+      const last = merged[merged.length - 1]
+      if (item.start <= last.end) {
+        last.end = Math.max(last.end, item.end)
+      } else {
+        merged.push({ ...item })
+      }
+    }
+  }
+
+  // 4. Los intervalos libres son los espacios entre los bloques ocupados fusionados
+  const freeWindows: TimeInterval[] = []
+  let cursor = rangeStartMin
+  for (const occ of merged) {
+    if (cursor < occ.start) {
+      freeWindows.push({ start: cursor, end: occ.start })
+    }
+    cursor = Math.max(cursor, occ.end)
+  }
+  if (cursor < rangeEndMin) {
+    freeWindows.push({ start: cursor, end: rangeEndMin })
+  }
+
+  return freeWindows
+}
+
+/**
+ * Evalúa si colocar un slot de clase genera un hueco huérfano inutilizable (fragmentación de agenda).
+ * 
+ * Regla matemática:
+ * 1. Conservación de capacidad: el slot no debe reducir el número total de alumnos/clases
+ *    que cabrían en la ventana continua libre (Math.floor(longitud / minDuration)).
+ * 2. Cero huecos muertos: si la ventana da para 2 o más clases, no puede quedar ningún
+ *    extremo con un espacio mayor a 0 pero menor a la duración mínima (ej. 30 min).
+ * 3. Si la ventana es pequeña (menor a 2 clases), el slot debe ir anclado a uno de los bordes.
+ */
+export function isSlotLeavingOrphanGap(
+  slotStartMin: number,
+  slotEndMin: number,
+  windowStartMin: number,
+  windowEndMin: number,
+  minDurationMinutes: number
+): boolean {
+  const windowLength = windowEndMin - windowStartMin
+  const slotDuration = slotEndMin - slotStartMin
+
+  if (windowLength < slotDuration) return true
+
+  const maxClassesInitial = Math.floor(windowLength / minDurationMinutes)
+
+  const gapBefore = slotStartMin - windowStartMin
+  const gapAfter = windowEndMin - slotEndMin
+
+  const maxClassesAfter = 1 + Math.floor(gapBefore / minDurationMinutes) + Math.floor(gapAfter / minDurationMinutes)
+
+  // 1. Destrucción de capacidad: si al elegir este horario caben menos clases en total
+  if (maxClassesAfter < maxClassesInitial) {
+    return true
+  }
+
+  // 2. Si la ventana permite 2 o más clases, ningún extremo puede quedar con un hueco
+  // inutilizable (menor a minDurationMinutes)
+  if (windowLength >= minDurationMinutes * 2) {
+    if (gapBefore > 0 && gapBefore < minDurationMinutes) return true
+    if (gapAfter > 0 && gapAfter < minDurationMinutes) return true
+  } else {
+    // Si la ventana no da para 2 clases completas, debe al menos estar pegada a un extremo
+    if (gapBefore > 0 && gapAfter > 0) return true
+  }
+
+  return false
+}
+
+export interface GetAvailableSlotsOptions {
+  excludeClassId?: string
+  excludeBookingId?: string
+  minDurationMinutes?: number
+  allowOrphanGaps?: boolean
+}
+
+/**
+ * Obtiene todos los slots disponibles para un profesor en una fecha específica,
+ * filtrando automáticamente aquellos que generen huecos huérfanos que impidan sumar otro alumno.
+ */
+export async function getAvailableSlots(
+  date: string,
+  teacherId: string,
+  durationMinutes: number,
+  options?: GetAvailableSlotsOptions
+): Promise<string[]> {
   const dayOfWeek = new Date(date + "T12:00").getDay()
 
   // 1. Obtener disponibilidad base para ese día
@@ -37,57 +173,144 @@ export async function getAvailableSlots(date: string, teacherId: string, duratio
   if (!availability || availability.length === 0) return []
 
   // 2. Obtener clases ya programadas
-  const { data: classes } = await supabase
+  let classQuery = supabase
     .from("Class")
-    .select("start_time, end_time")
+    .select("id, start_time, end_time, booking_id")
     .eq("teacher_id", teacherId)
     .eq("date", date)
     .neq("status", "CANCELLED")
 
+  if (options?.excludeClassId) {
+    classQuery = classQuery.neq("id", options.excludeClassId)
+  }
+
+  const { data: classes } = await classQuery
+
   // 3. Obtener reservas pendientes
-  const { data: bookings } = await supabase
+  let bookingQuery = supabase
     .from("Booking")
-    .select("start_time, end_time")
+    .select("id, start_time, end_time")
     .eq("teacher_id", teacherId)
     .eq("date", date)
     .eq("status", "PENDING")
 
-  const occupied = [...(classes || []), ...(bookings || [])]
+  if (options?.excludeBookingId) {
+    bookingQuery = bookingQuery.neq("id", options.excludeBookingId)
+  }
 
-  const availableSlots: string[] = []
+  const { data: bookings } = await bookingQuery
 
-  // 4. Generar slots para cada rango de disponibilidad
-  for (const range of availability) {
-    let current = range.start_time
-    const end = range.end_time
+  const filteredClasses = options?.excludeBookingId
+    ? (classes || []).filter((c: any) => c.booking_id !== options.excludeBookingId)
+    : (classes || [])
 
-    while (true) {
-      const slotStart = current
-      const slotEnd = addMinutes(slotStart, durationMinutes)
+  const occupied = [...filteredClasses, ...(bookings || [])]
 
-      // Si el slot se pasa del fin del rango, terminamos este rango
-      if (slotEnd > end) break
+  // 4. Determinar la duración mínima de clase del profesor para evitar huecos inservibles
+  let minDuration = options?.minDurationMinutes
+  if (!minDuration) {
+    try {
+      const { data: classTypes } = await supabase
+        .from("ClassType")
+        .select("duration")
+        .eq("teacher_id", teacherId)
 
-      // Verificar si solapa con algo ocupado
-      const isOccupied = occupied.some(occ => 
-        timesOverlap(slotStart, slotEnd, occ.start_time, occ.end_time)
-      )
+      if (classTypes && classTypes.length > 0) {
+        const validDurations = classTypes
+          .map((c: any) => Number(c.duration))
+          .filter((d: number) => !isNaN(d) && d > 0)
 
-      if (!isOccupied) {
-        availableSlots.push(slotStart)
+        if (validDurations.length > 0) {
+          minDuration = Math.min(...validDurations)
+        }
       }
-
-      // Avanzar al siguiente slot (por ahora avanzamos de a 30 min para dar flexibilidad, 
-      // o podríamos avanzar por la duración de la clase si quisiéramos slots continuos)
-      const nextCurrent = addMinutes(slotStart, 30) 
-      if (nextCurrent <= slotStart || nextCurrent >= end) {
-        break
-      }
-      current = nextCurrent
+    } catch (e) {
+      // Ignorar error de red/tabla y usar fallback
     }
   }
 
-  return availableSlots
+  if (!minDuration || minDuration <= 0) {
+    minDuration = Math.min(durationMinutes, 60)
+  }
+
+  const occupiedMin: TimeInterval[] = occupied.map((occ: any) => ({
+    start: timeToMinutes(occ.start_time),
+    end: timeToMinutes(occ.end_time)
+  }))
+
+  const availableSlots: string[] = []
+
+  // 5. Generar slots examinando las ventanas continuas libres de cada rango
+  for (const range of availability) {
+    const rangeStartMin = timeToMinutes(range.start_time)
+    const rangeEndMin = timeToMinutes(range.end_time)
+
+    const freeWindows = getContinuousFreeWindows(rangeStartMin, rangeEndMin, occupiedMin)
+
+    for (const win of freeWindows) {
+      if (win.end - win.start < durationMinutes) continue
+
+      // Generar candidatos avanzando en pasos de 30 min (o la duración si es menor)
+      const step = Math.min(30, durationMinutes)
+      const candidates = new Set<number>()
+
+      let cursor = win.start
+      while (cursor + durationMinutes <= win.end) {
+        candidates.add(cursor)
+        cursor += step
+      }
+
+      // Probar también el anclaje exacto al final del bloque libre
+      const endAnchor = win.end - durationMinutes
+      if (endAnchor >= win.start) {
+        candidates.add(endAnchor)
+      }
+
+      const sortedCandidates = Array.from(candidates).sort((a, b) => a - b)
+
+      for (const startMin of sortedCandidates) {
+        const endMin = startMin + durationMinutes
+
+        // Si no se permite hueco huérfano (comportamiento por defecto)
+        if (!options?.allowOrphanGaps) {
+          const leavesGap = isSlotLeavingOrphanGap(startMin, endMin, win.start, win.end, minDuration)
+          if (leavesGap) continue
+        }
+
+        availableSlots.push(minutesToTime(startMin))
+      }
+    }
+  }
+
+  // Eliminar duplicados y ordenar cronológicamente
+  return Array.from(new Set(availableSlots)).sort()
+}
+
+/**
+ * Valida si un horario seleccionado por el alumno es válido para agendar:
+ * 1. Cae dentro de la disponibilidad del profesor.
+ * 2. No solapa con clases existentes ni reservas pendientes.
+ * 3. No deja huecos huérfanos que impidan sumar otro alumno.
+ */
+export async function validateBookingSlot(
+  date: string,
+  teacherId: string,
+  startTime: string,
+  durationMinutes: number,
+  options?: GetAvailableSlotsOptions
+): Promise<{ valid: boolean; reason?: string }> {
+  const slots = await getAvailableSlots(date, teacherId, durationMinutes, options)
+  const normTime = normalizeTime(startTime)
+
+  const isAvailable = slots.some(s => normalizeTime(s) === normTime)
+  if (!isAvailable) {
+    return {
+      valid: false,
+      reason: "El horario seleccionado no está disponible o dejaría un espacio muerto en la agenda del profesor. Por favor selecciona otro horario."
+    }
+  }
+
+  return { valid: true }
 }
 
 /**

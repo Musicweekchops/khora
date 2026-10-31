@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react"
 import { supabase } from "@/lib/supabase"
-import { getAvailableSlots, addMinutes, timesOverlap } from "@/lib/availability"
+import { getAvailableSlots, addMinutes, timesOverlap, validateBookingSlot } from "@/lib/availability"
 import { formatTime } from "@/lib/utils"
 import { useAuth } from "@/lib/context/AuthContext"
 import { motion, AnimatePresence } from "framer-motion"
@@ -346,7 +346,9 @@ export default function StudentBookingDashboardPage() {
     setRescheduleSlot(null)
 
     try {
-      const slots = await getAvailableSlots(rescheduleDate, rescheduleClass.teacher_id, rescheduleClass.duration)
+      const slots = await getAvailableSlots(rescheduleDate, rescheduleClass.teacher_id, rescheduleClass.duration, {
+        excludeClassId: rescheduleClass.id
+      })
       
       // If we are rescheduling to the original date, ensure original slot is shown
       if (rescheduleDate === rescheduleClass.date) {
@@ -482,6 +484,17 @@ export default function StudentBookingDashboardPage() {
         throw new Error("Este horario acaba de ser reservado por otro usuario. Por favor elige otro slot.")
       }
 
+      // Validar que no deje huecos huérfanos
+      const slotValidation = await validateBookingSlot(
+        bookingDate,
+        teacher.id,
+        startTime,
+        selectedClass.duration
+      )
+      if (!slotValidation.valid) {
+        throw new Error(slotValidation.reason || "El horario seleccionado no está disponible.")
+      }
+
       // 3. Insert pending booking request
       const { error: insertErr } = await supabase.from("Booking").insert({
         teacher_id: teacher.id,
@@ -610,6 +623,18 @@ export default function StudentBookingDashboardPage() {
 
       if (hasConflict) {
         throw new Error("El profesor no tiene disponible ese bloque. Por favor selecciona otro.")
+      }
+
+      // Validar que no deje huecos huérfanos
+      const slotValidation = await validateBookingSlot(
+        rescheduleDate,
+        teacher.id,
+        startTime,
+        rescheduleClass.duration,
+        { excludeClassId: rescheduleClass.id }
+      )
+      if (!slotValidation.valid) {
+        throw new Error(slotValidation.reason || "El horario seleccionado no está disponible.")
       }
 
       const originalDate = rescheduleClass.date

@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense, useMemo } from "react"
 import { useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
-import { getAvailableSlots, addMinutes, timesOverlap } from "@/lib/availability"
+import { getAvailableSlots, addMinutes, timesOverlap, validateBookingSlot } from "@/lib/availability"
 import { formatTime } from "@/lib/utils"
 import { useAuth } from "@/lib/context/AuthContext"
 import { motion, AnimatePresence } from "framer-motion"
@@ -543,7 +543,7 @@ function PublicBookingPage() {
 
     try {
       const duration = classToReschedule.ClassType?.duration || 60
-      const slots = await getAvailableSlots(rescheduleDate, selectedTeacher.id, duration)
+      const slots = await getAvailableSlots(rescheduleDate, selectedTeacher.id, duration, { excludeClassId: classToReschedule.id })
       setAvailableRescheduleSlots(slots)
 
       // Suggest alternative date if selected date is fully booked
@@ -558,7 +558,7 @@ function PublicBookingPage() {
           const altDate = new Date(targetDate)
           altDate.setDate(targetDate.getDate() + (offset * 7))
           const altDateStr = altDate.toLocaleDateString("sv-SE")
-          const altSlots = await getAvailableSlots(altDateStr, selectedTeacher.id, duration)
+          const altSlots = await getAvailableSlots(altDateStr, selectedTeacher.id, duration, { excludeClassId: classToReschedule.id })
           if (altSlots.length > 0) {
             setAlternativeDateMsg(`Este ${dayName} está full, pero el ${dayName} ${altDate.toLocaleDateString("es-CL", { day: "numeric", month: "long" })} podría ser una buena opción.`)
             setAlternativeDateStr(altDateStr)
@@ -873,6 +873,18 @@ function PublicBookingPage() {
         throw new Error("El profesor no tiene disponible ese bloque. Por favor selecciona otro.")
       }
 
+      // Validar que el nuevo horario no deje huecos huérfanos
+      const slotValidation = await validateBookingSlot(
+        rescheduleDate,
+        selectedTeacher.id,
+        startTime,
+        classToReschedule.ClassType?.duration || 60,
+        { excludeClassId: classToReschedule.id }
+      )
+      if (!slotValidation.valid) {
+        throw new Error(slotValidation.reason || "El horario seleccionado no está disponible.")
+      }
+
       // 2. Student weekly conflict check.
       // Reagendar es un movimiento — no crea cupos nuevos — por eso NO aplicamos el
       // límite mensual. Pero sí validamos que el alumno no tenga OTRA clase distinta
@@ -1030,6 +1042,17 @@ function PublicBookingPage() {
 
       if (hasConflict) {
         throw new Error("Este horario acaba de ser reservado. Por favor elige otro.")
+      }
+
+      // Validar que el nuevo horario no deje huecos huérfanos
+      const slotValidation = await validateBookingSlot(
+        formData.date,
+        selectedTeacher.id,
+        startTime,
+        selectedClass.duration
+      )
+      if (!slotValidation.valid) {
+        throw new Error(slotValidation.reason || "El horario seleccionado no está disponible.")
       }
 
       // If it is a trial class, redirect to Mercado Pago instead of inserting booking directly
