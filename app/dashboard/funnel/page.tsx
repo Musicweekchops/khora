@@ -308,7 +308,7 @@ export default function FunnelPage() {
       }
       return `data:${file.type || "image/png"};base64,${btoa(binary)}`
     } catch (err) {
-      console.warn("arrayBuffer falló, intentando Canvas/ObjectURL:", err)
+      console.warn("arrayBuffer falló, intentando Canvas/ObjectURL:", err, (err as any)?.name, (err as any)?.message)
     }
 
     // Método 2: Decodificación nativa con Image + Canvas (inmune a bloqueos de sandbox y reduce peso)
@@ -350,7 +350,7 @@ export default function FunnelPage() {
       const reader = new FileReader()
       reader.onload = () => resolve(reader.result as string)
       reader.onerror = () => {
-        reject(new Error("No se pudo leer el archivo. Si está en iCloud Drive, haz doble clic en él en Finder para descargarlo antes de subirlo."))
+        reject(new Error(`No se pudo leer el archivo (${reader.error?.name || "?"}: ${reader.error?.message || "sin detalle"}) | nombre=${file.name} tipo=${file.type} tamaño=${file.size}`))
       }
       reader.readAsDataURL(file)
     })
