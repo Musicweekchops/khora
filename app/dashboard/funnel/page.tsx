@@ -144,6 +144,7 @@ export default function FunnelPage() {
   const [formHeaderImageUrl, setFormHeaderImageUrl] = useState<string>("")
   const [uploadingHeader, setUploadingHeader] = useState(false)
   const [isDraggingHeader, setIsDraggingHeader] = useState(false)
+  const [uploadingBodyImage, setUploadingBodyImage] = useState(false)
   const [globalDefaultHeader, setGlobalDefaultHeader] = useState<string>("")
   const [applyHeaderToAll, setApplyHeaderToAll] = useState(true)
   const [formIsActive, setFormIsActive] = useState(true)
@@ -449,6 +450,54 @@ export default function FunnelPage() {
     e.target.value = ""
   }
 
+  async function uploadBodyImage(file: File) {
+    if (!file) return
+    setUploadingBodyImage(true)
+    try {
+      const rawExt = file.name ? (file.name.split(".").pop() || "png").toLowerCase() : "png"
+      const ext = ["png", "jpg", "jpeg", "webp", "gif"].includes(rawExt) ? rawExt : "png"
+      const storagePath = `headers/body_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`
+      let url = ""
+
+      try {
+        const { error: directErr } = await supabase.storage
+          .from("landing")
+          .upload(storagePath, file, { upsert: true, contentType: file.type || "image/png" })
+        if (!directErr) {
+          url = supabase.storage.from("landing").getPublicUrl(storagePath).data?.publicUrl || ""
+        }
+      } catch (e) {
+        console.warn("Subida directa falló, usando Edge Function:", e)
+      }
+
+      if (!url) {
+        const base64 = await fileToBase64(file)
+        const { data, error: fnError } = await supabase.functions.invoke("send-email", {
+          body: { action: "upload-header", base64, ext, contentType: file.type || "image/png" }
+        })
+        if (!data?.publicUrl) {
+          throw new Error(fnError?.message || data?.error || "No se pudo subir la imagen al servidor")
+        }
+        url = data.publicUrl
+      }
+
+      const imgHtml = `<img src="${url}" alt="Imagen" style="width:100%;max-width:476px;height:auto;border-radius:12px;display:block;margin:16px auto;" />`
+      setFormContent(prev => {
+        const current = prev.trim()
+        // Si el contenido es texto plano, convertirlo a párrafos HTML para no perder los saltos de línea
+        const base = current && !current.includes("<")
+          ? current.split(/\n{2,}/).map(p => `<p>${p.replace(/\n/g, "<br />")}</p>`).join("\n")
+          : current
+        return base ? `${base}\n${imgHtml}` : imgHtml
+      })
+      setEditorTab("preview")
+    } catch (err: any) {
+      alert("Error al subir la imagen / GIF: " + (err.message || err))
+    } finally {
+      setUploadingBodyImage(false)
+    }
+  }
+
   function toggleAudience(key: string) {
     setFormAudiences(prev => 
       prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
@@ -531,9 +580,10 @@ export default function FunnelPage() {
   function buildFunnelEmailHtml(step: NurtureStep, studentName: string) {
     const firstName = studentName.split(" ")[0] || "Alumno"
     const parsedSubject = step.subject.replace(/{{nombre}}/g, firstName)
-    const parsedBody = step.content_html
-      .replace(/{{nombre}}/g, firstName)
-      .replace(/\n/g, "<br>")
+    const bodyWithName = step.content_html.replace(/{{nombre}}/g, firstName)
+    const parsedBody = bodyWithName.includes("<")
+      ? bodyWithName
+      : bodyWithName.replace(/\n/g, "<br>")
 
     const headerImg = step.header_image_url || formHeaderImageUrl || globalDefaultHeader
 
@@ -1268,6 +1318,25 @@ export default function FunnelPage() {
                       👁️ Vista Previa
                     </button>
                   </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <label className="cursor-pointer kh-btn-secondary py-1.5 px-3 text-xs flex items-center gap-2 font-bold">
+                    <ImageIcon className="w-3.5 h-3.5 text-violet-600" />
+                    {uploadingBodyImage ? "Subiendo..." : "Insertar GIF / Imagen"}
+                    <input
+                      type="file"
+                      accept="image/gif,image/png,image/jpeg,image/webp"
+                      disabled={uploadingBodyImage}
+                      className="hidden"
+                      onChange={async (e) => {
+                        const f = e.target.files?.[0]
+                        if (f) await uploadBodyImage(f)
+                        e.target.value = ""
+                      }}
+                    />
+                  </label>
+                  <span className="text-[10px] text-neutral-400">Se agrega al final del mensaje. Los GIF se animan en el correo.</span>
                 </div>
 
                 {editorTab === "text" && (

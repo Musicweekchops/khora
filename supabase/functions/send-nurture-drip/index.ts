@@ -91,9 +91,11 @@ serve(async (req) => {
       // 4. Preparar correo
       const firstName = u.name ? u.name.split(" ")[0] : "Alumno"
       const parsedSubject = nextStep.subject.replace(/{{nombre}}/g, firstName)
-      const parsedBody = nextStep.content_html
-        .replace(/{{nombre}}/g, firstName)
-        .replace(/\n/g, "<br>")
+      const bodyWithName = nextStep.content_html.replace(/{{nombre}}/g, firstName)
+      // Si el contenido ya es HTML (ej: imágenes/GIF insertados), respetarlo; si es texto plano, convertir saltos de línea
+      const parsedBody = bodyWithName.includes("<")
+        ? bodyWithName
+        : bodyWithName.replace(/\n/g, "<br>")
 
       let libraryHtml = ""
       if (nextStep.LibraryContent) {
