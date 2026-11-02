@@ -143,6 +143,7 @@ export default function FunnelPage() {
   const [formLibraryId, setFormLibraryId] = useState<string>("")
   const [formHeaderImageUrl, setFormHeaderImageUrl] = useState<string>("")
   const [uploadingHeader, setUploadingHeader] = useState(false)
+  const [isDraggingHeader, setIsDraggingHeader] = useState(false)
   const [globalDefaultHeader, setGlobalDefaultHeader] = useState<string>("")
   const [applyHeaderToAll, setApplyHeaderToAll] = useState(true)
   const [formIsActive, setFormIsActive] = useState(true)
@@ -295,43 +296,115 @@ export default function FunnelPage() {
     setShowModal(true)
   }
 
-  async function handleUploadHeaderImage(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
+  async function fileToBase64(file: File): Promise<string> {
+    // Método 1: arrayBuffer nativo por trozos (eficiente y sin límite de stack)
+    try {
+      const buffer = await file.arrayBuffer()
+      const bytes = new Uint8Array(buffer)
+      let binary = ""
+      const chunkSize = 8192
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunkSize)))
+      }
+      return `data:${file.type || "image/png"};base64,${btoa(binary)}`
+    } catch (err) {
+      console.warn("arrayBuffer falló, intentando Canvas/ObjectURL:", err)
+    }
+
+    // Método 2: Decodificación nativa con Image + Canvas (inmune a bloqueos de sandbox y reduce peso)
+    try {
+      const blobUrl = URL.createObjectURL(file)
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const img = new Image()
+        img.onload = () => {
+          try {
+            const maxW = 1200
+            const scale = img.width > maxW ? maxW / img.width : 1
+            const canvas = document.createElement("canvas")
+            canvas.width = Math.round(img.width * scale)
+            canvas.height = Math.round(img.height * scale)
+            const ctx = canvas.getContext("2d")
+            if (!ctx) throw new Error("Canvas context null")
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+            const dataUrl = canvas.toDataURL(file.type === "image/png" ? "image/png" : "image/jpeg", 0.9)
+            URL.revokeObjectURL(blobUrl)
+            resolve(dataUrl)
+          } catch (canvasErr) {
+            URL.revokeObjectURL(blobUrl)
+            reject(canvasErr)
+          }
+        }
+        img.onerror = () => {
+          URL.revokeObjectURL(blobUrl)
+          reject(new Error("No se pudo decodificar la imagen"))
+        }
+        img.src = blobUrl
+      })
+      if (base64) return base64
+    } catch (canvasErr) {
+      console.warn("Canvas falló, intentando FileReader:", canvasErr)
+    }
+
+    // Método 3: FileReader estándar
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = () => {
+        reject(new Error("No se pudo leer el archivo. Si está en iCloud Drive, haz doble clic en él en Finder para descargarlo antes de subirlo."))
+      }
+      reader.readAsDataURL(file)
+    })
+  }
+
+  async function processAndUploadHeaderFile(file: File) {
     if (!file) return
     setUploadingHeader(true)
 
     try {
-      const ext = file.name.split(".").pop() || "png"
+      const rawExt = file.name ? (file.name.split(".").pop() || "png").toLowerCase() : "png"
+      const ext = ["png", "jpg", "jpeg", "webp", "gif"].includes(rawExt) ? rawExt : "png"
+      const storagePath = `headers/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`
 
-      // 1. Convertir a Base64 en memoria (inmune a restricciones de sandbox o disco del navegador)
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(reader.result as string)
-        reader.onerror = () => reject(new Error("No se pudo leer el archivo local"))
-        reader.readAsDataURL(file)
-      })
-
-      // 2. Subida blindada vía Edge Function (omite cualquier bloqueo de Storage o Adblockers)
       let finalUrl = ""
-      const { data, error: fnError } = await supabase.functions.invoke("send-email", {
-        body: {
-          action: "upload-header",
-          base64,
-          ext,
-          contentType: file.type || "image/png"
-        }
-      })
 
-      if (data?.publicUrl) {
-        finalUrl = data.publicUrl
-      } else {
-        // Fallback a Storage directo
-        console.warn("Edge function upload fallback:", fnError)
-        const path = `headers/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
-        const { error: uploadErr } = await supabase.storage.from("landing").upload(path, file, { upsert: true })
-        if (uploadErr) throw uploadErr
-        const { data: stData } = supabase.storage.from("landing").getPublicUrl(path)
-        finalUrl = stData?.publicUrl || ""
+      // 1. Intentar primero subida directa a Supabase Storage con el objeto File nativo
+      try {
+        const { error: directErr } = await supabase.storage
+          .from("landing")
+          .upload(storagePath, file, { 
+            upsert: true,
+            contentType: file.type || "image/png"
+          })
+
+        if (!directErr) {
+          const { data: stData } = supabase.storage.from("landing").getPublicUrl(storagePath)
+          if (stData?.publicUrl) {
+            finalUrl = stData.publicUrl
+          }
+        } else {
+          console.warn("Subida directa a storage falló, usando Edge Function:", directErr)
+        }
+      } catch (directExc) {
+        console.warn("Excepción en subida directa, usando Edge Function:", directExc)
+      }
+
+      // 2. Si la subida directa no completó, usar la Edge Function con Service Role
+      if (!finalUrl) {
+        const base64 = await fileToBase64(file)
+        const { data, error: fnError } = await supabase.functions.invoke("send-email", {
+          body: {
+            action: "upload-header",
+            base64,
+            ext,
+            contentType: file.type || "image/png"
+          }
+        })
+
+        if (data?.publicUrl) {
+          finalUrl = data.publicUrl
+        } else {
+          throw new Error(fnError?.message || data?.error || "No se pudo subir la imagen al servidor")
+        }
       }
 
       if (finalUrl) {
@@ -341,23 +414,39 @@ export default function FunnelPage() {
           localStorage.setItem("khora_funnel_default_header", finalUrl)
         }
 
-        // Si la casilla está marcada, aplicar a todos los pasos existentes inmediatamente
-        if (applyHeaderToAll && profile?.teacherProfileId) {
+        // Actualizar en TeacherProfile para que sea el banner predeterminado
+        if (profile?.teacherProfileId) {
           await supabase
-            .from("NurtureStep")
-            .update({ header_image_url: finalUrl })
-            .eq("teacher_id", profile.teacherProfileId)
+            .from("TeacherProfile")
+            .update({ funnel_header_image_url: finalUrl })
+            .eq("id", profile.teacherProfileId)
 
-          setSteps(prev => prev.map(s => ({ ...s, header_image_url: finalUrl })))
+          // Si la casilla está marcada, aplicar a todos los pasos existentes inmediatamente
+          if (applyHeaderToAll) {
+            await supabase
+              .from("NurtureStep")
+              .update({ header_image_url: finalUrl })
+              .eq("teacher_id", profile.teacherProfileId)
+
+            setSteps(prev => prev.map(s => ({ ...s, header_image_url: finalUrl })))
+          }
         }
       } else {
-        throw new Error("No se pudo obtener la URL pública de la imagen")
+        throw new Error("No se pudo obtener la URL de la cabecera")
       }
     } catch (err: any) {
-      alert("Error al subir imagen de cabecera: " + err.message)
+      alert("Error al subir imagen de cabecera: " + (err.message || err))
     } finally {
       setUploadingHeader(false)
     }
+  }
+
+  async function handleUploadHeaderImage(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (file) {
+      await processAndUploadHeaderFile(file)
+    }
+    e.target.value = ""
   }
 
   function toggleAudience(key: string) {
@@ -968,7 +1057,45 @@ export default function FunnelPage() {
               </div>
 
               {/* CABECERA PERSONALIZADA (BANNER / LOGO) */}
-              <div className="bg-neutral-50/80 border border-neutral-200/80 rounded-2xl p-4 space-y-3">
+              <div 
+                className={`bg-neutral-50/80 border rounded-2xl p-4 space-y-3 transition-colors ${
+                  isDraggingHeader ? "border-violet-500 bg-violet-50/50" : "border-neutral-200/80"
+                }`}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setIsDraggingHeader(true)
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setIsDraggingHeader(false)
+                }}
+                onDrop={async (e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setIsDraggingHeader(false)
+                  const droppedFile = e.dataTransfer.files?.[0]
+                  if (droppedFile) {
+                    await processAndUploadHeaderFile(droppedFile)
+                  }
+                }}
+                onPaste={async (e) => {
+                  const items = e.clipboardData?.items
+                  if (items) {
+                    for (let i = 0; i < items.length; i++) {
+                      if (items[i].type.startsWith("image/")) {
+                        const pastedFile = items[i].getAsFile()
+                        if (pastedFile) {
+                          e.preventDefault()
+                          await processAndUploadHeaderFile(pastedFile)
+                          break
+                        }
+                      }
+                    }
+                  }
+                }}
+              >
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-neutral-800 flex items-center gap-1.5 uppercase tracking-wider">
                     <ImageIcon className="w-4 h-4 text-violet-600" /> Cabecera Personalizada (Banner / Logo)
@@ -993,17 +1120,20 @@ export default function FunnelPage() {
                     />
                   </div>
                 ) : (
-                  <div className="p-3 bg-white rounded-xl border border-dashed border-neutral-300 text-center">
-                    <p className="text-xs text-neutral-500 font-medium">
-                      Sin imagen cargada. Se mostrará únicamente tu nombre <strong>&quot;Arnaldo Allende&quot;</strong> (sin logotipo de Khora).
+                  <div className="p-4 bg-white rounded-xl border border-dashed border-neutral-300 text-center space-y-1">
+                    <p className="text-xs text-neutral-600 font-semibold">
+                      Arrastra y suelta tu imagen aquí, o pega con <kbd className="bg-neutral-100 px-1.5 py-0.5 rounded text-[10px] font-mono border">Cmd + V</kbd>
+                    </p>
+                    <p className="text-[11px] text-neutral-400">
+                      Sin imagen cargada, se mostrará únicamente tu nombre <strong>&quot;Arnaldo Allende&quot;</strong> (sin logotipo de Khora).
                     </p>
                   </div>
                 )}
 
                 <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
-                  <label className="cursor-pointer kh-btn-secondary py-2 px-3 text-xs flex items-center justify-center gap-2 w-full sm:w-auto font-bold">
-                    <Upload className="w-3.5 h-3.5 text-neutral-500" />
-                    {uploadingHeader ? "Subiendo imagen..." : (formHeaderImageUrl ? "Cambiar Imagen / Banner" : "Cargar Mi Cabecera / Banner")}
+                  <label className="cursor-pointer kh-btn-primary py-2.5 px-4 text-xs flex items-center justify-center gap-2 w-full sm:w-auto font-bold shadow-sm">
+                    <Upload className="w-4 h-4" />
+                    {uploadingHeader ? "Subiendo imagen..." : (formHeaderImageUrl ? "Cambiar Imagen de mi Computador" : "Seleccionar Imagen de mi Computador")}
                     <input
                       type="file"
                       accept="image/*"
@@ -1012,20 +1142,9 @@ export default function FunnelPage() {
                       className="hidden"
                     />
                   </label>
-                  <div className="text-neutral-300 text-xs hidden sm:block">o</div>
-                  <input
-                    type="url"
-                    value={formHeaderImageUrl}
-                    onChange={(e) => {
-                      setFormHeaderImageUrl(e.target.value)
-                      if (e.target.value && typeof window !== "undefined") {
-                        localStorage.setItem("khora_funnel_default_header", e.target.value)
-                        setGlobalDefaultHeader(e.target.value)
-                      }
-                    }}
-                    placeholder="Pegar URL directa de la imagen (https://...)"
-                    className="kh-input text-xs py-2 px-3 flex-1 w-full"
-                  />
+                  <span className="text-[11px] text-neutral-400 hidden sm:inline">
+                    (PNG, JPG o WebP recomendado: 600x150 px)
+                  </span>
                 </div>
 
                 <label className="flex items-center gap-2 pt-1 text-xs text-neutral-600 cursor-pointer select-none">
