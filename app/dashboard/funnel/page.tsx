@@ -298,41 +298,60 @@ export default function FunnelPage() {
   async function handleUploadHeaderImage(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
+    setUploadingHeader(true)
+
     try {
-      setUploadingHeader(true)
       const ext = file.name.split(".").pop() || "png"
-      // Usamos la carpeta 'headers/' para evitar bloqueos de EasyPrivacy / Adblockers
-      const path = `headers/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
-      
-      let publicUrl = ""
-      const { error: uploadErr } = await supabase.storage.from("landing").upload(path, file, { upsert: true })
-      if (uploadErr) {
-        // Fallback a bucket materials
-        const { error: fallbackErr } = await supabase.storage.from("materials").upload(path, file, { upsert: true })
-        if (fallbackErr) throw uploadErr
-        const { data } = supabase.storage.from("materials").getPublicUrl(path)
-        publicUrl = data?.publicUrl || ""
+
+      // 1. Convertir a Base64 en memoria (inmune a restricciones de sandbox o disco del navegador)
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = () => reject(new Error("No se pudo leer el archivo local"))
+        reader.readAsDataURL(file)
+      })
+
+      // 2. Subida blindada vía Edge Function (omite cualquier bloqueo de Storage o Adblockers)
+      let finalUrl = ""
+      const { data, error: fnError } = await supabase.functions.invoke("send-email", {
+        body: {
+          action: "upload-header",
+          base64,
+          ext,
+          contentType: file.type || "image/png"
+        }
+      })
+
+      if (data?.publicUrl) {
+        finalUrl = data.publicUrl
       } else {
-        const { data } = supabase.storage.from("landing").getPublicUrl(path)
-        publicUrl = data?.publicUrl || ""
+        // Fallback a Storage directo
+        console.warn("Edge function upload fallback:", fnError)
+        const path = `headers/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
+        const { error: uploadErr } = await supabase.storage.from("landing").upload(path, file, { upsert: true })
+        if (uploadErr) throw uploadErr
+        const { data: stData } = supabase.storage.from("landing").getPublicUrl(path)
+        finalUrl = stData?.publicUrl || ""
       }
 
-      if (publicUrl) {
-        setFormHeaderImageUrl(publicUrl)
-        setGlobalDefaultHeader(publicUrl)
+      if (finalUrl) {
+        setFormHeaderImageUrl(finalUrl)
+        setGlobalDefaultHeader(finalUrl)
         if (typeof window !== "undefined") {
-          localStorage.setItem("khora_funnel_default_header", publicUrl)
+          localStorage.setItem("khora_funnel_default_header", finalUrl)
         }
 
         // Si la casilla está marcada, aplicar a todos los pasos existentes inmediatamente
         if (applyHeaderToAll && profile?.teacherProfileId) {
           await supabase
             .from("NurtureStep")
-            .update({ header_image_url: publicUrl })
+            .update({ header_image_url: finalUrl })
             .eq("teacher_id", profile.teacherProfileId)
 
-          setSteps(prev => prev.map(s => ({ ...s, header_image_url: publicUrl })))
+          setSteps(prev => prev.map(s => ({ ...s, header_image_url: finalUrl })))
         }
+      } else {
+        throw new Error("No se pudo obtener la URL pública de la imagen")
       }
     } catch (err: any) {
       alert("Error al subir imagen de cabecera: " + err.message)

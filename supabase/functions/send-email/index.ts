@@ -115,7 +115,50 @@ serve(async (req) => {
   }
 
   try {
-    const { to, type, params, subject, customHtml, html } = await req.json()
+    const body = await req.json()
+
+    // 1. Subida segura de cabecera a Storage vía Service Role
+    if (body.action === 'upload-header') {
+      const { base64, ext = "png", contentType = "image/png" } = body
+      if (!base64) {
+        return new Response(
+          JSON.stringify({ error: "Missing base64 data" }), 
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+        )
+      }
+
+      const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? ""
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+      const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.39.3")
+      const supabaseAdmin = createClient(supabaseUrl, supabaseKey)
+
+      const rawBase64 = base64.includes(",") ? base64.split(",")[1] : base64
+      const binaryStr = atob(rawBase64)
+      const bytes = new Uint8Array(binaryStr.length)
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i)
+      }
+
+      const fileName = `headers/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
+      const { error: uploadErr } = await supabaseAdmin.storage.from("landing").upload(fileName, bytes, {
+        contentType: contentType,
+        upsert: true
+      })
+      if (uploadErr) {
+        return new Response(
+          JSON.stringify({ error: uploadErr.message }), 
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+        )
+      }
+
+      const { data: { publicUrl } } = supabaseAdmin.storage.from("landing").getPublicUrl(fileName)
+      return new Response(
+        JSON.stringify({ success: true, publicUrl }), 
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+      )
+    }
+
+    const { to, type, params, subject, customHtml, html } = body
 
     if (!to || (!type && !customHtml && !html)) {
       return new Response(
