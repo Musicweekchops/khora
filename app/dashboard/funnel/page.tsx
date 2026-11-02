@@ -301,14 +301,25 @@ export default function FunnelPage() {
       setUploadingHeader(true)
       const ext = file.name.split(".").pop() || "png"
       const path = `funnel/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
+      
+      let publicUrl = ""
       const { error: uploadErr } = await supabase.storage.from("landing").upload(path, file, { upsert: true })
-      if (uploadErr) throw uploadErr
-      const { data } = supabase.storage.from("landing").getPublicUrl(path)
-      if (data?.publicUrl) {
-        setFormHeaderImageUrl(data.publicUrl)
-        setGlobalDefaultHeader(data.publicUrl)
+      if (uploadErr) {
+        // Fallback a bucket materials
+        const { error: fallbackErr } = await supabase.storage.from("materials").upload(path, file, { upsert: true })
+        if (fallbackErr) throw uploadErr
+        const { data } = supabase.storage.from("materials").getPublicUrl(path)
+        publicUrl = data?.publicUrl || ""
+      } else {
+        const { data } = supabase.storage.from("landing").getPublicUrl(path)
+        publicUrl = data?.publicUrl || ""
+      }
+
+      if (publicUrl) {
+        setFormHeaderImageUrl(publicUrl)
+        setGlobalDefaultHeader(publicUrl)
         if (typeof window !== "undefined") {
-          localStorage.setItem("khora_funnel_default_header", data.publicUrl)
+          localStorage.setItem("khora_funnel_default_header", publicUrl)
         }
       }
     } catch (err: any) {
