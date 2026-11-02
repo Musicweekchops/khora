@@ -144,6 +144,7 @@ export default function FunnelPage() {
   const [formHeaderImageUrl, setFormHeaderImageUrl] = useState<string>("")
   const [uploadingHeader, setUploadingHeader] = useState(false)
   const [globalDefaultHeader, setGlobalDefaultHeader] = useState<string>("")
+  const [applyHeaderToAll, setApplyHeaderToAll] = useState(true)
   const [formIsActive, setFormIsActive] = useState(true)
   const [editorTab, setEditorTab] = useState<"text" | "html" | "preview">("text")
 
@@ -300,7 +301,8 @@ export default function FunnelPage() {
     try {
       setUploadingHeader(true)
       const ext = file.name.split(".").pop() || "png"
-      const path = `funnel/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
+      // Usamos la carpeta 'headers/' para evitar bloqueos de EasyPrivacy / Adblockers
+      const path = `headers/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
       
       let publicUrl = ""
       const { error: uploadErr } = await supabase.storage.from("landing").upload(path, file, { upsert: true })
@@ -320,6 +322,16 @@ export default function FunnelPage() {
         setGlobalDefaultHeader(publicUrl)
         if (typeof window !== "undefined") {
           localStorage.setItem("khora_funnel_default_header", publicUrl)
+        }
+
+        // Si la casilla está marcada, aplicar a todos los pasos existentes inmediatamente
+        if (applyHeaderToAll && profile?.teacherProfileId) {
+          await supabase
+            .from("NurtureStep")
+            .update({ header_image_url: publicUrl })
+            .eq("teacher_id", profile.teacherProfileId)
+
+          setSteps(prev => prev.map(s => ({ ...s, header_image_url: publicUrl })))
         }
       }
     } catch (err: any) {
@@ -367,6 +379,14 @@ export default function FunnelPage() {
           .from("NurtureStep")
           .insert(payload)
         if (error) throw error
+      }
+
+      // Si la casilla está activa, actualizar también todos los pasos creados con esta cabecera
+      if (applyHeaderToAll && formHeaderImageUrl.trim()) {
+        await supabase
+          .from("NurtureStep")
+          .update({ header_image_url: formHeaderImageUrl.trim() })
+          .eq("teacher_id", profile.teacherProfileId)
       }
 
       setShowModal(false)
@@ -988,6 +1008,16 @@ export default function FunnelPage() {
                     className="kh-input text-xs py-2 px-3 flex-1 w-full"
                   />
                 </div>
+
+                <label className="flex items-center gap-2 pt-1 text-xs text-neutral-600 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={applyHeaderToAll}
+                    onChange={e => setApplyHeaderToAll(e.target.checked)}
+                    className="rounded text-violet-600 focus:ring-violet-500"
+                  />
+                  <span>Aplicar automáticamente esta cabecera a <strong>todos los pasos ya creados</strong> del Funnel</span>
+                </label>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

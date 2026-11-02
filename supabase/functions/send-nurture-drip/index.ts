@@ -14,7 +14,7 @@ serve(async (req) => {
     // 1. Obtener profesor Arnaldo Allende
     const { data: teacherUser } = await supabase
       .from("User")
-      .select("id, TeacherProfile ( id )")
+      .select("id, TeacherProfile ( id, funnel_header_image_url )")
       .eq("email", "arnaldoallende@hotmail.com")
       .maybeSingle()
 
@@ -120,10 +120,11 @@ serve(async (req) => {
           </h2>
         </div>
       `
-      if (nextStep.header_image_url) {
+      const bannerUrl = nextStep.header_image_url || teacherProfile.funnel_header_image_url
+      if (bannerUrl) {
         headerHtml = `
           <div style="text-align: center; padding: 0; overflow: hidden; border-bottom: 1px solid #f1f5f9; background-color: #ffffff;">
-            <img src="${nextStep.header_image_url}" alt="Header" style="width: 100%; max-width: 540px; height: auto; max-height: 200px; object-fit: cover; display: block; margin: 0 auto;" />
+            <img src="${bannerUrl}" alt="Header" style="width: 100%; max-width: 540px; height: auto; max-height: 200px; object-fit: cover; display: block; margin: 0 auto;" />
           </div>
         `
       }
