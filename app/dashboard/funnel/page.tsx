@@ -156,6 +156,20 @@ export default function FunnelPage() {
   const [convertedStudents, setConvertedStudents] = useState<ConvertedStudent[]>([])
   const [loadingConversions, setLoadingConversions] = useState(false)
 
+  // Modal Ver Actividad (Enviados / Abiertos / Clics)
+  const [activityModalOpen, setActivityModalOpen] = useState(false)
+  const [selectedStepForActivity, setSelectedStepForActivity] = useState<NurtureStep | null>(null)
+  const [activityFilter, setActivityFilter] = useState<"sent" | "opened" | "clicked">("opened")
+  const [activityLogs, setActivityLogs] = useState<{
+    id: string
+    name: string
+    email: string
+    sent_at: string
+    opened_at: string | null
+    clicked_at: string | null
+  }[]>([])
+  const [loadingActivity, setLoadingActivity] = useState(false)
+
   // Global KPIs
   const [kpiContactsCount, setKpiContactsCount] = useState(0)
   const [kpiConversionsTotal, setKpiConversionsTotal] = useState(0)
@@ -901,6 +915,49 @@ export default function FunnelPage() {
     }
   }
 
+  async function openActivityModal(step: NurtureStep, filter: "sent" | "opened" | "clicked" = "opened") {
+    setSelectedStepForActivity(step)
+    setActivityFilter(filter)
+    setActivityModalOpen(true)
+    setLoadingActivity(true)
+
+    try {
+      const { data } = await supabase
+        .from("NurtureLog")
+        .select(`
+          id,
+          email,
+          sent_at,
+          opened_at,
+          clicked_at,
+          StudentProfile ( User ( name, email ) )
+        `)
+        .eq("step_id", step.id)
+        .order("sent_at", { ascending: false })
+
+      if (data) {
+        setActivityLogs(data.map((d: any) => {
+          const sp = Array.isArray(d.StudentProfile) ? d.StudentProfile[0] : d.StudentProfile
+          const u = Array.isArray(sp?.User) ? sp?.User[0] : sp?.User
+          return {
+            id: d.id,
+            name: u?.name || d.email.split("@")[0],
+            email: d.email,
+            sent_at: d.sent_at,
+            opened_at: d.opened_at,
+            clicked_at: d.clicked_at,
+          }
+        }))
+      } else {
+        setActivityLogs([])
+      }
+    } catch (e) {
+      console.error("Error cargando actividad del paso:", e)
+    } finally {
+      setLoadingActivity(false)
+    }
+  }
+
   // Si no es Arnaldo Allende, no mostrar nada
   if (!isArnaldo) {
     return (
@@ -1175,18 +1232,38 @@ export default function FunnelPage() {
 
                     {/* Footer / Attribution Metrics */}
                     <div className="pt-4 border-t border-neutral-100 flex flex-wrap items-center justify-between gap-4">
-                      <div className="flex items-center gap-4 text-xs text-neutral-500">
-                        <span className="flex items-center gap-1 font-semibold text-neutral-700">
-                          <Send className="w-3.5 h-3.5 text-neutral-400" /> {step.stats?.sent || 0} enviados
-                        </span>
-                        <span className="flex items-center gap-1 font-semibold text-neutral-700">
-                          <Eye className="w-3.5 h-3.5 text-neutral-400" /> 
-                          {step.stats?.sent ? Math.round(((step.stats?.opened || 0) / step.stats.sent) * 100) : 0}% apertura
-                        </span>
-                        <span className="flex items-center gap-1 font-semibold text-neutral-700">
-                          <MousePointer className="w-3.5 h-3.5 text-neutral-400" /> 
-                          {step.stats?.sent ? Math.round(((step.stats?.clicked || 0) / step.stats.sent) * 100) : 0}% clics
-                        </span>
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-500">
+                        <button
+                          type="button"
+                          onClick={() => openActivityModal(step, "sent")}
+                          className="flex items-center gap-1.5 font-semibold text-neutral-700 hover:text-violet-700 bg-neutral-50 hover:bg-violet-50 border border-neutral-200/80 hover:border-violet-200 px-2.5 py-1 rounded-xl transition-colors"
+                          title="Ver lista de destinatarios enviados"
+                        >
+                          <Send className="w-3.5 h-3.5 text-neutral-400" />
+                          <span>{step.stats?.sent || 0} enviados</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openActivityModal(step, "opened")}
+                          className="flex items-center gap-1.5 font-semibold text-neutral-700 hover:text-violet-700 bg-neutral-50 hover:bg-violet-50 border border-neutral-200/80 hover:border-violet-200 px-2.5 py-1 rounded-xl transition-colors"
+                          title="Ver quiénes abrieron este correo"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-violet-500" />
+                          <span>
+                            {step.stats?.opened || 0} abiertos ({step.stats?.sent ? Math.round(((step.stats?.opened || 0) / step.stats.sent) * 100) : 0}%)
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openActivityModal(step, "clicked")}
+                          className="flex items-center gap-1.5 font-semibold text-neutral-700 hover:text-violet-700 bg-neutral-50 hover:bg-violet-50 border border-neutral-200/80 hover:border-violet-200 px-2.5 py-1 rounded-xl transition-colors"
+                          title="Ver quiénes hicieron clic en el correo"
+                        >
+                          <MousePointer className="w-3.5 h-3.5 text-indigo-500" />
+                          <span>
+                            {step.stats?.clicked || 0} clics ({step.stats?.sent ? Math.round(((step.stats?.clicked || 0) / step.stats.sent) * 100) : 0}%)
+                          </span>
+                        </button>
                       </div>
 
                       {/* CONVERSION TAG BADGE */}
@@ -1667,6 +1744,139 @@ export default function FunnelPage() {
                 {sendingNow ? "Enviando..." : `Enviar a ${sendSelected.size} persona(s)`}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {activityModalOpen && selectedStepForActivity && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl border border-neutral-200 shadow-2xl w-full max-w-lg p-6 flex flex-col gap-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-neutral-100 pb-4">
+              <div>
+                <h3 className="text-base font-extrabold text-neutral-900 flex items-center gap-2">
+                  <Eye className="w-4 h-4 text-violet-600" />
+                  <span>Actividad del Correo</span>
+                </h3>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  Paso #{selectedStepForActivity.step_order}: &quot;{selectedStepForActivity.subject}&quot;
+                </p>
+              </div>
+              <button onClick={() => setActivityModalOpen(false)} className="p-1.5 text-neutral-400 hover:text-neutral-900 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="grid grid-cols-3 gap-1.5 p-1 bg-neutral-100 rounded-2xl text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setActivityFilter("opened")}
+                className={`py-2 px-2 rounded-xl transition-all ${
+                  activityFilter === "opened" ? "bg-white text-violet-700 shadow-sm" : "text-neutral-500 hover:text-neutral-900"
+                }`}
+              >
+                👁️ Abiertos ({activityLogs.filter(l => !!l.opened_at).length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActivityFilter("clicked")}
+                className={`py-2 px-2 rounded-xl transition-all ${
+                  activityFilter === "clicked" ? "bg-white text-indigo-700 shadow-sm" : "text-neutral-500 hover:text-neutral-900"
+                }`}
+              >
+                🖱️ Clics ({activityLogs.filter(l => !!l.clicked_at).length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActivityFilter("sent")}
+                className={`py-2 px-2 rounded-xl transition-all ${
+                  activityFilter === "sent" ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500 hover:text-neutral-900"
+                }`}
+              >
+                ✉️ Todos ({activityLogs.length})
+              </button>
+            </div>
+
+            {loadingActivity ? (
+              <div className="py-8 text-center text-xs text-neutral-400 font-semibold animate-pulse">
+                Cargando actividad de destinatarios...
+              </div>
+            ) : (() => {
+              const filtered = activityLogs.filter(l => {
+                if (activityFilter === "opened") return !!l.opened_at
+                if (activityFilter === "clicked") return !!l.clicked_at
+                return true
+              })
+
+              if (filtered.length === 0) {
+                return (
+                  <div className="py-8 text-center space-y-1.5">
+                    <p className="text-sm font-bold text-neutral-900">
+                      {activityFilter === "opened"
+                        ? "Nadie ha abierto este correo todavía"
+                        : activityFilter === "clicked"
+                          ? "Nadie ha hecho clic en este correo todavía"
+                          : "Aún no se ha enviado este correo"}
+                    </p>
+                    <p className="text-xs text-neutral-500 max-w-xs mx-auto">
+                      Cuando un destinatario abra el correo o interactúe con sus enlaces, aparecerá aquí con su fecha y hora exacta.
+                    </p>
+                  </div>
+                )
+              }
+
+              const fmtDate = (iso: string) =>
+                new Date(iso).toLocaleString("es-CL", {
+                  day: "numeric",
+                  month: "short",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+
+              return (
+                <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                  {filtered.map(item => (
+                    <div
+                      key={item.id}
+                      className="p-3 bg-neutral-50/80 border border-neutral-200/80 rounded-2xl flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="min-w-0">
+                        <h4 className="font-bold text-neutral-900 truncate">{item.name}</h4>
+                        <p className="text-[11px] text-neutral-500 truncate">{item.email}</p>
+                        <p className="text-[10px] text-neutral-400 mt-0.5">
+                          Enviado: {fmtDate(item.sent_at)}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0 space-y-1">
+                        {item.opened_at ? (
+                          <div className="inline-block text-[10px] font-bold text-violet-800 bg-violet-100 border border-violet-200 px-2 py-0.5 rounded-full">
+                            👁️ Abierto: {fmtDate(item.opened_at)}
+                          </div>
+                        ) : (
+                          <div className="inline-block text-[10px] font-semibold text-neutral-500 bg-neutral-200/70 px-2 py-0.5 rounded-full">
+                            Sin abrir aún
+                          </div>
+                        )}
+                        {item.clicked_at && (
+                          <div>
+                            <span className="inline-block text-[10px] font-bold text-indigo-800 bg-indigo-100 border border-indigo-200 px-2 py-0.5 rounded-full">
+                              🖱️ Clic: {fmtDate(item.clicked_at)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
+
+            <button
+              onClick={() => setActivityModalOpen(false)}
+              className="w-full kh-btn-secondary py-2.5 text-xs font-bold mt-1"
+            >
+              Cerrar
+            </button>
           </div>
         </div>
       )}
