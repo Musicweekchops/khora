@@ -53,6 +53,7 @@ interface NurtureStep {
     opened: number
     clicked: number
     converted: number
+    unsubscribed: number
   }
 }
 
@@ -156,10 +157,10 @@ export default function FunnelPage() {
   const [convertedStudents, setConvertedStudents] = useState<ConvertedStudent[]>([])
   const [loadingConversions, setLoadingConversions] = useState(false)
 
-  // Modal Ver Actividad (Enviados / Abiertos / Clics)
+  // Modal Ver Actividad (Enviados / Abiertos / Clics / Bajas)
   const [activityModalOpen, setActivityModalOpen] = useState(false)
   const [selectedStepForActivity, setSelectedStepForActivity] = useState<NurtureStep | null>(null)
-  const [activityFilter, setActivityFilter] = useState<"sent" | "opened" | "clicked">("opened")
+  const [activityFilter, setActivityFilter] = useState<"sent" | "opened" | "clicked" | "unsubscribed">("opened")
   const [activityLogs, setActivityLogs] = useState<{
     id: string
     name: string
@@ -167,8 +168,18 @@ export default function FunnelPage() {
     sent_at: string
     opened_at: string | null
     clicked_at: string | null
+    unsubscribed: boolean
   }[]>([])
   const [loadingActivity, setLoadingActivity] = useState(false)
+
+  // Modal Global Dados de Baja
+  const [unsubscribedModalOpen, setUnsubscribedModalOpen] = useState(false)
+  const [unsubscribedContacts, setUnsubscribedContacts] = useState<{
+    id: string
+    name: string
+    email: string
+    nurture_step: number
+  }[]>([])
 
   // Global KPIs
   const [kpiContactsCount, setKpiContactsCount] = useState(0)
@@ -245,15 +256,15 @@ export default function FunnelPage() {
       // 2. Cargar Logs de reportería
       const { data: logsData } = await supabase
         .from("NurtureLog")
-        .select("step_id, opened_at, clicked_at, converted_at")
+        .select("step_id, opened_at, clicked_at, converted_at, conversion_details, StudentProfile ( User ( marketing_consent ) )")
         .eq("teacher_id", teacherId)
 
-      const statsMap: Record<string, { sent: number; opened: number; clicked: number; converted: number }> = {}
+      const statsMap: Record<string, { sent: number; opened: number; clicked: number; converted: number; unsubscribed: number }> = {}
       let totalConversions = 0
 
       for (const log of logsData || []) {
         if (!statsMap[log.step_id]) {
-          statsMap[log.step_id] = { sent: 0, opened: 0, clicked: 0, converted: 0 }
+          statsMap[log.step_id] = { sent: 0, opened: 0, clicked: 0, converted: 0, unsubscribed: 0 }
         }
         statsMap[log.step_id].sent++
         if (log.opened_at) statsMap[log.step_id].opened++
@@ -261,6 +272,11 @@ export default function FunnelPage() {
         if (log.converted_at) {
           statsMap[log.step_id].converted++
           totalConversions++
+        }
+        const sp: any = Array.isArray((log as any).StudentProfile) ? (log as any).StudentProfile[0] : (log as any).StudentProfile
+        const u: any = Array.isArray(sp?.User) ? sp?.User[0] : sp?.User
+        if ((log as any).conversion_details === "UNSUBSCRIBED" || u?.marketing_consent === false) {
+          statsMap[log.step_id].unsubscribed++
         }
       }
 
@@ -270,19 +286,38 @@ export default function FunnelPage() {
       const mapped = (stepsData || []).map((s: any) => ({
         ...s,
         library_content: s.LibraryContent,
-        stats: statsMap[s.id] || { sent: 0, opened: 0, clicked: 0, converted: 0 }
+        stats: statsMap[s.id] || { sent: 0, opened: 0, clicked: 0, converted: 0, unsubscribed: 0 }
       }))
 
       setSteps(mapped)
 
-      // 4. Contar contactos elegibles en el embudo (no activos con marketing_consent)
-      const { count } = await supabase
+      // 4. Contar contactos elegibles en el embudo y dados de baja
+      const { data: allContacts } = await supabase
         .from("StudentProfile")
-        .select("id", { count: "exact", head: true })
+        .select("id, nurture_step, User ( name, email, marketing_consent )")
         .eq("teacher_id", teacherId)
         .neq("status", "ACTIVE")
 
-      setKpiContactsCount(count || 0)
+      let activeFunnelCount = 0
+      const unsubList: { id: string; name: string; email: string; nurture_step: number }[] = []
+
+      for (const c of allContacts || []) {
+        const u: any = Array.isArray(c.User) ? c.User[0] : c.User
+        if (!u?.email) continue
+        if (u.marketing_consent === false) {
+          unsubList.push({
+            id: c.id,
+            name: u.name || u.email.split("@")[0],
+            email: u.email,
+            nurture_step: c.nurture_step || 0,
+          })
+        } else {
+          activeFunnelCount++
+        }
+      }
+
+      setKpiContactsCount(activeFunnelCount)
+      setUnsubscribedContacts(unsubList)
 
     } catch (err) {
       console.error("Error cargando funnel:", err)
@@ -701,6 +736,7 @@ export default function FunnelPage() {
                         <a href="https://khora.cl/privacidad" style="color: #7c3aed; text-decoration: underline;">Privacidad</a>
                         &nbsp;•&nbsp;
                         <a href="mailto:hola@khora.cl" style="color: #7c3aed; text-decoration: underline;">Contacto</a>
+                        ${logId ? `&nbsp;•&nbsp;<a href="${fnBase}?unsubscribe=${logId}" style="color: #64748b; text-decoration: underline;">Darse de baja</a>` : ""}
                       </p>
                       <p style="font-size: 11px; color: #94a3b8; margin: 12px 0 0 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
                         © 2026 Khora • Arnaldo Allende.
@@ -915,7 +951,7 @@ export default function FunnelPage() {
     }
   }
 
-  async function openActivityModal(step: NurtureStep, filter: "sent" | "opened" | "clicked" = "opened") {
+  async function openActivityModal(step: NurtureStep, filter: "sent" | "opened" | "clicked" | "unsubscribed" = "opened") {
     setSelectedStepForActivity(step)
     setActivityFilter(filter)
     setActivityModalOpen(true)
@@ -930,7 +966,8 @@ export default function FunnelPage() {
           sent_at,
           opened_at,
           clicked_at,
-          StudentProfile ( User ( name, email ) )
+          conversion_details,
+          StudentProfile ( User ( name, email, marketing_consent ) )
         `)
         .eq("step_id", step.id)
         .order("sent_at", { ascending: false })
@@ -946,6 +983,7 @@ export default function FunnelPage() {
             sent_at: d.sent_at,
             opened_at: d.opened_at,
             clicked_at: d.clicked_at,
+            unsubscribed: d.conversion_details === "UNSUBSCRIBED" || u?.marketing_consent === false,
           }
         }))
       } else {
@@ -1050,7 +1088,7 @@ export default function FunnelPage() {
       )}
 
       {/* KPI METRICS BAR */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div className="bg-white border border-neutral-200/80 rounded-2xl p-5 shadow-sm space-y-1">
           <div className="flex items-center justify-between text-neutral-500 text-xs font-semibold">
             <span>Contactos en el Funnel</span>
@@ -1071,6 +1109,24 @@ export default function FunnelPage() {
           </div>
           <p className="text-[11px] text-emerald-600/80">Alumnos que contrataron plan tras recibir correos del funnel</p>
         </div>
+
+        <button
+          type="button"
+          onClick={() => setUnsubscribedModalOpen(true)}
+          className="text-left bg-white hover:bg-rose-50/40 border border-neutral-200/80 hover:border-rose-200 rounded-2xl p-5 shadow-sm space-y-1 transition-colors"
+        >
+          <div className="flex items-center justify-between text-neutral-500 text-xs font-semibold">
+            <span>Dados de Baja</span>
+            <span className="text-xs font-bold text-rose-600 underline">Ver quiénes</span>
+          </div>
+          <div className="text-3xl font-extrabold text-neutral-900 flex items-center gap-2">
+            <span>{unsubscribedContacts.length}</span>
+            {unsubscribedContacts.length > 0 && (
+              <span className="text-xs bg-rose-100 text-rose-700 font-bold px-2 py-0.5 rounded-full">🚫 Bajas</span>
+            )}
+          </div>
+          <p className="text-[11px] text-neutral-400">Contactos que cancelaron su suscripción al funnel</p>
+        </button>
 
         <div className="bg-white border border-neutral-200/80 rounded-2xl p-5 shadow-sm space-y-1">
           <div className="flex items-center justify-between text-neutral-500 text-xs font-semibold">
@@ -1263,6 +1319,14 @@ export default function FunnelPage() {
                           <span>
                             {step.stats?.clicked || 0} clics ({step.stats?.sent ? Math.round(((step.stats?.clicked || 0) / step.stats.sent) * 100) : 0}%)
                           </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openActivityModal(step, "unsubscribed")}
+                          className="flex items-center gap-1.5 font-semibold text-neutral-700 hover:text-rose-700 bg-neutral-50 hover:bg-rose-50 border border-neutral-200/80 hover:border-rose-200 px-2.5 py-1 rounded-xl transition-colors"
+                          title="Ver quiénes se dieron de baja en este correo"
+                        >
+                          <span>🚫 {step.stats?.unsubscribed || 0} bajas</span>
                         </button>
                       </div>
 
@@ -1767,11 +1831,11 @@ export default function FunnelPage() {
             </div>
 
             {/* Filter Tabs */}
-            <div className="grid grid-cols-3 gap-1.5 p-1 bg-neutral-100 rounded-2xl text-xs font-bold">
+            <div className="grid grid-cols-4 gap-1.5 p-1 bg-neutral-100 rounded-2xl text-xs font-bold">
               <button
                 type="button"
                 onClick={() => setActivityFilter("opened")}
-                className={`py-2 px-2 rounded-xl transition-all ${
+                className={`py-2 px-1.5 rounded-xl transition-all ${
                   activityFilter === "opened" ? "bg-white text-violet-700 shadow-sm" : "text-neutral-500 hover:text-neutral-900"
                 }`}
               >
@@ -1780,7 +1844,7 @@ export default function FunnelPage() {
               <button
                 type="button"
                 onClick={() => setActivityFilter("clicked")}
-                className={`py-2 px-2 rounded-xl transition-all ${
+                className={`py-2 px-1.5 rounded-xl transition-all ${
                   activityFilter === "clicked" ? "bg-white text-indigo-700 shadow-sm" : "text-neutral-500 hover:text-neutral-900"
                 }`}
               >
@@ -1788,8 +1852,17 @@ export default function FunnelPage() {
               </button>
               <button
                 type="button"
+                onClick={() => setActivityFilter("unsubscribed")}
+                className={`py-2 px-1.5 rounded-xl transition-all ${
+                  activityFilter === "unsubscribed" ? "bg-white text-rose-700 shadow-sm" : "text-neutral-500 hover:text-neutral-900"
+                }`}
+              >
+                🚫 Bajas ({activityLogs.filter(l => l.unsubscribed).length})
+              </button>
+              <button
+                type="button"
                 onClick={() => setActivityFilter("sent")}
-                className={`py-2 px-2 rounded-xl transition-all ${
+                className={`py-2 px-1.5 rounded-xl transition-all ${
                   activityFilter === "sent" ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500 hover:text-neutral-900"
                 }`}
               >
@@ -1805,6 +1878,7 @@ export default function FunnelPage() {
               const filtered = activityLogs.filter(l => {
                 if (activityFilter === "opened") return !!l.opened_at
                 if (activityFilter === "clicked") return !!l.clicked_at
+                if (activityFilter === "unsubscribed") return l.unsubscribed
                 return true
               })
 
@@ -1816,10 +1890,12 @@ export default function FunnelPage() {
                         ? "Nadie ha abierto este correo todavía"
                         : activityFilter === "clicked"
                           ? "Nadie ha hecho clic en este correo todavía"
-                          : "Aún no se ha enviado este correo"}
+                          : activityFilter === "unsubscribed"
+                            ? "Nadie se ha dado de baja en este correo"
+                            : "Aún no se ha enviado este correo"}
                     </p>
                     <p className="text-xs text-neutral-500 max-w-xs mx-auto">
-                      Cuando un destinatario abra el correo o interactúe con sus enlaces, aparecerá aquí con su fecha y hora exacta.
+                      Cuando un destinatario abra el correo, haga clic o se dé de baja, aparecerá listado aquí.
                     </p>
                   </div>
                 )
@@ -1864,6 +1940,13 @@ export default function FunnelPage() {
                             </span>
                           </div>
                         )}
+                        {item.unsubscribed && (
+                          <div>
+                            <span className="inline-block text-[10px] font-bold text-rose-800 bg-rose-100 border border-rose-200 px-2 py-0.5 rounded-full">
+                              🚫 Dado de baja
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -1873,6 +1956,59 @@ export default function FunnelPage() {
 
             <button
               onClick={() => setActivityModalOpen(false)}
+              className="w-full kh-btn-secondary py-2.5 text-xs font-bold mt-1"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {unsubscribedModalOpen && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl border border-neutral-200 shadow-2xl w-full max-w-lg p-6 flex flex-col gap-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-neutral-100 pb-4">
+              <div>
+                <h3 className="text-base font-extrabold text-neutral-900 flex items-center gap-2">
+                  <span>🚫 Contactos Dados de Baja</span>
+                </h3>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  Personas que cancelaron su suscripción a los correos del Funnel ({unsubscribedContacts.length})
+                </p>
+              </div>
+              <button onClick={() => setUnsubscribedModalOpen(false)} className="p-1.5 text-neutral-400 hover:text-neutral-900 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {unsubscribedContacts.length === 0 ? (
+              <div className="py-8 text-center space-y-1.5">
+                <p className="text-sm font-bold text-neutral-900">Nadie se ha dado de baja</p>
+                <p className="text-xs text-neutral-500 max-w-xs mx-auto">
+                  Todos tus contactos actuales mantienen activa su suscripción a los correos del funnel.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                {unsubscribedContacts.map(u => (
+                  <div
+                    key={u.id}
+                    className="p-3 bg-rose-50/40 border border-rose-200/60 rounded-2xl flex items-center justify-between gap-3 text-xs"
+                  >
+                    <div className="min-w-0">
+                      <h4 className="font-bold text-neutral-900 truncate">{u.name}</h4>
+                      <p className="text-[11px] text-neutral-500 truncate">{u.email}</p>
+                    </div>
+                    <span className="shrink-0 text-[10px] font-bold text-rose-800 bg-rose-100 border border-rose-200 px-2.5 py-0.5 rounded-full">
+                      {u.nurture_step > 0 ? `Baja en Paso #${u.nurture_step}` : "Dado de baja"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button
+              onClick={() => setUnsubscribedModalOpen(false)}
               className="w-full kh-btn-secondary py-2.5 text-xs font-bold mt-1"
             >
               Cerrar

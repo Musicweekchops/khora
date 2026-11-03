@@ -126,9 +126,10 @@ serve(async (req) => {
     const reqUrl = new URL(req.url)
     const trackOpenId = reqUrl.searchParams.get("track_open")
     const trackClickId = reqUrl.searchParams.get("track_click")
+    const unsubscribeId = reqUrl.searchParams.get("unsubscribe")
 
-    // 0. Seguimiento de apertura (píxel 1x1) y clics en enlaces del Funnel
-    if (trackOpenId || trackClickId) {
+    // 0. Seguimiento de apertura (píxel 1x1), clics y baja de suscripción (unsubscribe) del Funnel
+    if (trackOpenId || trackClickId || unsubscribeId) {
       try {
         const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? ""
         const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
@@ -159,8 +160,65 @@ serve(async (req) => {
             })
             .eq("id", trackClickId)
         }
+
+        if (unsubscribeId) {
+          const { data: logRow } = await supabaseAdmin
+            .from("NurtureLog")
+            .select("id, email, opened_at, converted_at, StudentProfile ( user_id )")
+            .eq("id", unsubscribeId)
+            .maybeSingle()
+
+          if (logRow) {
+            await supabaseAdmin
+              .from("NurtureLog")
+              .update({
+                opened_at: logRow.opened_at || nowIso,
+                conversion_details: logRow.converted_at ? undefined : "UNSUBSCRIBED",
+              })
+              .eq("id", unsubscribeId)
+
+            const sp: any = Array.isArray(logRow.StudentProfile) ? logRow.StudentProfile[0] : logRow.StudentProfile
+            if (sp?.user_id) {
+              await supabaseAdmin
+                .from("User")
+                .update({ marketing_consent: false })
+                .eq("id", sp.user_id)
+            } else if (logRow.email) {
+              await supabaseAdmin
+                .from("User")
+                .update({ marketing_consent: false })
+                .ilike("email", logRow.email.trim())
+            }
+          }
+        }
       } catch (trackErr) {
-        console.error("Error registrando evento de apertura/clic:", trackErr)
+        console.error("Error registrando evento de apertura/clic/baja:", trackErr)
+      }
+
+      if (unsubscribeId) {
+        const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Suscripción cancelada</title>
+</head>
+<body style="margin:0;padding:40px 16px;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#0f172a;text-align:center;">
+  <div style="max-width:420px;margin:60px auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:20px;padding:32px;box-shadow:0 4px 20px rgba(0,0,0,0.04);">
+    <h2 style="margin:0 0 12px 0;font-size:20px;font-weight:800;">Te has dado de baja correctamente</h2>
+    <p style="margin:0 0 20px 0;font-size:14px;color:#64748b;line-height:1.6;">
+      Ya no recibirás más correos automáticos de esta secuencia.
+    </p>
+    <a href="https://khora.cl" style="display:inline-block;background:#0f172a;color:#ffffff;text-decoration:none;font-size:13px;font-weight:700;padding:10px 20px;border-radius:10px;">
+      Volver a Khora
+    </a>
+  </div>
+</body>
+</html>`
+        return new Response(html, {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "text/html; charset=utf-8" },
+        })
       }
 
       if (trackClickId) {
