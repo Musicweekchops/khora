@@ -161,6 +161,11 @@ export default function FunnelPage() {
   const [kpiConversionsTotal, setKpiConversionsTotal] = useState(0)
   const [testingSend, setTestingSend] = useState<string | null>(null)
   const [sendingNow, setSendingNow] = useState<string | null>(null)
+  const [sendModal, setSendModal] = useState<{
+    step: NurtureStep
+    recipients: { id: string; name: string; email: string; nurtureStep: number }[]
+  } | null>(null)
+  const [sendSelected, setSendSelected] = useState<Set<string>>(new Set())
   const [tableMissing, setTableMissing] = useState(false)
   const [copiedSql, setCopiedSql] = useState(false)
 
@@ -754,13 +759,26 @@ export default function FunnelPage() {
         return
       }
 
-      const preview = recipients.slice(0, 8).map(r => `• ${r.name} (${r.email})`).join("\n")
-      const more = recipients.length > 8 ? `\n… y ${recipients.length - 8} más` : ""
-      if (!window.confirm(`¿Enviar el Paso #${step.step_order} "${step.subject}" ahora a ${recipients.length} persona(s)?\n\n${preview}${more}\n\nEsta acción no se puede deshacer.`)) {
-        return
-      }
+      setSendModal({ step, recipients })
+      setSendSelected(new Set(recipients.map(r => r.id)))
+    } catch (err: any) {
+      alert("Error al preparar el envío: " + (err.message || err))
+    } finally {
+      setSendingNow(null)
+    }
+  }
 
-      // 3. Enviar uno a uno (con pausa para respetar el límite del proveedor)
+  async function runSendNow() {
+    if (!sendModal || !profile?.teacherProfileId) return
+    const step = sendModal.step
+    const recipients = sendModal.recipients.filter(r => sendSelected.has(r.id))
+    if (recipients.length === 0) {
+      alert("Selecciona al menos un destinatario.")
+      return
+    }
+    setSendingNow(step.id)
+    try {
+      // Enviar uno a uno (con pausa para respetar el límite del proveedor)
       let ok = 0
       const failed: string[] = []
       for (const r of recipients) {
@@ -807,6 +825,7 @@ export default function FunnelPage() {
       }
 
       alert(`Enviados: ${ok} de ${recipients.length}.${failed.length ? `\nFallaron:\n${failed.join("\n")}` : ""}`)
+      setSendModal(null)
       loadFunnelData(profile.teacherProfileId)
     } catch (err: any) {
       alert("Error al enviar el paso: " + (err.message || err))
@@ -1564,6 +1583,64 @@ export default function FunnelPage() {
       )}
 
       {/* MODAL VER ALUMNOS CONVERTIDOS */}
+      {sendModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+            <div className="p-5 border-b border-neutral-100">
+              <h3 className="font-extrabold text-neutral-900">Enviar Paso #{sendModal.step.step_order} ahora</h3>
+              <p className="text-xs text-neutral-500 mt-0.5 truncate">{sendModal.step.subject}</p>
+            </div>
+
+            <div className="px-5 pt-3 flex flex-wrap items-center gap-2 text-xs">
+              <button type="button" onClick={() => setSendSelected(new Set(sendModal.recipients.map(r => r.id)))} className="px-2.5 py-1 rounded-lg border border-neutral-200 hover:bg-neutral-50 font-semibold">Todos</button>
+              <button type="button" onClick={() => setSendSelected(new Set())} className="px-2.5 py-1 rounded-lg border border-neutral-200 hover:bg-neutral-50 font-semibold">Ninguno</button>
+              <button
+                type="button"
+                onClick={() => { const s = sendModal.step; setSendModal(null); handleSendTest(s) }}
+                className="px-2.5 py-1 rounded-lg border border-violet-200 text-violet-700 hover:bg-violet-50 font-semibold"
+              >
+                Enviarme solo a mí (prueba)
+              </button>
+              <span className="ml-auto text-neutral-400 font-medium">{sendSelected.size} de {sendModal.recipients.length}</span>
+            </div>
+
+            <div className="p-5 overflow-y-auto space-y-1.5">
+              {sendModal.recipients.map(r => {
+                const checked = sendSelected.has(r.id)
+                return (
+                  <label key={r.id} className={`flex items-center gap-3 p-2.5 rounded-xl border cursor-pointer text-xs ${checked ? "border-violet-300 bg-violet-50/50" : "border-neutral-200 opacity-70"}`}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => setSendSelected(prev => {
+                        const next = new Set(prev)
+                        if (next.has(r.id)) next.delete(r.id); else next.add(r.id)
+                        return next
+                      })}
+                      className="rounded text-violet-600"
+                    />
+                    <span className="font-bold text-neutral-900">{r.name}</span>
+                    <span className="text-neutral-500 truncate">{r.email}</span>
+                  </label>
+                )
+              })}
+            </div>
+
+            <div className="p-5 border-t border-neutral-100 flex items-center justify-end gap-2">
+              <button type="button" onClick={() => setSendModal(null)} disabled={!!sendingNow} className="px-4 py-2 text-xs font-bold text-neutral-600 hover:bg-neutral-100 rounded-xl">Cancelar</button>
+              <button
+                type="button"
+                onClick={runSendNow}
+                disabled={!!sendingNow || sendSelected.size === 0}
+                className="px-4 py-2 text-xs font-bold text-white bg-violet-600 hover:bg-violet-700 rounded-xl disabled:opacity-50"
+              >
+                {sendingNow ? "Enviando..." : `Enviar a ${sendSelected.size} persona(s)`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {conversionModalOpen && selectedStepForConversions && (
         <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl border border-neutral-200 shadow-2xl w-full max-w-lg p-6 flex flex-col gap-4 animate-in zoom-in-95 duration-200">
