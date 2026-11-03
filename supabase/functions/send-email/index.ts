@@ -108,6 +108,14 @@ function generateIcs(params: any): string {
   return icsLines.join("\r\n")
 }
 
+// 1x1 transparent GIF bytes
+const TRANSPARENT_GIF = new Uint8Array([
+  0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00,
+  0x00, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x21, 0xf9, 0x04, 0x01, 0x00,
+  0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00,
+  0x00, 0x02, 0x02, 0x44, 0x01, 0x00, 0x3b,
+])
+
 serve(async (req) => {
   // Manejo de preflight CORS
   if (req.method === 'OPTIONS') {
@@ -115,6 +123,63 @@ serve(async (req) => {
   }
 
   try {
+    const reqUrl = new URL(req.url)
+    const trackOpenId = reqUrl.searchParams.get("track_open")
+    const trackClickId = reqUrl.searchParams.get("track_click")
+
+    // 0. Seguimiento de apertura (píxel 1x1) y clics en enlaces del Funnel
+    if (trackOpenId || trackClickId) {
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? ""
+        const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+        const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.39.3")
+        const supabaseAdmin = createClient(supabaseUrl, supabaseKey)
+        const nowIso = new Date().toISOString()
+
+        if (trackOpenId) {
+          await supabaseAdmin
+            .from("NurtureLog")
+            .update({ opened_at: nowIso })
+            .eq("id", trackOpenId)
+            .is("opened_at", null)
+        }
+
+        if (trackClickId) {
+          const { data: existing } = await supabaseAdmin
+            .from("NurtureLog")
+            .select("opened_at, clicked_at")
+            .eq("id", trackClickId)
+            .maybeSingle()
+
+          await supabaseAdmin
+            .from("NurtureLog")
+            .update({
+              opened_at: existing?.opened_at || nowIso,
+              clicked_at: existing?.clicked_at || nowIso,
+            })
+            .eq("id", trackClickId)
+        }
+      } catch (trackErr) {
+        console.error("Error registrando evento de apertura/clic:", trackErr)
+      }
+
+      if (trackClickId) {
+        const target = reqUrl.searchParams.get("to") || "https://khora.cl/login"
+        return Response.redirect(target, 302)
+      }
+
+      return new Response(TRANSPARENT_GIF, {
+        status: 200,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "image/gif",
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+          "Pragma": "no-cache",
+          "Expires": "0",
+        },
+      })
+    }
+
     const body = await req.json()
 
     // 1. Subida segura de cabecera a Storage vía Service Role

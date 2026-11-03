@@ -583,13 +583,27 @@ export default function FunnelPage() {
     }
   }
 
-  function buildFunnelEmailHtml(step: NurtureStep, studentName: string) {
+  function buildFunnelEmailHtml(step: NurtureStep, studentName: string, logId?: string) {
     const firstName = studentName.split(" ")[0] || "Alumno"
     const parsedSubject = step.subject.replace(/{{nombre}}/g, firstName)
     const bodyWithName = step.content_html.replace(/{{nombre}}/g, firstName)
-    const parsedBody = bodyWithName.includes("<")
+    const rawParsedBody = bodyWithName.includes("<")
       ? bodyWithName
       : bodyWithName.replace(/\n/g, "<br>")
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://ljazboprejtdrfsisfxu.supabase.co"
+    const fnBase = `${supabaseUrl}/functions/v1/send-email`
+
+    const parsedBody = logId
+      ? rawParsedBody.replace(/href=["'](https?:\/\/[^"']+)["']/gi, (_m, href) => {
+          if (href.includes("/functions/v1/send-email")) return `href="${href}"`
+          return `href="${fnBase}?track_click=${logId}&to=${encodeURIComponent(href)}"`
+        })
+      : rawParsedBody
+
+    const openPixelHtml = logId
+      ? `<img src="${fnBase}?track_open=${logId}" width="1" height="1" alt="" style="display:block;width:1px !important;height:1px !important;border:0 !important;margin:0 !important;padding:0 !important;" />`
+      : ""
 
     const headerImg = step.header_image_url || formHeaderImageUrl || globalDefaultHeader
 
@@ -611,6 +625,10 @@ export default function FunnelPage() {
     let libraryHtml = ""
     if (step.library_content) {
       const mat = step.library_content
+      const rawHref = `https://khora.cl/login?ref=funnel_step_${step.step_order}`
+      const trackedHref = logId
+        ? `${fnBase}?track_click=${logId}&to=${encodeURIComponent(rawHref)}`
+        : rawHref
       libraryHtml = `
         <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 16px; padding: 20px; margin: 24px 0; text-align: left;">
           <div style="font-size: 11px; font-weight: 800; color: #7c3aed; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">
@@ -619,7 +637,7 @@ export default function FunnelPage() {
           <h4 style="font-size: 15px; font-weight: 800; color: #0f172a; margin: 0 0 12px 0;">
             ${mat.title}
           </h4>
-          <a href="https://khora.cl/login?ref=funnel_step_${step.step_order}" style="display: inline-block; background-color: #7c3aed; color: #ffffff !important; text-decoration: none; font-size: 13px; font-weight: 700; padding: 10px 22px; border-radius: 10px; box-shadow: 0 2px 8px rgba(124, 58, 237, 0.25);">
+          <a href="${trackedHref}" style="display: inline-block; background-color: #7c3aed; color: #ffffff !important; text-decoration: none; font-size: 13px; font-weight: 700; padding: 10px 22px; border-radius: 10px; box-shadow: 0 2px 8px rgba(124, 58, 237, 0.25);">
             Ver Material en Khora
           </a>
         </div>
@@ -673,6 +691,7 @@ export default function FunnelPage() {
                       <p style="font-size: 11px; color: #94a3b8; margin: 12px 0 0 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
                         © 2026 Khora • Arnaldo Allende.
                       </p>
+                      ${openPixelHtml}
                     </div>
                   </td>
                 </tr>
@@ -783,7 +802,22 @@ export default function FunnelPage() {
       const failed: string[] = []
       for (const r of recipients) {
         const firstName = r.name.split(" ")[0] || "Alumno"
-        const html = buildFunnelEmailHtml(step, r.name)
+
+        // Crear registro en NurtureLog primero para inyectar su ID en el píxel de apertura y clics
+        const { data: logRow } = await supabase
+          .from("NurtureLog")
+          .insert({
+            teacher_id: profile.teacherProfileId,
+            step_id: step.id,
+            student_profile_id: r.id,
+            email: r.email,
+            sent_at: new Date().toISOString()
+          })
+          .select("id")
+          .single()
+
+        const logId = logRow?.id
+        const html = buildFunnelEmailHtml(step, r.name, logId)
         const { error } = await supabase.functions.invoke("send-email", {
           body: {
             to: r.email,
@@ -804,15 +838,11 @@ export default function FunnelPage() {
 
         if (error) {
           failed.push(r.email)
+          if (logId) {
+            await supabase.from("NurtureLog").delete().eq("id", logId)
+          }
         } else {
           ok++
-          await supabase.from("NurtureLog").insert({
-            teacher_id: profile.teacherProfileId,
-            step_id: step.id,
-            student_profile_id: r.id,
-            email: r.email,
-            sent_at: new Date().toISOString()
-          })
           // Avanzar el progreso solo si este paso es posterior al actual del alumno
           if (step.step_order > r.nurtureStep) {
             await supabase.from("StudentProfile").update({
