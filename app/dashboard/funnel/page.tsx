@@ -193,13 +193,102 @@ export default function FunnelPage() {
   const [sendSelected, setSendSelected] = useState<Set<string>>(new Set())
   const [tableMissing, setTableMissing] = useState(false)
   const [copiedSql, setCopiedSql] = useState(false)
+  const [copiedCommunityLink, setCopiedCommunityLink] = useState(false)
+
+  // Modal Personalizar Landing Comunidad
+  const [communityModalOpen, setCommunityModalOpen] = useState(false)
+  const [communityHeaderUrl, setCommunityHeaderUrl] = useState("")
+  const [communityBadge, setCommunityBadge] = useState("🥁 Comunidad de Batería")
+  const [communityTitle, setCommunityTitle] = useState("Súmate a la comunidad de estudiantes")
+  const [communitySubtitle, setCommunitySubtitle] = useState("Recibe ejercicios de práctica, partituras, material de estudio y novedades directamente en tu correo.")
+  const [communityCta, setCommunityCta] = useState("Sumarme a la comunidad")
+  const [savingCommunityConfig, setSavingCommunityConfig] = useState(false)
+  const [uploadingCommunityHeader, setUploadingCommunityHeader] = useState(false)
 
   useEffect(() => {
     if (isArnaldo && profile?.teacherProfileId) {
       loadFunnelData(profile.teacherProfileId)
       loadLibrary(profile.teacherProfileId)
+      loadCommunityConfig()
     }
   }, [isArnaldo, profile?.teacherProfileId])
+
+  async function loadCommunityConfig() {
+    try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://ljazboprejtdrfsisfxu.supabase.co"
+      const res = await fetch(`${supabaseUrl}/functions/v1/send-email?community_config=1`, { cache: "no-store" })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.headerImageUrl) setCommunityHeaderUrl(data.headerImageUrl)
+        if (data.badge) setCommunityBadge(data.badge)
+        if (data.title) setCommunityTitle(data.title)
+        if (data.subtitle) setCommunitySubtitle(data.subtitle)
+        if (data.ctaText) setCommunityCta(data.ctaText)
+      }
+    } catch (_e) {}
+  }
+
+  async function handleUploadCommunityHeader(file: File) {
+    if (!file) return
+    setUploadingCommunityHeader(true)
+    try {
+      const rawExt = file.name ? (file.name.split(".").pop() || "png").toLowerCase() : "png"
+      const ext = ["png", "jpg", "jpeg", "webp", "gif"].includes(rawExt) ? rawExt : "png"
+      const storagePath = `headers/comm_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`
+      let url = ""
+
+      try {
+        const { error: directErr } = await supabase.storage
+          .from("landing")
+          .upload(storagePath, file, { upsert: true, contentType: file.type || "image/png" })
+        if (!directErr) {
+          url = supabase.storage.from("landing").getPublicUrl(storagePath).data?.publicUrl || ""
+        }
+      } catch (_e) {}
+
+      if (!url) {
+        const base64 = await fileToBase64(file)
+        const { data, error: fnError } = await supabase.functions.invoke("send-email", {
+          body: { action: "upload-header", base64, ext, contentType: file.type || "image/png" }
+        })
+        if (!data?.publicUrl) {
+          throw new Error(fnError?.message || data?.error || "No se pudo subir la imagen")
+        }
+        url = data.publicUrl
+      }
+
+      setCommunityHeaderUrl(url)
+    } catch (err: any) {
+      alert("Error al subir cabecera de la landing: " + (err.message || err))
+    } finally {
+      setUploadingCommunityHeader(false)
+    }
+  }
+
+  async function handleSaveCommunityConfig(e: React.FormEvent) {
+    e.preventDefault()
+    setSavingCommunityConfig(true)
+    try {
+      const { data, error } = await supabase.functions.invoke("send-email", {
+        body: {
+          action: "save-community-config",
+          headerImageUrl: communityHeaderUrl || globalDefaultHeader,
+          badge: communityBadge.trim(),
+          title: communityTitle.trim(),
+          subtitle: communitySubtitle.trim(),
+          ctaText: communityCta.trim(),
+        }
+      })
+      if (error || data?.error) {
+        throw new Error(data?.error || error?.message || "No se pudo guardar")
+      }
+      setCommunityModalOpen(false)
+    } catch (err: any) {
+      alert("Error al guardar configuración de la landing: " + (err.message || err))
+    } finally {
+      setSavingCommunityConfig(false)
+    }
+  }
 
   async function loadLibrary(teacherId: string) {
     try {
@@ -1028,12 +1117,52 @@ export default function FunnelPage() {
           </p>
         </div>
 
-        <button
-          onClick={openCreateModal}
-          className="kh-btn-primary py-3 px-5 text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-violet-500/10"
-        >
-          <Plus className="w-4 h-4" /> Agregar Siguiente Correo
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard.writeText("https://khora.cl/comunidad")
+              setCopiedCommunityLink(true)
+              setTimeout(() => setCopiedCommunityLink(false), 2500)
+            }}
+            className="kh-btn-secondary py-2.5 px-4 text-xs font-bold flex items-center gap-2"
+            title="Copiar enlace público de suscripción a la comunidad"
+          >
+            {copiedCommunityLink ? (
+              <>
+                <Check className="w-4 h-4 text-emerald-600" />
+                <span className="text-emerald-700">¡Link copiado!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-4 h-4 text-violet-600" />
+                <span>Copiar Link Comunidad</span>
+              </>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (!communityHeaderUrl && globalDefaultHeader) {
+                setCommunityHeaderUrl(globalDefaultHeader)
+              }
+              setCommunityModalOpen(true)
+            }}
+            className="kh-btn-secondary py-2.5 px-4 text-xs font-bold flex items-center gap-2"
+            title="Editar cabecera y textos de khora.cl/comunidad"
+          >
+            <Edit3 className="w-4 h-4 text-neutral-500" />
+            <span>Personalizar Landing</span>
+          </button>
+
+          <button
+            onClick={openCreateModal}
+            className="kh-btn-primary py-3 px-5 text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-violet-500/10"
+          >
+            <Plus className="w-4 h-4" /> Agregar Siguiente Correo
+          </button>
+        </div>
       </div>
 
       {/* MIGRATION NEEDED ALERT */}
@@ -1960,6 +2089,155 @@ export default function FunnelPage() {
             >
               Cerrar
             </button>
+          </div>
+        </div>
+      )}
+
+      {communityModalOpen && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl border border-neutral-200 shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 flex flex-col gap-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-neutral-100 pb-4">
+              <div>
+                <h3 className="text-base font-extrabold text-neutral-900">
+                  Personalizar Landing de Comunidad
+                </h3>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  Enlace público:{" "}
+                  <a
+                    href="/comunidad"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-violet-600 font-bold underline"
+                  >
+                    khora.cl/comunidad
+                  </a>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCommunityModalOpen(false)}
+                className="p-1.5 text-neutral-400 hover:text-neutral-900 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCommunityConfig} className="space-y-4">
+              <div className="bg-neutral-50 border border-neutral-200/80 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-neutral-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <ImageIcon className="w-4 h-4 text-violet-600" /> Cabecera de la Landing
+                  </label>
+                  {communityHeaderUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setCommunityHeaderUrl("")}
+                      className="text-[11px] text-red-600 hover:text-red-700 font-semibold"
+                    >
+                      ✕ Quitar imagen
+                    </button>
+                  )}
+                </div>
+
+                {(communityHeaderUrl || globalDefaultHeader) ? (
+                  <div className="rounded-xl overflow-hidden border border-neutral-200 bg-white max-h-36 flex items-center justify-center">
+                    <img
+                      src={communityHeaderUrl || globalDefaultHeader}
+                      alt="Cabecera Landing"
+                      className="w-full h-auto max-h-36 object-cover"
+                    />
+                  </div>
+                ) : (
+                  <p className="text-xs text-neutral-500 text-center py-2">
+                    Sin imagen. Se mostrará el encabezado &quot;ARNALDO ALLENDE&quot;.
+                  </p>
+                )}
+
+                <label className="cursor-pointer kh-btn-secondary py-2 px-3 text-xs font-bold inline-flex items-center gap-2">
+                  <Upload className="w-3.5 h-3.5 text-violet-600" />
+                  <span>{uploadingCommunityHeader ? "Subiendo..." : "Cambiar imagen de cabecera"}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    disabled={uploadingCommunityHeader}
+                    className="hidden"
+                    onChange={async (e) => {
+                      const f = e.target.files?.[0]
+                      if (f) await handleUploadCommunityHeader(f)
+                      e.target.value = ""
+                    }}
+                  />
+                </label>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-neutral-700 mb-1">
+                  Etiqueta Superior
+                </label>
+                <input
+                  type="text"
+                  value={communityBadge}
+                  onChange={(e) => setCommunityBadge(e.target.value)}
+                  className="kh-input w-full text-xs font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-neutral-700 mb-1">
+                  Título Principal
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={communityTitle}
+                  onChange={(e) => setCommunityTitle(e.target.value)}
+                  className="kh-input w-full text-sm font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-neutral-700 mb-1">
+                  Descripción / Bajada
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  value={communitySubtitle}
+                  onChange={(e) => setCommunitySubtitle(e.target.value)}
+                  className="kh-input w-full text-xs leading-relaxed"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-neutral-700 mb-1">
+                  Texto del Botón
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={communityCta}
+                  onChange={(e) => setCommunityCta(e.target.value)}
+                  className="kh-input w-full text-xs font-bold"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-neutral-100">
+                <button
+                  type="button"
+                  onClick={() => setCommunityModalOpen(false)}
+                  className="kh-btn-secondary py-2 px-4 text-xs font-bold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingCommunityConfig}
+                  className="kh-btn-primary py-2 px-5 text-xs font-bold"
+                >
+                  {savingCommunityConfig ? "Guardando..." : "Guardar Cambios"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

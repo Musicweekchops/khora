@@ -95,14 +95,23 @@ export default function AjustesPage() {
       })
       const subJson = subscription.toJSON()
       if (subJson.endpoint && subJson.keys?.p256dh && subJson.keys?.auth) {
-        const { error } = await supabase.from("PushSubscription").upsert({
-          user_id: profile!.id,
-          endpoint: subJson.endpoint,
-          p256dh: subJson.keys.p256dh,
-          auth: subJson.keys.auth
-        }, { onConflict: "endpoint" })
-        if (error) {
-          throw error
+        const { data: existing } = await supabase
+          .from("PushSubscription")
+          .select("id")
+          .eq("user_id", profile!.id)
+          .eq("endpoint", subJson.endpoint)
+          .maybeSingle()
+
+        if (!existing) {
+          const { error } = await supabase.from("PushSubscription").insert({
+            user_id: profile!.id,
+            endpoint: subJson.endpoint,
+            p256dh: subJson.keys.p256dh,
+            auth: subJson.keys.auth
+          })
+          if (error) {
+            throw error
+          }
         }
       }
       localStorage.setItem("khora-push-dismissed", "true")

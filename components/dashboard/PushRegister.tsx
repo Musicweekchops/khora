@@ -40,14 +40,23 @@ export default function PushRegister() {
 
       const subJson = subscription.toJSON()
       if (subJson.endpoint && subJson.keys?.p256dh && subJson.keys?.auth) {
-        await supabase
+        const { data: existing } = await supabase
           .from("PushSubscription")
-          .upsert({
-            user_id: userId,
-            endpoint: subJson.endpoint,
-            p256dh: subJson.keys.p256dh,
-            auth: subJson.keys.auth
-          }, { onConflict: "endpoint" })
+          .select("id")
+          .eq("user_id", userId)
+          .eq("endpoint", subJson.endpoint)
+          .maybeSingle()
+
+        if (!existing) {
+          await supabase
+            .from("PushSubscription")
+            .insert({
+              user_id: userId,
+              endpoint: subJson.endpoint,
+              p256dh: subJson.keys.p256dh,
+              auth: subJson.keys.auth
+            })
+        }
       }
     } catch (err) {
       console.debug("[PushRegister] Auto-sync info:", err)

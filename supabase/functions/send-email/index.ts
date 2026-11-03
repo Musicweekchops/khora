@@ -127,6 +127,43 @@ serve(async (req) => {
     const trackOpenId = reqUrl.searchParams.get("track_open")
     const trackClickId = reqUrl.searchParams.get("track_click")
     const unsubscribeId = reqUrl.searchParams.get("unsubscribe")
+    const getCommunityConfigParam = reqUrl.searchParams.get("community_config")
+
+    if (getCommunityConfigParam) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? ""
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+      const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.39.3")
+      const supabaseAdmin = createClient(supabaseUrl, supabaseKey)
+
+      const { data: teacherUser } = await supabaseAdmin
+        .from("User")
+        .select("id, TeacherProfile ( id, funnel_header_image_url )")
+        .eq("email", "arnaldoallende@hotmail.com")
+        .maybeSingle()
+
+      const tp: any = Array.isArray(teacherUser?.TeacherProfile)
+        ? teacherUser?.TeacherProfile[0]
+        : teacherUser?.TeacherProfile
+
+      let customConfig: any = {}
+      try {
+        const { data: fileBlob } = await supabaseAdmin.storage.from("landing").download("headers/community_config.json")
+        if (fileBlob) {
+          customConfig = JSON.parse(await fileBlob.text())
+        }
+      } catch (_e) {}
+
+      return new Response(
+        JSON.stringify({
+          headerImageUrl: customConfig.headerImageUrl ?? tp?.funnel_header_image_url ?? "",
+          badge: customConfig.badge || "🥁 Comunidad de Batería",
+          title: customConfig.title || "Súmate a la comunidad de estudiantes",
+          subtitle: customConfig.subtitle || "Recibe ejercicios de práctica, partituras, material de estudio y novedades directamente en tu correo.",
+          ctaText: customConfig.ctaText || "Sumarme a la comunidad",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+      )
+    }
 
     // 0. Seguimiento de apertura (píxel 1x1), clics y baja de suscripción (unsubscribe) del Funnel
     if (trackOpenId || trackClickId || unsubscribeId) {
@@ -277,6 +314,170 @@ serve(async (req) => {
       const { data: { publicUrl } } = supabaseAdmin.storage.from("landing").getPublicUrl(fileName)
       return new Response(
         JSON.stringify({ success: true, publicUrl }), 
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+      )
+    }
+
+    // 1.b Guardar configuración editable de la Landing de Comunidad
+    if (body.action === 'save-community-config') {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? ""
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+      const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.39.3")
+      const supabaseAdmin = createClient(supabaseUrl, supabaseKey)
+
+      const configPayload = {
+        headerImageUrl: body.headerImageUrl ?? "",
+        badge: body.badge || "🥁 Comunidad de Batería",
+        title: body.title || "Súmate a la comunidad de estudiantes",
+        subtitle: body.subtitle || "Recibe ejercicios de práctica, partituras, material de estudio y novedades directamente en tu correo.",
+        ctaText: body.ctaText || "Sumarme a la comunidad",
+        updatedAt: new Date().toISOString(),
+      }
+
+      const encoder = new TextEncoder()
+      await supabaseAdmin.storage.from("landing").upload(
+        "headers/community_config.json",
+        encoder.encode(JSON.stringify(configPayload)),
+        { contentType: "application/json", upsert: true }
+      )
+
+      return new Response(
+        JSON.stringify({ success: true, config: configPayload }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+      )
+    }
+
+    // 1.c Suscripción pública a la Comunidad + Notificación Push instantánea al Profesor
+    if (body.action === 'subscribe-community') {
+      const rawName = (body.name || "").trim()
+      const rawEmail = (body.email || "").trim().toLowerCase()
+
+      if (!rawName || !rawEmail || !rawEmail.includes("@")) {
+        return new Response(
+          JSON.stringify({ error: "Por favor ingresa tu nombre y un correo válido." }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+        )
+      }
+
+      const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? ""
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+      const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.39.3")
+      const supabaseAdmin = createClient(supabaseUrl, supabaseKey)
+
+      // Obtener profesor Arnaldo Allende
+      const { data: teacherUser } = await supabaseAdmin
+        .from("User")
+        .select("id, TeacherProfile ( id )")
+        .eq("email", "arnaldoallende@hotmail.com")
+        .maybeSingle()
+
+      const tp: any = Array.isArray(teacherUser?.TeacherProfile)
+        ? teacherUser?.TeacherProfile[0]
+        : teacherUser?.TeacherProfile
+
+      if (!teacherUser?.id || !tp?.id) {
+        return new Response(
+          JSON.stringify({ error: "No se encontró el perfil del profesor." }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 404 }
+        )
+      }
+
+      // Buscar si el usuario ya existe por email
+      const { data: existingUser } = await supabaseAdmin
+        .from("User")
+        .select("id, name")
+        .ilike("email", rawEmail)
+        .maybeSingle()
+
+      let studentUserId = existingUser?.id
+
+      if (studentUserId) {
+        await supabaseAdmin
+          .from("User")
+          .update({
+            marketing_consent: true,
+            name: existingUser?.name || rawName,
+          })
+          .eq("id", studentUserId)
+      } else {
+        const newId = crypto.randomUUID()
+        const { error: userInsertErr } = await supabaseAdmin
+          .from("User")
+          .insert({
+            id: newId,
+            email: rawEmail,
+            name: rawName,
+            role: "STUDENT",
+            marketing_consent: true,
+          })
+        if (userInsertErr) {
+          return new Response(
+            JSON.stringify({ error: userInsertErr.message }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+          )
+        }
+        studentUserId = newId
+      }
+
+      // Verificar si ya tiene StudentProfile con Arnaldo
+      const { data: existingSp } = await supabaseAdmin
+        .from("StudentProfile")
+        .select("id")
+        .eq("user_id", studentUserId)
+        .eq("teacher_id", tp.id)
+        .maybeSingle()
+
+      if (!existingSp) {
+        await supabaseAdmin
+          .from("StudentProfile")
+          .insert({
+            user_id: studentUserId,
+            teacher_id: tp.id,
+            status: "PROSPECT",
+            nurture_step: 0,
+          })
+      }
+
+      // Enviar Notificación Push a todos los dispositivos de Arnaldo
+      let pushSent = 0
+      try {
+        const { data: subs } = await supabaseAdmin
+          .from("PushSubscription")
+          .select("*")
+          .eq("user_id", teacherUser.id)
+
+        if (subs && subs.length > 0) {
+          const webpush = await import("https://esm.sh/web-push@3.6.7")
+          const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY") || Deno.env.get("VITE_VAPID_PUBLIC_KEY") || "BC3N_V7TcV1Wo-u4IdieY9eJYuHfO-zC3ghLAho4Lj2BsLtQf2lgrQURxmq_I0vNigamO5lRB1C_AG-2jLm1Cm4"
+          const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY") || "HTsnrmAK-XWgfOHMO2u2I_t9rbL-4qmaisaF00mcEdI"
+          webpush.setVapidDetails("mailto:hola@khora.cl", vapidPublicKey, vapidPrivateKey)
+
+          const pushPayload = JSON.stringify({
+            title: "🥁 ¡Nuevo miembro en la Comunidad!",
+            body: `${rawName} (${rawEmail}) se acaba de sumar a la comunidad de estudiantes.`,
+            url: "/dashboard/funnel",
+          })
+
+          for (const sub of subs) {
+            try {
+              await webpush.sendNotification(
+                { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+                pushPayload
+              )
+              pushSent++
+            } catch (pushErr: any) {
+              if (pushErr?.statusCode === 410 || pushErr?.statusCode === 404) {
+                await supabaseAdmin.from("PushSubscription").delete().eq("id", sub.id)
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Error enviando push de comunidad:", e)
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, pushSent }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
       )
     }
