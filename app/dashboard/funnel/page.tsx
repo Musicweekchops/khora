@@ -160,6 +160,7 @@ export default function FunnelPage() {
   const [kpiContactsCount, setKpiContactsCount] = useState(0)
   const [kpiConversionsTotal, setKpiConversionsTotal] = useState(0)
   const [testingSend, setTestingSend] = useState<string | null>(null)
+  const [sendingNow, setSendingNow] = useState<string | null>(null)
   const [tableMissing, setTableMissing] = useState(false)
   const [copiedSql, setCopiedSql] = useState(false)
 
@@ -721,6 +722,99 @@ export default function FunnelPage() {
     }
   }
 
+  async function handleSendNow(step: NurtureStep) {
+    if (!profile?.teacherProfileId) return
+    setSendingNow(step.id)
+    try {
+      // 1. Destinatarios: alumnos no activos, dentro de las audiencias del paso y con consentimiento
+      const { data: studentsData, error: stErr } = await supabase
+        .from("StudentProfile")
+        .select("id, status, nurture_step, User ( name, email, marketing_consent )")
+        .eq("teacher_id", profile.teacherProfileId)
+        .neq("status", "ACTIVE")
+      if (stErr) throw stErr
+
+      // 2. Excluir quienes ya recibieron este paso
+      const { data: logs } = await supabase
+        .from("NurtureLog")
+        .select("student_profile_id")
+        .eq("step_id", step.id)
+      const alreadySent = new Set((logs || []).map((l: any) => l.student_profile_id))
+
+      const recipients = (studentsData || []).flatMap((s: any) => {
+        const u = Array.isArray(s.User) ? s.User[0] : s.User
+        if (!u?.email || u.marketing_consent === false) return []
+        if (!(step.target_audiences || []).includes(s.status || "PROSPECT")) return []
+        if (alreadySent.has(s.id)) return []
+        return [{ id: s.id, name: u.name || "Alumno", email: u.email.trim().toLowerCase(), nurtureStep: s.nurture_step || 0 }]
+      })
+
+      if (recipients.length === 0) {
+        alert("No hay destinatarios pendientes para este paso (todos ya lo recibieron, no tienen consentimiento o no están en las audiencias).")
+        return
+      }
+
+      const preview = recipients.slice(0, 8).map(r => `• ${r.name} (${r.email})`).join("\n")
+      const more = recipients.length > 8 ? `\n… y ${recipients.length - 8} más` : ""
+      if (!window.confirm(`¿Enviar el Paso #${step.step_order} "${step.subject}" ahora a ${recipients.length} persona(s)?\n\n${preview}${more}\n\nEsta acción no se puede deshacer.`)) {
+        return
+      }
+
+      // 3. Enviar uno a uno (con pausa para respetar el límite del proveedor)
+      let ok = 0
+      const failed: string[] = []
+      for (const r of recipients) {
+        const firstName = r.name.split(" ")[0] || "Alumno"
+        const html = buildFunnelEmailHtml(step, r.name)
+        const { error } = await supabase.functions.invoke("send-email", {
+          body: {
+            to: r.email,
+            subject: step.subject.replace(/{{nombre}}/g, firstName),
+            type: "NURTURE_STEP",
+            customHtml: html,
+            html,
+            params: {
+              studentName: firstName,
+              teacherName: "Arnaldo Allende",
+              headerImageUrl: step.header_image_url || globalDefaultHeader,
+              libraryTitle: step.library_content?.title,
+              libraryType: step.library_content?.type,
+              content: step.content_html
+            }
+          }
+        })
+
+        if (error) {
+          failed.push(r.email)
+        } else {
+          ok++
+          await supabase.from("NurtureLog").insert({
+            teacher_id: profile.teacherProfileId,
+            step_id: step.id,
+            student_profile_id: r.id,
+            email: r.email,
+            sent_at: new Date().toISOString()
+          })
+          // Avanzar el progreso solo si este paso es posterior al actual del alumno
+          if (step.step_order > r.nurtureStep) {
+            await supabase.from("StudentProfile").update({
+              nurture_step: step.step_order,
+              nurture_last_sent_at: new Date().toISOString()
+            }).eq("id", r.id)
+          }
+        }
+        await new Promise(res => setTimeout(res, 600))
+      }
+
+      alert(`Enviados: ${ok} de ${recipients.length}.${failed.length ? `\nFallaron:\n${failed.join("\n")}` : ""}`)
+      loadFunnelData(profile.teacherProfileId)
+    } catch (err: any) {
+      alert("Error al enviar el paso: " + (err.message || err))
+    } finally {
+      setSendingNow(null)
+    }
+  }
+
   async function openConversionsModal(step: NurtureStep) {
     setSelectedStepForConversions(step)
     setConversionModalOpen(true)
@@ -961,6 +1055,15 @@ export default function FunnelPage() {
                         >
                           <Send className="w-3 h-3 text-neutral-400" />
                           {testingSend === step.id ? "Enviando..." : "Probar"}
+                        </button>
+                        <button
+                          onClick={() => handleSendNow(step)}
+                          disabled={sendingNow === step.id}
+                          className="text-xs text-white bg-violet-600 hover:bg-violet-700 px-3 py-1 rounded-xl transition-colors font-bold flex items-center gap-1 disabled:opacity-60"
+                          title="Enviar este paso ahora a los alumnos de sus audiencias"
+                        >
+                          <Send className="w-3 h-3" />
+                          {sendingNow === step.id ? "Enviando..." : "Enviar ahora"}
                         </button>
                         <button
                           onClick={() => openEditModal(step)}
