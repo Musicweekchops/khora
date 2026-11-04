@@ -43,22 +43,46 @@ const AuthContext = createContext<AuthContextType>({
 // -------------------------------------------------------------------
 // Rutas públicas (accesibles sin autenticación)
 // -------------------------------------------------------------------
-const PUBLIC_PATHS = ['/login', '/register', '/', '/agendar', '/recuperar', '/actualizar-password', '/unirse']
+const PUBLIC_PATHS = [
+  '/login',
+  '/register',
+  '/',
+  '/agendar',
+  '/recuperar',
+  '/actualizar-password',
+  '/unirse',
+  '/comunidad',
+  '/newsletter',
+  '/privacidad',
+  '/terminos',
+  '/confirmar-clase',
+  '/confirmar-continuidad',
+  '/comprar',
+]
 
 // Rutas que, si el usuario ya está logueado, lo redirigen al dashboard
-// (no incluye /unirse ni /agendar, que deben ser accesibles siempre)
+// (no incluye /unirse, /agendar, /comunidad ni /newsletter, que deben ser accesibles siempre)
 const AUTH_REDIRECT_PATHS = ['/login', '/register']
 
 function isPublicPath(pathname: string | null) {
   if (!pathname) return false
+  // Cualquier ruta fuera de /dashboard es pública (incluyendo /comunidad, /newsletter, /[slug], etc.)
+  if (!pathname.startsWith('/dashboard')) return true
   return (
     pathname === '/' ||
-    pathname === '/login' ||
-    pathname === '/register' ||
+    pathname.startsWith('/login') ||
+    pathname.startsWith('/register') ||
     pathname.startsWith('/agendar') ||
     pathname.startsWith('/unirse') ||
+    pathname.startsWith('/comunidad') ||
+    pathname.startsWith('/newsletter') ||
     pathname.startsWith('/recuperar') ||
-    pathname.startsWith('/actualizar-password')
+    pathname.startsWith('/actualizar-password') ||
+    pathname.startsWith('/privacidad') ||
+    pathname.startsWith('/terminos') ||
+    pathname.startsWith('/confirmar-clase') ||
+    pathname.startsWith('/confirmar-continuidad') ||
+    pathname.startsWith('/comprar')
   )
 }
 
@@ -212,7 +236,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
         if (event === 'SIGNED_OUT') {
-          router.push('/login')
+          const currentPath = typeof window !== 'undefined' ? window.location.pathname : pathname
+          if (!isPublicPath(currentPath)) {
+            router.push('/login')
+          }
         }
       },
     )
