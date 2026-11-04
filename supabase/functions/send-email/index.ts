@@ -367,7 +367,7 @@ serve(async (req) => {
       // Obtener profesor Arnaldo Allende
       const { data: teacherUser } = await supabaseAdmin
         .from("User")
-        .select("id, TeacherProfile ( id )")
+        .select("id, TeacherProfile ( id, funnel_header_image_url )")
         .eq("email", "arnaldoallende@hotmail.com")
         .maybeSingle()
 
@@ -422,13 +422,15 @@ serve(async (req) => {
       // Verificar si ya tiene StudentProfile con Arnaldo
       const { data: existingSp } = await supabaseAdmin
         .from("StudentProfile")
-        .select("id")
+        .select("id, nurture_step")
         .eq("user_id", studentUserId)
         .eq("teacher_id", tp.id)
         .maybeSingle()
 
-      if (!existingSp) {
-        await supabaseAdmin
+      let studentProfileId = existingSp?.id
+
+      if (!studentProfileId) {
+        const { data: insertedSp } = await supabaseAdmin
           .from("StudentProfile")
           .insert({
             user_id: studentUserId,
@@ -436,6 +438,233 @@ serve(async (req) => {
             status: "PROSPECT",
             nurture_step: 0,
           })
+          .select("id")
+          .single()
+        studentProfileId = insertedSp?.id
+      }
+
+      // Enviar inmediatamente el Correo #0 (step_order = 0) si está activo
+      let welcomeEmailSent = false
+      try {
+        let { data: stepZero } = await supabaseAdmin
+          .from("NurtureStep")
+          .select(`
+            id,
+            step_order,
+            subject,
+            content_html,
+            header_image_url,
+            is_active,
+            LibraryContent ( id, title, type, file_url )
+          `)
+          .eq("teacher_id", tp.id)
+          .eq("step_order", 0)
+          .maybeSingle()
+
+        // Si aún no existe ningún Correo #0 en la base de datos, crearlo por defecto
+        if (!stepZero) {
+          const { data: anyStepWithHeader } = await supabaseAdmin
+            .from("NurtureStep")
+            .select("header_image_url")
+            .eq("teacher_id", tp.id)
+            .not("header_image_url", "is", null)
+            .limit(1)
+            .maybeSingle()
+
+          const defaultHeader = tp.funnel_header_image_url || anyStepWithHeader?.header_image_url || null
+          const { data: createdZero } = await supabaseAdmin
+            .from("NurtureStep")
+            .insert({
+              teacher_id: tp.id,
+              step_order: 0,
+              subject: "¡Bienvenido/a a la comunidad de estudiantes, {{nombre}}! 🥁",
+              content_html:
+                "Qué alegría tenerte en la comunidad de estudiantes.\n\nPor aquí te iré compartiendo ejercicios de práctica, partituras, ideas de estudio y novedades para acompañarte en tu avance en la batería.\n\nGuarda este correo en tu bandeja principal para que no te pierdas el material de los próximos días.",
+              delay_days: 0,
+              target_audiences: ["PROSPECT", "TRIAL", "PAUSED", "INACTIVE"],
+              header_image_url: defaultHeader,
+              is_active: true,
+            })
+            .select(`
+              id,
+              step_order,
+              subject,
+              content_html,
+              header_image_url,
+              is_active,
+              LibraryContent ( id, title, type, file_url )
+            `)
+            .maybeSingle()
+          stepZero = createdZero
+        }
+
+        if (stepZero && stepZero.is_active && studentProfileId && RESEND_API_KEY) {
+          const { data: existingLog } = await supabaseAdmin
+            .from("NurtureLog")
+            .select("id")
+            .eq("step_id", stepZero.id)
+            .eq("student_profile_id", studentProfileId)
+            .maybeSingle()
+
+          if (!existingLog) {
+            const nowIso = new Date().toISOString()
+            const { data: logRow } = await supabaseAdmin
+              .from("NurtureLog")
+              .insert({
+                teacher_id: tp.id,
+                step_id: stepZero.id,
+                student_profile_id: studentProfileId,
+                email: rawEmail,
+                sent_at: nowIso,
+              })
+              .select("id")
+              .single()
+
+            const logId = logRow?.id
+            const fnBase = `${supabaseUrl}/functions/v1/send-email`
+            const openPixelHtml = logId
+              ? `<img src="${fnBase}?track_open=${logId}" width="1" height="1" alt="" style="display:block;width:1px !important;height:1px !important;border:0 !important;margin:0 !important;padding:0 !important;" />`
+              : ""
+
+            const firstName = rawName.split(" ")[0] || "Alumno"
+            const parsedSubject = stepZero.subject.replace(/{{nombre}}/g, firstName)
+            const bodyWithName = stepZero.content_html.replace(/{{nombre}}/g, firstName)
+            const rawParsedBody = bodyWithName.includes("<")
+              ? bodyWithName
+              : bodyWithName.replace(/\n/g, "<br>")
+
+            const parsedBody = logId
+              ? rawParsedBody.replace(/href=["'](https?:\/\/[^"']+)["']/gi, (_m: string, href: string) => {
+                  if (href.includes("/functions/v1/send-email")) return `href="${href}"`
+                  return `href="${fnBase}?track_click=${logId}&to=${encodeURIComponent(href)}"`
+                })
+              : rawParsedBody
+
+            let libraryHtml = ""
+            const libMat: any = Array.isArray(stepZero.LibraryContent)
+              ? stepZero.LibraryContent[0]
+              : stepZero.LibraryContent
+            if (libMat) {
+              const rawHref = `https://khora.cl/login?ref=funnel_step_0`
+              const trackedHref = logId
+                ? `${fnBase}?track_click=${logId}&to=${encodeURIComponent(rawHref)}`
+                : rawHref
+              libraryHtml = `
+                <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 16px; padding: 20px; margin: 24px 0; text-align: left;">
+                  <div style="font-size: 11px; font-weight: 800; color: #7c3aed; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">
+                    ${libMat.type === "video" ? "📹 VIDEO DE PRÁCTICA" : "📄 PARTITURA / PDF"}
+                  </div>
+                  <h4 style="font-size: 15px; font-weight: 800; color: #0f172a; margin: 0 0 12px 0;">
+                    ${libMat.title}
+                  </h4>
+                  <a href="${trackedHref}" style="display: inline-block; background-color: #7c3aed; color: #ffffff !important; text-decoration: none; font-size: 13px; font-weight: 700; padding: 10px 22px; border-radius: 10px; box-shadow: 0 2px 8px rgba(124, 58, 237, 0.25);">
+                    Ver Material en Khora
+                  </a>
+                </div>
+              `
+            }
+
+            let headerHtml = `
+              <div style="text-align: center; padding: 24px 0 16px 0; border-bottom: 1px solid #f1f5f9;">
+                <h2 style="margin: 0; font-size: 20px; font-weight: 800; color: #0f172a; letter-spacing: -0.3px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                  Arnaldo Allende
+                </h2>
+              </div>
+            `
+            const bannerUrl = stepZero.header_image_url || tp.funnel_header_image_url
+            if (bannerUrl) {
+              headerHtml = `
+                <div style="text-align: center; padding: 0; overflow: hidden; border-bottom: 1px solid #f1f5f9; background-color: #ffffff;">
+                  <img src="${bannerUrl}" alt="Cabecera" style="width: 100%; max-width: 540px; height: auto; max-height: 220px; object-fit: cover; display: block; margin: 0 auto;" />
+                </div>
+              `
+            }
+
+            const emailHtml = `
+              <!DOCTYPE html>
+              <html>
+              <head>
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>${parsedSubject}</title>
+              </head>
+              <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; -webkit-font-smoothing: antialiased;">
+                <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f8fafc; padding: 36px 12px; width: 100%;">
+                  <tr>
+                    <td align="center">
+                      <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 540px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.04);">
+                        <tr>
+                          <td>
+                            ${headerHtml}
+                            <div style="padding: 32px 32px 24px 32px; font-size: 15px; color: #334155; line-height: 1.65;">
+                              <p style="font-size: 16px; color: #0f172a; font-weight: 700; margin: 0 0 16px 0;">
+                                ¡Hola ${firstName}!
+                              </p>
+                              <div style="color: #334155; line-height: 1.7;">
+                                ${parsedBody}
+                              </div>
+                              ${libraryHtml}
+                              <div style="margin-top: 32px; padding-top: 20px; border-top: 1px solid #f1f5f9; font-size: 14px; color: #64748b;">
+                                <p style="margin: 0;">Un abrazo,<br><strong style="color: #0f172a;">Arnaldo Allende</strong></p>
+                              </div>
+                            </div>
+                            <div style="padding: 24px 32px; text-align: center; background-color: #f8fafc; border-top: 1px solid #e2e8f0;">
+                              <p style="font-size: 11px; color: #64748b; margin: 0 0 8px 0; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                                Recibes este correo porque te sumaste a la comunidad de estudiantes de Arnaldo Allende.
+                              </p>
+                              <p style="font-size: 11px; color: #64748b; margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                                <a href="https://khora.cl/terminos" style="color: #7c3aed; text-decoration: underline;">Términos</a>
+                                &nbsp;•&nbsp;
+                                <a href="https://khora.cl/privacidad" style="color: #7c3aed; text-decoration: underline;">Privacidad</a>
+                                &nbsp;•&nbsp;
+                                <a href="mailto:hola@khora.cl" style="color: #7c3aed; text-decoration: underline;">Contacto</a>
+                                ${logId ? `&nbsp;•&nbsp;<a href="${fnBase}?unsubscribe=${logId}" style="color: #64748b; text-decoration: underline;">Darse de baja</a>` : ""}
+                              </p>
+                              <p style="font-size: 11px; color: #94a3b8; margin: 12px 0 0 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                                © 2026 Khora • Arnaldo Allende.
+                              </p>
+                              ${openPixelHtml}
+                            </div>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+              </body>
+              </html>
+            `
+
+            const emailRes = await fetch("https://api.resend.com/emails", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${RESEND_API_KEY}`,
+              },
+              body: JSON.stringify({
+                from: FROM_EMAIL,
+                to: rawEmail,
+                subject: parsedSubject,
+                html: emailHtml,
+              }),
+            })
+
+            if (emailRes.ok) {
+              welcomeEmailSent = true
+              await supabaseAdmin
+                .from("StudentProfile")
+                .update({
+                  nurture_step: existingSp?.nurture_step || 0,
+                  nurture_last_sent_at: nowIso,
+                })
+                .eq("id", studentProfileId)
+            } else if (logId) {
+              await supabaseAdmin.from("NurtureLog").delete().eq("id", logId)
+            }
+          }
+        }
+      } catch (welcomeErr) {
+        console.error("Error enviando Correo #0 de bienvenida:", welcomeErr)
       }
 
       // Enviar Notificación Push a todos los dispositivos de Arnaldo
@@ -477,7 +706,7 @@ serve(async (req) => {
       }
 
       return new Response(
-        JSON.stringify({ success: true, pushSent }),
+        JSON.stringify({ success: true, pushSent, welcomeEmailSent }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
       )
     }

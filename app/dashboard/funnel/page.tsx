@@ -134,6 +134,7 @@ export default function FunnelPage() {
   // Modal Crear / Editar
   const [showModal, setShowModal] = useState(false)
   const [editingStep, setEditingStep] = useState<NurtureStep | null>(null)
+  const [creatingStepZero, setCreatingStepZero] = useState(false)
   const [saving, setSaving] = useState(false)
 
   // Form State
@@ -372,7 +373,55 @@ export default function FunnelPage() {
       setKpiConversionsTotal(totalConversions)
 
       // 3. Mapear pasos formateados
-      const mapped = (stepsData || []).map((s: any) => ({
+      let finalStepsData = stepsData || []
+      const existingBanner =
+        finalStepsData.find((s: any) => s.header_image_url)?.header_image_url ||
+        (typeof window !== "undefined" ? localStorage.getItem("khora_funnel_default_header") || "" : "")
+      if (existingBanner && !globalDefaultHeader) {
+        setGlobalDefaultHeader(existingBanner)
+      }
+
+      // Auto-crear Correo #0 (Bienvenida inmediata) la primera vez si aún no existe
+      const hasStepZero = finalStepsData.some((s: any) => s.step_order === 0)
+      const alreadySeededZero = typeof window !== "undefined" && localStorage.getItem("khora_step_zero_seeded_v1") === "1"
+      if (!hasStepZero && !alreadySeededZero && !stepErr) {
+        const { data: createdZero } = await supabase
+          .from("NurtureStep")
+          .insert({
+            teacher_id: teacherId,
+            step_order: 0,
+            subject: "¡Bienvenido/a a la comunidad de estudiantes, {{nombre}}! 🥁",
+            content_html:
+              "Qué alegría tenerte en la comunidad de estudiantes.\n\nPor aquí te iré compartiendo ejercicios de práctica, partituras, ideas de estudio y novedades para acompañarte en tu avance en la batería.\n\nGuarda este correo en tu bandeja principal para que no te pierdas el material de los próximos días.",
+            delay_days: 0,
+            target_audiences: ["PROSPECT", "TRIAL", "PAUSED", "INACTIVE"],
+            header_image_url: existingBanner || null,
+            is_active: true,
+          })
+          .select(`
+            id,
+            step_order,
+            subject,
+            content_html,
+            delay_days,
+            target_audiences,
+            library_content_id,
+            header_image_url,
+            is_active,
+            created_at,
+            LibraryContent ( id, title, type )
+          `)
+          .maybeSingle()
+
+        if (typeof window !== "undefined") {
+          localStorage.setItem("khora_step_zero_seeded_v1", "1")
+        }
+        if (createdZero) {
+          finalStepsData = [createdZero, ...finalStepsData]
+        }
+      }
+
+      const mapped = finalStepsData.map((s: any) => ({
         ...s,
         library_content: s.LibraryContent,
         stats: statsMap[s.id] || { sent: 0, opened: 0, clicked: 0, converted: 0, unsubscribed: 0 }
@@ -417,6 +466,7 @@ export default function FunnelPage() {
 
   function openCreateModal() {
     setEditingStep(null)
+    setCreatingStepZero(false)
     setFormSubject("")
     setFormContent("")
     setFormDelay(7)
@@ -428,11 +478,28 @@ export default function FunnelPage() {
     setShowModal(true)
   }
 
+  function openCreateStepZeroModal() {
+    setEditingStep(null)
+    setCreatingStepZero(true)
+    setFormSubject("¡Bienvenido/a a la comunidad de estudiantes, {{nombre}}! 🥁")
+    setFormContent(
+      "Qué alegría tenerte en la comunidad de estudiantes.\n\nPor aquí te iré compartiendo ejercicios de práctica, partituras, ideas de estudio y novedades para acompañarte en tu avance en la batería.\n\nGuarda este correo en tu bandeja principal para que no te pierdas el material de los próximos días."
+    )
+    setFormDelay(0)
+    setFormAudiences(["PROSPECT", "TRIAL", "PAUSED", "INACTIVE"])
+    setFormLibraryId("")
+    setFormHeaderImageUrl(globalDefaultHeader || "")
+    setFormIsActive(true)
+    setEditorTab("text")
+    setShowModal(true)
+  }
+
   function openEditModal(step: NurtureStep) {
     setEditingStep(step)
+    setCreatingStepZero(step.step_order === 0)
     setFormSubject(step.subject)
     setFormContent(step.content_html)
-    setFormDelay(step.delay_days)
+    setFormDelay(step.step_order === 0 ? 0 : step.delay_days)
     setFormAudiences(step.target_audiences || ["PROSPECT", "TRIAL", "PAUSED", "INACTIVE"])
     setFormLibraryId(step.library_content_id || "")
     setFormHeaderImageUrl(step.header_image_url || globalDefaultHeader || "")
@@ -654,14 +721,19 @@ export default function FunnelPage() {
     setSaving(true)
 
     try {
-      const nextOrder = editingStep ? editingStep.step_order : steps.length + 1
+      const maxOrder = steps.reduce((max, s) => Math.max(max, s.step_order), 0)
+      const nextOrder = editingStep
+        ? editingStep.step_order
+        : creatingStepZero
+          ? 0
+          : maxOrder + 1
 
       const payload: any = {
         teacher_id: profile.teacherProfileId,
         step_order: nextOrder,
         subject: formSubject.trim(),
         content_html: formContent.trim(),
-        delay_days: Number(formDelay) || 7,
+        delay_days: nextOrder === 0 ? 0 : (Number(formDelay) || 7),
         target_audiences: formAudiences,
         library_content_id: formLibraryId || null,
         header_image_url: formHeaderImageUrl.trim() || null,
@@ -1302,28 +1374,71 @@ export default function FunnelPage() {
           </div>
         ) : (
           <div className="relative pl-6 sm:pl-8 border-l-2 border-violet-200/80 space-y-8 ml-2 sm:ml-4">
-            {steps.map((step, idx) => {
+            {!steps.some(s => s.step_order === 0) && (
+              <div className="relative">
+                <div className="absolute -left-[33px] sm:-left-[41px] top-6 w-6 h-6 rounded-full bg-amber-500 border-4 border-amber-200 shadow-sm flex items-center justify-center text-[10px] font-black text-white">
+                  0
+                </div>
+                <div className="bg-amber-50/70 border-2 border-dashed border-amber-300 rounded-3xl p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="space-y-1">
+                    <span className="inline-block text-xs font-black uppercase tracking-wider text-amber-800 bg-amber-100 px-3 py-1 rounded-full border border-amber-300/60">
+                      ⚡ Correo #0 • Bienvenida Inmediata
+                    </span>
+                    <h3 className="text-sm font-bold text-neutral-900 pt-1">
+                      Correo de bienvenida al registrarse en la comunidad
+                    </h3>
+                    <p className="text-xs text-neutral-600">
+                      Se envía automáticamente en el mismo instante en que un estudiante se registra en <code className="font-mono font-bold">khora.cl/comunidad</code>.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={openCreateStepZeroModal}
+                    className="kh-btn-primary py-2.5 px-4 text-xs font-bold shrink-0"
+                  >
+                    ⚡ Configurar Correo #0
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {steps.map((step) => {
               const conversionCount = step.stats?.converted || 0
+              const isStepZero = step.step_order === 0
               return (
                 <div key={step.id} className="relative group">
                   {/* Bullet Marker on Timeline */}
-                  <div className="absolute -left-[33px] sm:-left-[41px] top-6 w-6 h-6 rounded-full bg-white border-4 border-violet-600 shadow-sm flex items-center justify-center text-[10px] font-bold text-violet-800">
-                    {idx + 1}
+                  <div className={`absolute -left-[33px] sm:-left-[41px] top-6 w-6 h-6 rounded-full shadow-sm flex items-center justify-center text-[10px] font-bold ${
+                    isStepZero
+                      ? "bg-amber-500 border-4 border-amber-200 text-white font-black"
+                      : "bg-white border-4 border-violet-600 text-violet-800"
+                  }`}>
+                    {step.step_order}
                   </div>
 
                   {/* Step Card */}
                   <div className={`bg-white border rounded-3xl p-5 sm:p-6 transition-all shadow-sm ${
-                    step.is_active ? "border-neutral-200/80 hover:border-violet-300" : "border-neutral-200/50 opacity-60 bg-neutral-50"
+                    step.is_active
+                      ? isStepZero
+                        ? "border-amber-300/90 hover:border-amber-400 ring-1 ring-amber-100"
+                        : "border-neutral-200/80 hover:border-violet-300"
+                      : "border-neutral-200/50 opacity-60 bg-neutral-50"
                   }`}>
                     {/* Header Row */}
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-neutral-100 pb-4">
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs font-black uppercase tracking-wider text-violet-700 bg-violet-50 px-3 py-1 rounded-full border border-violet-200/50">
-                          Paso #{step.step_order}
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span className={`text-xs font-black uppercase tracking-wider px-3 py-1 rounded-full border ${
+                          isStepZero
+                            ? "text-amber-800 bg-amber-50 border-amber-300/70"
+                            : "text-violet-700 bg-violet-50 border-violet-200/50"
+                        }`}>
+                          {isStepZero ? "⚡ Correo #0 • Bienvenida" : `Paso #${step.step_order}`}
                         </span>
                         <span className="flex items-center gap-1.5 text-xs text-neutral-500 font-medium">
                           <Clock className="w-3.5 h-3.5 text-neutral-400" />
-                          Se envía {step.delay_days} días después del anterior
+                          {isStepZero
+                            ? "Se envía inmediatamente al registrarse en la comunidad"
+                            : `Se envía ${step.delay_days} días después del anterior`}
                         </span>
                       </div>
 
@@ -1483,7 +1598,7 @@ export default function FunnelPage() {
                 onClick={openCreateModal}
                 className="w-full py-4 border-2 border-dashed border-violet-300 hover:border-violet-500 rounded-3xl text-violet-700 hover:text-violet-900 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 bg-violet-50/30 hover:bg-violet-50/70 transition-all"
               >
-                <Plus className="w-4 h-4" /> Agregar Paso #{steps.length + 1} a la Secuencia
+                <Plus className="w-4 h-4" /> Agregar Paso #{steps.reduce((max, s) => Math.max(max, s.step_order), 0) + 1} a la Secuencia
               </button>
             </div>
           </div>
@@ -1498,10 +1613,18 @@ export default function FunnelPage() {
             <div className="p-6 border-b border-neutral-100 flex items-center justify-between">
               <div>
                 <h3 className="font-extrabold text-neutral-900 text-lg">
-                  {editingStep ? `Editar Paso #${editingStep.step_order}` : `Crear Paso #${steps.length + 1} del Funnel`}
+                  {editingStep
+                    ? editingStep.step_order === 0
+                      ? "Editar Correo #0 (Bienvenida Inmediata)"
+                      : `Editar Paso #${editingStep.step_order}`
+                    : creatingStepZero
+                      ? "Configurar Correo #0 (Bienvenida Inmediata)"
+                      : `Crear Paso #${steps.reduce((max, s) => Math.max(max, s.step_order), 0) + 1} del Funnel`}
                 </h3>
                 <p className="text-xs text-neutral-500 mt-0.5">
-                  Este correo se enviará en automático siguiendo el orden de la secuencia infinita.
+                  {editingStep?.step_order === 0 || creatingStepZero
+                    ? "Este correo se envía automáticamente en el mismo instante en que alguien se suscribe en la comunidad."
+                    : "Este correo se enviará en automático siguiendo el orden de la secuencia infinita."}
                 </p>
               </div>
               <button onClick={() => setShowModal(false)} className="p-2 text-neutral-400 hover:text-neutral-900 rounded-xl">
@@ -1633,20 +1756,28 @@ export default function FunnelPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="kh-label block text-xs font-bold text-neutral-700 mb-1">
-                    Tiempo de Espera (Días)
+                    {editingStep?.step_order === 0 || creatingStepZero ? "Momento de Envío" : "Tiempo de Espera (Días)"}
                   </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={60}
-                    required
-                    value={formDelay}
-                    onChange={e => setFormDelay(parseInt(e.target.value) || 7)}
-                    className="kh-input w-full font-bold"
-                  />
-                  <p className="text-[10px] text-neutral-400 mt-1">
-                    Días a esperar tras el correo anterior (Recomendado: 7 días).
-                  </p>
+                  {editingStep?.step_order === 0 || creatingStepZero ? (
+                    <div className="px-3.5 py-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold flex items-center gap-2">
+                      <span>⚡ Envío Inmediato (0 días) al registrarse</span>
+                    </div>
+                  ) : (
+                    <>
+                      <input
+                        type="number"
+                        min={1}
+                        max={60}
+                        required
+                        value={formDelay}
+                        onChange={e => setFormDelay(parseInt(e.target.value) || 7)}
+                        className="kh-input w-full font-bold"
+                      />
+                      <p className="text-[10px] text-neutral-400 mt-1">
+                        Días a esperar tras el correo anterior (Recomendado: 7 días).
+                      </p>
+                    </>
+                  )}
                 </div>
 
                 <div>

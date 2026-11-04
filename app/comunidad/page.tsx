@@ -188,9 +188,10 @@ export default function ComunidadPage() {
               </h2>
               <p className="text-xs sm:text-sm text-stone-500 leading-relaxed">
                 Hola <strong>{name.split(" ")[0]}</strong>, ya eres parte de la
-                comunidad de estudiantes. Muy pronto recibirás el próximo
-                ejercicio y novedades directamente en{" "}
-                <span className="font-semibold text-stone-700">{email}</span>.
+                comunidad de estudiantes. Te acabamos de enviar un correo de
+                bienvenida a{" "}
+                <span className="font-semibold text-stone-700">{email}</span>{" "}
+                (revisa también promociones o spam).
               </p>
             </div>
           </div>
