@@ -137,7 +137,7 @@ serve(async (req) => {
 
       const { data: teacherUser } = await supabaseAdmin
         .from("User")
-        .select("id, TeacherProfile ( id, funnel_header_image_url )")
+        .select("id, TeacherProfile ( id )")
         .eq("email", "arnaldoallende@hotmail.com")
         .maybeSingle()
 
@@ -153,9 +153,21 @@ serve(async (req) => {
         }
       } catch (_e) {}
 
+      let fallbackHeader = ""
+      if (!customConfig.headerImageUrl && tp?.id) {
+        const { data: anyStep } = await supabaseAdmin
+          .from("NurtureStep")
+          .select("header_image_url")
+          .eq("teacher_id", tp.id)
+          .not("header_image_url", "is", null)
+          .limit(1)
+          .maybeSingle()
+        fallbackHeader = anyStep?.header_image_url || ""
+      }
+
       return new Response(
         JSON.stringify({
-          headerImageUrl: customConfig.headerImageUrl ?? tp?.funnel_header_image_url ?? "",
+          headerImageUrl: customConfig.headerImageUrl || fallbackHeader || "",
           badge: customConfig.badge || "🥁 Comunidad de Batería",
           title: customConfig.title || "Súmate a la comunidad de estudiantes",
           subtitle: customConfig.subtitle || "Recibe ejercicios de práctica, partituras, material de estudio y novedades directamente en tu correo.",
@@ -367,7 +379,7 @@ serve(async (req) => {
       // Obtener profesor Arnaldo Allende
       const { data: teacherUser } = await supabaseAdmin
         .from("User")
-        .select("id, TeacherProfile ( id, funnel_header_image_url )")
+        .select("id, TeacherProfile ( id )")
         .eq("email", "arnaldoallende@hotmail.com")
         .maybeSingle()
 
@@ -445,7 +457,18 @@ serve(async (req) => {
 
       // Enviar inmediatamente el Correo #0 (step_order = 0) si está activo
       let welcomeEmailSent = false
+      let welcomeError: string | null = null
       try {
+        const { data: anyStepWithHeader } = await supabaseAdmin
+          .from("NurtureStep")
+          .select("header_image_url")
+          .eq("teacher_id", tp.id)
+          .not("header_image_url", "is", null)
+          .limit(1)
+          .maybeSingle()
+
+        const defaultHeader = anyStepWithHeader?.header_image_url || null
+
         let { data: stepZero } = await supabaseAdmin
           .from("NurtureStep")
           .select(`
@@ -455,7 +478,7 @@ serve(async (req) => {
             content_html,
             header_image_url,
             is_active,
-            LibraryContent ( id, title, type, file_url )
+            LibraryContent ( id, title, type )
           `)
           .eq("teacher_id", tp.id)
           .eq("step_order", 0)
@@ -463,15 +486,6 @@ serve(async (req) => {
 
         // Si aún no existe ningún Correo #0 en la base de datos, crearlo por defecto
         if (!stepZero) {
-          const { data: anyStepWithHeader } = await supabaseAdmin
-            .from("NurtureStep")
-            .select("header_image_url")
-            .eq("teacher_id", tp.id)
-            .not("header_image_url", "is", null)
-            .limit(1)
-            .maybeSingle()
-
-          const defaultHeader = tp.funnel_header_image_url || anyStepWithHeader?.header_image_url || null
           const { data: createdZero } = await supabaseAdmin
             .from("NurtureStep")
             .insert({
@@ -492,7 +506,7 @@ serve(async (req) => {
               content_html,
               header_image_url,
               is_active,
-              LibraryContent ( id, title, type, file_url )
+              LibraryContent ( id, title, type )
             `)
             .maybeSingle()
           stepZero = createdZero
@@ -571,7 +585,7 @@ serve(async (req) => {
                 </h2>
               </div>
             `
-            const bannerUrl = stepZero.header_image_url || tp.funnel_header_image_url
+            const bannerUrl = stepZero.header_image_url || defaultHeader
             if (bannerUrl) {
               headerHtml = `
                 <div style="text-align: center; padding: 0; overflow: hidden; border-bottom: 1px solid #f1f5f9; background-color: #ffffff;">
@@ -658,12 +672,17 @@ serve(async (req) => {
                   nurture_last_sent_at: nowIso,
                 })
                 .eq("id", studentProfileId)
-            } else if (logId) {
-              await supabaseAdmin.from("NurtureLog").delete().eq("id", logId)
+            } else {
+              const errTxt = await emailRes.text()
+              welcomeError = errTxt
+              if (logId) {
+                await supabaseAdmin.from("NurtureLog").delete().eq("id", logId)
+              }
             }
           }
         }
-      } catch (welcomeErr) {
+      } catch (welcomeErr: any) {
+        welcomeError = welcomeErr?.message || String(welcomeErr)
         console.error("Error enviando Correo #0 de bienvenida:", welcomeErr)
       }
 
@@ -706,7 +725,180 @@ serve(async (req) => {
       }
 
       return new Response(
-        JSON.stringify({ success: true, pushSent, welcomeEmailSent }),
+        JSON.stringify({ success: true, pushSent, welcomeEmailSent, welcomeError }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+      )
+    }
+
+    // 1.d Reenviar Correo #0 a suscriptores recientes de la Comunidad que no lo hayan recibido
+    if (body.action === 'backfill-step-zero') {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? ""
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+      const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.39.3")
+      const supabaseAdmin = createClient(supabaseUrl, supabaseKey)
+
+      const { data: teacherUser } = await supabaseAdmin
+        .from("User")
+        .select("id, TeacherProfile ( id )")
+        .eq("email", "arnaldoallende@hotmail.com")
+        .maybeSingle()
+
+      const tp: any = Array.isArray(teacherUser?.TeacherProfile)
+        ? teacherUser?.TeacherProfile[0]
+        : teacherUser?.TeacherProfile
+
+      if (!tp?.id) {
+        return new Response(JSON.stringify({ error: "No teacher profile" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 404,
+        })
+      }
+
+      const { data: anyStepWithHeader } = await supabaseAdmin
+        .from("NurtureStep")
+        .select("header_image_url")
+        .eq("teacher_id", tp.id)
+        .not("header_image_url", "is", null)
+        .limit(1)
+        .maybeSingle()
+
+      const defaultHeader = anyStepWithHeader?.header_image_url || null
+
+      let { data: stepZero } = await supabaseAdmin
+        .from("NurtureStep")
+        .select(`
+          id,
+          step_order,
+          subject,
+          content_html,
+          header_image_url,
+          is_active,
+          LibraryContent ( id, title, type )
+        `)
+        .eq("teacher_id", tp.id)
+        .eq("step_order", 0)
+        .maybeSingle()
+
+      if (!stepZero) {
+        const { data: createdZero } = await supabaseAdmin
+          .from("NurtureStep")
+          .insert({
+            teacher_id: tp.id,
+            step_order: 0,
+            subject: "¡Bienvenido/a a la comunidad de estudiantes, {{nombre}}! 🥁",
+            content_html:
+              "Qué alegría tenerte en la comunidad de estudiantes.\n\nPor aquí te iré compartiendo ejercicios de práctica, partituras, ideas de estudio y novedades para acompañarte en tu avance en la batería.\n\nGuarda este correo en tu bandeja principal para que no te pierdas el material de los próximos días.",
+            delay_days: 0,
+            target_audiences: ["PROSPECT", "TRIAL", "PAUSED", "INACTIVE"],
+            header_image_url: defaultHeader,
+            is_active: true,
+          })
+          .select(`
+            id,
+            step_order,
+            subject,
+            content_html,
+            header_image_url,
+            is_active,
+            LibraryContent ( id, title, type )
+          `)
+          .maybeSingle()
+        stepZero = createdZero
+      }
+
+      const sinceIso = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString()
+      const { data: recentProspects } = await supabaseAdmin
+        .from("StudentProfile")
+        .select("id, status, nurture_step, created_at, User ( id, name, email, marketing_consent )")
+        .eq("teacher_id", tp.id)
+        .eq("status", "PROSPECT")
+        .gte("created_at", sinceIso)
+
+      const sentTo: string[] = []
+      if (stepZero && stepZero.is_active && RESEND_API_KEY) {
+        for (const sp of recentProspects || []) {
+          const u: any = Array.isArray(sp.User) ? sp.User[0] : sp.User
+          if (!u?.email || u.marketing_consent === false) continue
+
+          const { data: existingLog } = await supabaseAdmin
+            .from("NurtureLog")
+            .select("id")
+            .eq("step_id", stepZero.id)
+            .eq("student_profile_id", sp.id)
+            .maybeSingle()
+
+          if (existingLog) continue
+
+          const nowIso = new Date().toISOString()
+          const rawEmail = u.email.trim().toLowerCase()
+          const rawName = u.name || "Alumno"
+          const { data: logRow } = await supabaseAdmin
+            .from("NurtureLog")
+            .insert({
+              teacher_id: tp.id,
+              step_id: stepZero.id,
+              student_profile_id: sp.id,
+              email: rawEmail,
+              sent_at: nowIso,
+            })
+            .select("id")
+            .single()
+
+          const logId = logRow?.id
+          const fnBase = `${supabaseUrl}/functions/v1/send-email`
+          const openPixelHtml = logId
+            ? `<img src="${fnBase}?track_open=${logId}" width="1" height="1" alt="" style="display:block;width:1px !important;height:1px !important;border:0 !important;margin:0 !important;padding:0 !important;" />`
+            : ""
+
+          const firstName = rawName.split(" ")[0] || "Alumno"
+          const parsedSubject = stepZero.subject.replace(/{{nombre}}/g, firstName)
+          const bodyWithName = stepZero.content_html.replace(/{{nombre}}/g, firstName)
+          const rawParsedBody = bodyWithName.includes("<")
+            ? bodyWithName
+            : bodyWithName.replace(/\n/g, "<br>")
+
+          const parsedBody = logId
+            ? rawParsedBody.replace(/href=["'](https?:\/\/[^"']+)["']/gi, (_m: string, href: string) => {
+                if (href.includes("/functions/v1/send-email")) return `href="${href}"`
+                return `href="${fnBase}?track_click=${logId}&to=${encodeURIComponent(href)}"`
+              })
+            : rawParsedBody
+
+          const bannerUrl = stepZero.header_image_url || defaultHeader
+          const headerHtml = bannerUrl
+            ? `<div style="text-align: center; padding: 0; overflow: hidden; border-bottom: 1px solid #f1f5f9; background-color: #ffffff;"><img src="${bannerUrl}" alt="Cabecera" style="width: 100%; max-width: 540px; height: auto; max-height: 220px; object-fit: cover; display: block; margin: 0 auto;" /></div>`
+            : `<div style="text-align: center; padding: 24px 0 16px 0; border-bottom: 1px solid #f1f5f9;"><h2 style="margin: 0; font-size: 20px; font-weight: 800; color: #0f172a;">Arnaldo Allende</h2></div>`
+
+          const emailHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${parsedSubject}</title></head><body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b;"><table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f8fafc; padding: 36px 12px; width: 100%;"><tr><td align="center"><table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 540px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 20px; overflow: hidden;"><tr><td>${headerHtml}<div style="padding: 32px 32px 24px 32px; font-size: 15px; color: #334155; line-height: 1.65;"><p style="font-size: 16px; color: #0f172a; font-weight: 700; margin: 0 0 16px 0;">¡Hola ${firstName}!</p><div style="color: #334155; line-height: 1.7;">${parsedBody}</div><div style="margin-top: 32px; padding-top: 20px; border-top: 1px solid #f1f5f9; font-size: 14px; color: #64748b;"><p style="margin: 0;">Un abrazo,<br><strong style="color: #0f172a;">Arnaldo Allende</strong></p></div></div><div style="padding: 24px 32px; text-align: center; background-color: #f8fafc; border-top: 1px solid #e2e8f0;"><p style="font-size: 11px; color: #64748b; margin: 0 0 8px 0;">Recibes este correo porque te sumaste a la comunidad de estudiantes de Arnaldo Allende.</p><p style="font-size: 11px; color: #64748b; margin: 0;"><a href="https://khora.cl/terminos" style="color: #7c3aed; text-decoration: underline;">Términos</a> &nbsp;•&nbsp; <a href="https://khora.cl/privacidad" style="color: #7c3aed; text-decoration: underline;">Privacidad</a> &nbsp;•&nbsp; <a href="mailto:hola@khora.cl" style="color: #7c3aed; text-decoration: underline;">Contacto</a>${logId ? `&nbsp;•&nbsp;<a href="${fnBase}?unsubscribe=${logId}" style="color: #64748b; text-decoration: underline;">Darse de baja</a>` : ""}</p><p style="font-size: 11px; color: #94a3b8; margin: 12px 0 0 0;">© 2026 Khora • Arnaldo Allende.</p>${openPixelHtml}</div></td></tr></table></td></tr></table></body></html>`
+
+          const emailRes = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${RESEND_API_KEY}`,
+            },
+            body: JSON.stringify({
+              from: FROM_EMAIL,
+              to: rawEmail,
+              subject: parsedSubject,
+              html: emailHtml,
+            }),
+          })
+
+          if (emailRes.ok) {
+            sentTo.push(rawEmail)
+            await supabaseAdmin
+              .from("StudentProfile")
+              .update({ nurture_step: sp.nurture_step || 0, nurture_last_sent_at: nowIso })
+              .eq("id", sp.id)
+          } else if (logId) {
+            await supabaseAdmin.from("NurtureLog").delete().eq("id", logId)
+          }
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, sentTo, recentProspectsCount: recentProspects?.length || 0 }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
       )
     }

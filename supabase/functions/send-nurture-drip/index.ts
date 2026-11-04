@@ -14,7 +14,7 @@ serve(async (req) => {
     // 1. Obtener profesor Arnaldo Allende
     const { data: teacherUser } = await supabase
       .from("User")
-      .select("id, TeacherProfile ( id, funnel_header_image_url )")
+      .select("id, TeacherProfile ( id )")
       .eq("email", "arnaldoallende@hotmail.com")
       .maybeSingle()
 
@@ -40,7 +40,7 @@ serve(async (req) => {
         target_audiences,
         library_content_id,
         header_image_url,
-        LibraryContent ( id, title, type, file_url )
+        LibraryContent ( id, title, type )
       `)
       .eq("teacher_id", teacherId)
       .eq("is_active", true)
@@ -49,6 +49,8 @@ serve(async (req) => {
     if (!steps || steps.length === 0) {
       return new Response(JSON.stringify({ message: "No active nurture steps" }), { status: 200 })
     }
+
+    const defaultBannerUrl = steps.find((s: any) => s.header_image_url)?.header_image_url || ""
 
     // 3. Obtener alumnos no activos con consentimiento
     const { data: students } = await supabase
@@ -152,7 +154,7 @@ serve(async (req) => {
           </h2>
         </div>
       `
-      const bannerUrl = nextStep.header_image_url || teacherProfile.funnel_header_image_url
+      const bannerUrl = nextStep.header_image_url || defaultBannerUrl
       if (bannerUrl) {
         headerHtml = `
           <div style="text-align: center; padding: 0; overflow: hidden; border-bottom: 1px solid #f1f5f9; background-color: #ffffff;">
