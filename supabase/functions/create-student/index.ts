@@ -30,7 +30,14 @@ serve(async (req) => {
     // 1. Crear el usuario con la API de Administrador o asociarlo si ya existe
     let finalUserId: string | null = null
 
+    const { data: preExistingUser } = await supabaseAdmin
+      .from("User")
+      .select("id")
+      .ilike("email", email.trim().toLowerCase())
+      .maybeSingle()
+
     const { data: userData, error: createErr } = await supabaseAdmin.auth.admin.createUser({
+      ...(preExistingUser?.id ? { id: preExistingUser.id } : {}),
       email: email.trim().toLowerCase(),
       password: password,
       email_confirm: true, // Auto-confirmar el correo
@@ -100,6 +107,16 @@ serve(async (req) => {
     if (!finalUserId) throw new Error("No se pudo obtener el identificador del usuario")
 
     // 2. Garantizar que StudentProfile exista con la modalidad, profesor y academia asignados
+    const { data: existingSpRow } = await supabaseAdmin
+      .from("StudentProfile")
+      .select("lead_source")
+      .eq("user_id", finalUserId)
+      .maybeSingle()
+
+    const wasInNewsletter =
+      existingSpRow?.lead_source === "NEWSLETTER_ONLY" ||
+      existingSpRow?.lead_source === "NEWSLETTER"
+
     const { error: spErr } = await supabaseAdmin
       .from("StudentProfile")
       .upsert({
@@ -107,6 +124,7 @@ serve(async (req) => {
         teacher_id: teacher_id,
         academy_id: academy_id || null,
         modalidad: modalidad || "online",
+        ...(wasInNewsletter ? { lead_source: "NEWSLETTER" } : {}),
       }, { onConflict: "user_id" })
 
     if (spErr) console.warn("Aviso actualizando StudentProfile:", spErr)

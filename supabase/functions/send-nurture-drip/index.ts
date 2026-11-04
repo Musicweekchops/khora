@@ -52,19 +52,19 @@ serve(async (req) => {
 
     const defaultBannerUrl = steps.find((s: any) => s.header_image_url)?.header_image_url || ""
 
-    // 3. Obtener alumnos no activos con consentimiento
+    // 3. Obtener contactos del funnel y suscriptores del newsletter con consentimiento
     const { data: students } = await supabase
       .from("StudentProfile")
       .select(`
         id,
         status,
+        lead_source,
         created_at,
         nurture_step,
         nurture_last_sent_at,
         User ( id, name, email, marketing_consent )
       `)
       .eq("teacher_id", teacherId)
-      .neq("status", "ACTIVE")
 
     let sentCount = 0
     const now = Date.now()
@@ -78,9 +78,10 @@ serve(async (req) => {
       const nextStep = steps.find(s => s.step_order === currentStepNum + 1)
       if (!nextStep) continue
 
-      // Verificar si el estado del alumno está en las audiencias objetivo de este paso
+      // Verificar si el estado del alumno está en las audiencias objetivo o si se suscribió al Newsletter
       const studentStatus = student.status || "PROSPECT"
-      if (!nextStep.target_audiences.includes(studentStatus)) continue
+      const isNewsletterSubscriber = student.lead_source === "NEWSLETTER" || student.lead_source === "NEWSLETTER_ONLY"
+      if (!nextStep.target_audiences.includes(studentStatus) && !isNewsletterSubscriber) continue
 
       // Verificar tiempo de espera (delay_days)
       const lastSentTime = student.nurture_last_sent_at 

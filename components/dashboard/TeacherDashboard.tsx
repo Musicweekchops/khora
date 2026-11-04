@@ -49,7 +49,7 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
       const endOfMonth = toDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 0))
 
       const [students, todayCl, bookings, payments, availCheck, classTypesCheck, teacherProf, monthClassesReq] = await Promise.all([
-        supabase.from("StudentProfile").select("id", { count: "exact", head: true }).eq("teacher_id", teacherId),
+        supabase.from("StudentProfile").select("id, status, lead_source").eq("teacher_id", teacherId),
         supabase.from("Class").select("id, start_time, end_time, status, modalidad, is_recovery_pending, is_recovery, original_class_date, is_special, special_note, StudentProfile ( User ( name ) )").eq("teacher_id", teacherId).eq("date", today).neq("status", "CANCELLED").order("start_time"),
         supabase.from("Booking").select("id, date").eq("teacher_id", teacherId).eq("status", "PENDING").order("date", { ascending: true }),
         supabase.from("Payment").select("amount").eq("teacher_id", teacherId).gte("date", startOfMonth),
@@ -59,8 +59,12 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
         supabase.from("Class").select("id, student_id, date, start_time, end_time, status, is_recovery, original_class_date, is_recovery_pending, is_special, special_note").eq("teacher_id", teacherId).gte("date", startOfMonth).lte("date", endOfMonth)
       ])
 
+      const realStudentsCount = (students.data || []).filter(
+        (s: any) => !((s.status ?? "PROSPECT") === "PROSPECT" && s.lead_source === "NEWSLETTER_ONLY")
+      ).length
+
       setStats({
-        activeStudents: students.count ?? 0,
+        activeStudents: realStudentsCount,
         classesToday: todayCl.data?.length ?? 0,
         pendingBookings: bookings.data?.length ?? 0,
         monthlyRevenue: payments.data?.reduce((s, p) => s + (p.amount || 0), 0) ?? 0,

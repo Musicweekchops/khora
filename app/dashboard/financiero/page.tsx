@@ -108,15 +108,17 @@ export default function FinancieroPage() {
       }))
     }
 
-    if (sp) setStudents(sp.map((s: any) => {
-      const u = Array.isArray(s?.User) ? s.User[0] : s?.User
-      return {
-        id: s.id, status: s.status ?? "PROSPECT", lifetime_value: s.lifetime_value ?? 0,
-        created_at: s.created_at, lead_source: s.lead_source ?? "", name: u?.name ?? "—",
-        email: u?.email ?? "",
-        monthly_fee: Number(s.monthly_fee ?? 0), modalidad: s.modalidad ?? "online"
-      }
-    }))
+    if (sp) setStudents(sp
+      .filter((s: any) => !((s.status ?? "PROSPECT") === "PROSPECT" && s.lead_source === "NEWSLETTER_ONLY"))
+      .map((s: any) => {
+        const u = Array.isArray(s?.User) ? s.User[0] : s?.User
+        return {
+          id: s.id, status: s.status ?? "PROSPECT", lifetime_value: s.lifetime_value ?? 0,
+          created_at: s.created_at, lead_source: s.lead_source ?? "", name: u?.name ?? "—",
+          email: u?.email ?? "",
+          monthly_fee: Number(s.monthly_fee ?? 0), modalidad: s.modalidad ?? "online"
+        }
+      }))
 
     // Alumnos activos sin pago COMPLETO este mes
     if (activeStudents && py) {

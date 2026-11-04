@@ -434,7 +434,7 @@ serve(async (req) => {
       // Verificar si ya tiene StudentProfile con Arnaldo
       const { data: existingSp } = await supabaseAdmin
         .from("StudentProfile")
-        .select("id, nurture_step")
+        .select("id, status, lead_source, nurture_step")
         .eq("user_id", studentUserId)
         .eq("teacher_id", tp.id)
         .maybeSingle()
@@ -442,17 +442,27 @@ serve(async (req) => {
       let studentProfileId = existingSp?.id
 
       if (!studentProfileId) {
+        // Suscriptor nuevo exclusivo de Newsletter/Comunidad (no se mezcla con alumnos de clases)
         const { data: insertedSp } = await supabaseAdmin
           .from("StudentProfile")
           .insert({
             user_id: studentUserId,
             teacher_id: tp.id,
             status: "PROSPECT",
+            lead_source: "NEWSLETTER_ONLY",
             nurture_step: 0,
           })
           .select("id")
           .single()
         studentProfileId = insertedSp?.id
+      } else if (existingSp?.lead_source !== "NEWSLETTER_ONLY") {
+        // Ya era alumno registrado en Khora: mantener su estado de alumno y etiquetarlo en el Newsletter
+        await supabaseAdmin
+          .from("StudentProfile")
+          .update({
+            lead_source: "NEWSLETTER",
+          })
+          .eq("id", studentProfileId)
       }
 
       // Enviar inmediatamente el Correo #0 (step_order = 0) si está activo
@@ -809,10 +819,33 @@ serve(async (req) => {
       const sinceIso = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString()
       const { data: recentProspects } = await supabaseAdmin
         .from("StudentProfile")
-        .select("id, status, nurture_step, created_at, User ( id, name, email, marketing_consent )")
+        .select("id, status, lead_source, nurture_step, created_at, User ( id, name, email, marketing_consent )")
         .eq("teacher_id", tp.id)
         .eq("status", "PROSPECT")
         .gte("created_at", sinceIso)
+
+      const taggedNewsletterOnly: string[] = []
+      const taggedExistingStudent: string[] = []
+      for (const sp of recentProspects || []) {
+        const u: any = Array.isArray(sp.User) ? sp.User[0] : sp.User
+        const emailStr = u?.email || sp.id
+        const { count: classCount } = await supabaseAdmin
+          .from("Class")
+          .select("id", { count: "exact", head: true })
+          .eq("student_id", sp.id)
+        const { count: payCount } = await supabaseAdmin
+          .from("Payment")
+          .select("id", { count: "exact", head: true })
+          .eq("student_id", sp.id)
+
+        if ((classCount || 0) > 0 || (payCount || 0) > 0) {
+          await supabaseAdmin.from("StudentProfile").update({ lead_source: "NEWSLETTER" }).eq("id", sp.id)
+          taggedExistingStudent.push(emailStr)
+        } else if (sp.lead_source !== "NEWSLETTER_ONLY") {
+          await supabaseAdmin.from("StudentProfile").update({ lead_source: "NEWSLETTER_ONLY" }).eq("id", sp.id)
+          taggedNewsletterOnly.push(`${emailStr} (was: ${sp.lead_source || "null"})`)
+        }
+      }
 
       const sentTo: string[] = []
       if (stepZero && stepZero.is_active && RESEND_API_KEY) {
@@ -898,7 +931,13 @@ serve(async (req) => {
       }
 
       return new Response(
-        JSON.stringify({ success: true, sentTo, recentProspectsCount: recentProspects?.length || 0 }),
+        JSON.stringify({
+          success: true,
+          sentTo,
+          taggedNewsletterOnly,
+          taggedExistingStudent,
+          recentProspectsCount: recentProspects?.length || 0,
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
       )
     }

@@ -664,7 +664,14 @@ export default function StudentDetail({ studentId }: { studentId: string }) {
               {student.user.name.charAt(0).toUpperCase()}
             </div>
             <div>
-              <h1 className="text-2xl md:text-3xl font-black text-neutral-900 tracking-tight">{student.user.name}</h1>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h1 className="text-2xl md:text-3xl font-black text-neutral-900 tracking-tight">{student.user.name}</h1>
+                {(student.lead_source === "NEWSLETTER" || student.lead_source === "NEWSLETTER_ONLY") && (
+                  <span className="px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider bg-violet-100 text-violet-700 border border-violet-200">
+                    🥁 Newsletter
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-2.5 mt-1 flex-wrap">
                 <p className="text-neutral-500 font-medium text-sm md:text-base">{student.user.email}</p>
                 <button

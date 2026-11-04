@@ -9,6 +9,8 @@ import LastSeenBadge from "@/components/ui/LastSeenBadge"
 interface Student {
   id: string
   status: string
+  lead_source?: string
+  in_newsletter?: boolean
   modalidad: string
   name: string
   email: string
@@ -85,16 +87,23 @@ export default function StudentsList() {
     try {
       const { data, error } = await supabase
         .from("StudentProfile")
-        .select(`id, status, modalidad, user_id, User ( name, email, phone, last_sign_in_at )`)
+        .select(`id, status, lead_source, modalidad, user_id, User ( name, email, phone, last_sign_in_at )`)
         .eq("teacher_id", teacherId)
         .order("created_at", { ascending: false })
 
       if (error) throw error
 
-      const mapped = (data ?? []).map((s: any, idx: number) => ({
+      // Excluir personas que SOLO se suscribieron al Newsletter y no son alumnos de clases
+      const realStudents = (data ?? []).filter(
+        (s: any) => !((s.status ?? "PROSPECT") === "PROSPECT" && s.lead_source === "NEWSLETTER_ONLY")
+      )
+
+      const mapped = realStudents.map((s: any, idx: number) => ({
         id: s.id,
         user_id: s.user_id,
         status: s.status ?? "PROSPECT",
+        lead_source: s.lead_source ?? "",
+        in_newsletter: s.lead_source === "NEWSLETTER" || s.lead_source === "NEWSLETTER_ONLY",
         modalidad: s.modalidad ?? "online",
         name: s.User?.name ?? "—",
         email: s.User?.email ?? "—",
@@ -300,7 +309,14 @@ export default function StudentsList() {
                           </span>
                         </div>
                         <div>
-                          <p className="font-black text-neutral-900 group-hover:text-violet-600 transition-colors">{s.name}</p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-black text-neutral-900 group-hover:text-violet-600 transition-colors">{s.name}</p>
+                            {s.in_newsletter && (
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-violet-100 text-violet-700 border border-violet-200">
+                                🥁 Newsletter
+                              </span>
+                            )}
+                          </div>
                           <p className="text-[11px] md:hidden text-neutral-500 mt-0.5">{s.email}</p>
                           <div className="flex gap-1 mt-1 flex-wrap">
                             {s.has_pending_payment && <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-red-100 text-red-700 border border-red-200">Deuda</span>}

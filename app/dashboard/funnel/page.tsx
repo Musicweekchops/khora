@@ -182,6 +182,17 @@ export default function FunnelPage() {
     nurture_step: number
   }[]>([])
 
+  // Modal Global Contactos en el Funnel / Newsletter
+  const [funnelContactsModalOpen, setFunnelContactsModalOpen] = useState(false)
+  const [funnelContactsList, setFunnelContactsList] = useState<{
+    id: string
+    name: string
+    email: string
+    status: string
+    lead_source: string
+    nurture_step: number
+  }[]>([])
+
   // Global KPIs
   const [kpiContactsCount, setKpiContactsCount] = useState(0)
   const [kpiConversionsTotal, setKpiConversionsTotal] = useState(0)
@@ -432,14 +443,17 @@ export default function FunnelPage() {
       // 4. Contar contactos elegibles en el embudo y dados de baja
       const { data: allContacts } = await supabase
         .from("StudentProfile")
-        .select("id, nurture_step, User ( name, email, marketing_consent )")
+        .select("id, status, lead_source, nurture_step, User ( name, email, marketing_consent )")
         .eq("teacher_id", teacherId)
-        .neq("status", "ACTIVE")
 
       let activeFunnelCount = 0
       const unsubList: { id: string; name: string; email: string; nurture_step: number }[] = []
+      const activeList: { id: string; name: string; email: string; status: string; lead_source: string; nurture_step: number }[] = []
 
       for (const c of allContacts || []) {
+        const isNewsletterSub = c.lead_source === "NEWSLETTER" || c.lead_source === "NEWSLETTER_ONLY"
+        if (c.status === "ACTIVE" && !isNewsletterSub) continue
+
         const u: any = Array.isArray(c.User) ? c.User[0] : c.User
         if (!u?.email) continue
         if (u.marketing_consent === false) {
@@ -451,10 +465,19 @@ export default function FunnelPage() {
           })
         } else {
           activeFunnelCount++
+          activeList.push({
+            id: c.id,
+            name: u.name || u.email.split("@")[0],
+            email: u.email,
+            status: c.status || "PROSPECT",
+            lead_source: c.lead_source || "",
+            nurture_step: c.nurture_step || 0,
+          })
         }
       }
 
       setKpiContactsCount(activeFunnelCount)
+      setFunnelContactsList(activeList)
       setUnsubscribedContacts(unsubList)
 
     } catch (err) {
@@ -961,12 +984,11 @@ export default function FunnelPage() {
     if (!profile?.teacherProfileId) return
     setSendingNow(step.id)
     try {
-      // 1. Destinatarios: alumnos no activos, dentro de las audiencias del paso y con consentimiento
+      // 1. Destinatarios: contactos del funnel y suscriptores del newsletter con consentimiento
       const { data: studentsData, error: stErr } = await supabase
         .from("StudentProfile")
-        .select("id, status, nurture_step, User ( name, email, marketing_consent )")
+        .select("id, status, lead_source, nurture_step, User ( name, email, marketing_consent )")
         .eq("teacher_id", profile.teacherProfileId)
-        .neq("status", "ACTIVE")
       if (stErr) throw stErr
 
       // 2. Excluir quienes ya recibieron este paso
@@ -979,7 +1001,8 @@ export default function FunnelPage() {
       const recipients = (studentsData || []).flatMap((s: any) => {
         const u = Array.isArray(s.User) ? s.User[0] : s.User
         if (!u?.email || u.marketing_consent === false) return []
-        if (!(step.target_audiences || []).includes(s.status || "PROSPECT")) return []
+        const isNewsletterSub = s.lead_source === "NEWSLETTER" || s.lead_source === "NEWSLETTER_ONLY"
+        if (!(step.target_audiences || []).includes(s.status || "PROSPECT") && !isNewsletterSub) return []
         if (alreadySent.has(s.id)) return []
         return [{ id: s.id, name: u.name || "Alumno", email: u.email.trim().toLowerCase(), nurtureStep: s.nurture_step || 0 }]
       })
@@ -1290,14 +1313,18 @@ export default function FunnelPage() {
 
       {/* KPI METRICS BAR */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <div className="bg-white border border-neutral-200/80 rounded-2xl p-5 shadow-sm space-y-1">
+        <button
+          type="button"
+          onClick={() => setFunnelContactsModalOpen(true)}
+          className="text-left bg-white hover:bg-violet-50/40 border border-neutral-200/80 hover:border-violet-300 rounded-2xl p-5 shadow-sm space-y-1 transition-colors"
+        >
           <div className="flex items-center justify-between text-neutral-500 text-xs font-semibold">
             <span>Contactos en el Funnel</span>
-            <Users className="w-4 h-4 text-violet-500" />
+            <span className="text-xs font-bold text-violet-600 underline">Ver quiénes</span>
           </div>
           <div className="text-3xl font-extrabold text-neutral-900">{kpiContactsCount}</div>
-          <p className="text-[11px] text-neutral-400">Prospectos y alumnos pausados recibiendo la secuencia</p>
-        </div>
+          <p className="text-[11px] text-neutral-400">Suscriptores del Newsletter y contactos recibiendo la secuencia</p>
+        </button>
 
         <div className="bg-white border border-emerald-200/80 rounded-2xl p-5 shadow-sm space-y-1 bg-gradient-to-br from-emerald-50/40 to-white">
           <div className="flex items-center justify-between text-emerald-700 text-xs font-bold uppercase tracking-wider">
@@ -2369,6 +2396,73 @@ export default function FunnelPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {funnelContactsModalOpen && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl border border-neutral-200 shadow-2xl w-full max-w-lg p-6 flex flex-col gap-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-neutral-100 pb-4">
+              <div>
+                <h3 className="text-base font-extrabold text-neutral-900 flex items-center gap-2">
+                  <span>🥁 Contactos en el Funnel y Newsletter</span>
+                </h3>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  Suscriptores exclusivos del Newsletter (separados de Alumnos) y alumnos en seguimiento ({funnelContactsList.length})
+                </p>
+              </div>
+              <button onClick={() => setFunnelContactsModalOpen(false)} className="p-1.5 text-neutral-400 hover:text-neutral-900 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {funnelContactsList.length === 0 ? (
+              <div className="py-8 text-center space-y-1.5">
+                <p className="text-sm font-bold text-neutral-900">Aún no hay contactos activos en el Funnel</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                {funnelContactsList.map(c => (
+                  <div
+                    key={c.id}
+                    className="p-3 bg-neutral-50/80 border border-neutral-200/80 rounded-2xl flex items-center justify-between gap-3 text-xs"
+                  >
+                    <div className="min-w-0">
+                      <h4 className="font-bold text-neutral-900 truncate">{c.name}</h4>
+                      <p className="text-[11px] text-neutral-500 truncate">{c.email}</p>
+                    </div>
+                    <div className="text-right shrink-0 space-y-1">
+                      {c.lead_source === "NEWSLETTER_ONLY" ? (
+                        <span className="inline-block text-[10px] font-bold text-violet-800 bg-violet-100 border border-violet-200 px-2.5 py-0.5 rounded-full">
+                          🥁 Solo Newsletter
+                        </span>
+                      ) : c.lead_source === "NEWSLETTER" ? (
+                        <span className="inline-block text-[10px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                          🎓 Alumno + Newsletter
+                        </span>
+                      ) : (
+                        <span className="inline-block text-[10px] font-semibold text-neutral-600 bg-neutral-200/70 px-2.5 py-0.5 rounded-full">
+                          {c.status}
+                        </span>
+                      )}
+                      <div>
+                        <span className="text-[10px] text-neutral-400">
+                          Paso actual: #{c.nurture_step}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button
+              onClick={() => setFunnelContactsModalOpen(false)}
+              className="w-full kh-btn-secondary py-2.5 text-xs font-bold mt-1"
+            >
+              Cerrar
+            </button>
           </div>
         </div>
       )}
