@@ -207,13 +207,20 @@ export default function FunnelPage() {
   const [copiedSql, setCopiedSql] = useState(false)
   const [copiedCommunityLink, setCopiedCommunityLink] = useState(false)
 
-  // Modal Personalizar Landing Comunidad
+  // Modal Personalizar Landing Comunidad + Sorpresa Alumno Activo en Correo #0
   const [communityModalOpen, setCommunityModalOpen] = useState(false)
   const [communityHeaderUrl, setCommunityHeaderUrl] = useState("")
   const [communityBadge, setCommunityBadge] = useState("🥁 Comunidad de Batería")
   const [communityTitle, setCommunityTitle] = useState("Súmate a la comunidad de estudiantes")
   const [communitySubtitle, setCommunitySubtitle] = useState("Recibe ejercicios de práctica, partituras, material de estudio y novedades directamente en tu correo.")
   const [communityCta, setCommunityCta] = useState("Sumarme a la comunidad")
+  const [activeStudentSubject, setActiveStudentSubject] = useState(
+    "¡{{nombre}}! Qué buena sorpresa verte también por aquí 🥁"
+  )
+  const [activeStudentMessage, setActiveStudentMessage] = useState(
+    "¡Qué buena sorpresa verte en el newsletter, {{nombre}}! Ya nos vemos en clases, pero me alegra un montón que te sumes por aquí para recibir ejercicios y material extra entre semana. {{saludo_clase}}"
+  )
+  const [previewSurpriseMode, setPreviewSurpriseMode] = useState<"new" | "active_tomorrow" | "active_thursday">("new")
   const [savingCommunityConfig, setSavingCommunityConfig] = useState(false)
   const [uploadingCommunityHeader, setUploadingCommunityHeader] = useState(false)
 
@@ -236,6 +243,8 @@ export default function FunnelPage() {
         if (data.title) setCommunityTitle(data.title)
         if (data.subtitle) setCommunitySubtitle(data.subtitle)
         if (data.ctaText) setCommunityCta(data.ctaText)
+        if (data.activeStudentSubject) setActiveStudentSubject(data.activeStudentSubject)
+        if (data.activeStudentMessage) setActiveStudentMessage(data.activeStudentMessage)
       }
     } catch (_e) {}
   }
@@ -775,6 +784,17 @@ export default function FunnelPage() {
           .from("NurtureStep")
           .insert(payload)
         if (error) throw error
+      }
+
+      // Si es el Correo #0, guardar también el asunto y mensaje sorpresa para Alumnos Activos
+      if (nextOrder === 0) {
+        await supabase.functions.invoke("send-email", {
+          body: {
+            action: "save-community-config",
+            activeStudentSubject: activeStudentSubject.trim(),
+            activeStudentMessage: activeStudentMessage.trim(),
+          },
+        })
       }
 
       // Si la casilla está activa, actualizar también todos los pasos creados con esta cabecera
@@ -1663,7 +1683,9 @@ export default function FunnelPage() {
             <form onSubmit={handleSaveStep} className="p-6 overflow-y-auto space-y-5 flex-1">
               <div>
                 <label className="kh-label block text-xs font-bold text-neutral-700 mb-1">
-                  Asunto del Correo
+                  {editingStep?.step_order === 0 || creatingStepZero
+                    ? "Asunto del Correo (para Nuevos Suscriptores)"
+                    : "Asunto del Correo"}
                 </label>
                 <input
                   type="text"
@@ -1677,6 +1699,55 @@ export default function FunnelPage() {
                   💡 Tip: Puedes usar <code className="bg-neutral-100 px-1 py-0.5 rounded font-bold">{"{{nombre}}"}</code> para insertar el nombre del alumno automáticamente.
                 </p>
               </div>
+
+              {(editingStep?.step_order === 0 || creatingStepZero) && (
+                <div className="bg-violet-50/70 border border-violet-200 rounded-2xl p-4 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-xs font-black text-violet-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <span>🎓 Modo Sorpresa si coincide con un Alumno Activo</span>
+                    </div>
+                    <span className="text-[10px] font-bold bg-violet-100 text-violet-800 border border-violet-200 px-2.5 py-0.5 rounded-full">
+                      Automático al detectar correo de alumno activo
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-violet-900/80 leading-relaxed">
+                    Si quien se suscribe en <code className="font-mono font-bold">khora.cl/comunidad</code> ya es un <strong>Alumno Activo</strong> tuyo, el Correo #0 cambiará su asunto y agregará esta nota cómplice arriba del correo con un guiño automático al día de su próxima clase.
+                  </p>
+                  <div>
+                    <label className="block text-[11px] font-bold text-violet-950 mb-1">
+                      Asunto Sorpresa para Alumno Activo
+                    </label>
+                    <input
+                      type="text"
+                      value={activeStudentSubject}
+                      onChange={e => setActiveStudentSubject(e.target.value)}
+                      placeholder="¡{{nombre}}! Qué buena sorpresa verte también por aquí 🥁"
+                      className="kh-input w-full text-xs font-medium bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-violet-950 mb-1">
+                      Nota Sorpresa arriba del Correo #0
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={activeStudentMessage}
+                      onChange={e => setActiveStudentMessage(e.target.value)}
+                      className="kh-input w-full text-xs font-sans leading-relaxed bg-white"
+                    />
+                    <div className="mt-1.5 p-2.5 bg-white/90 border border-violet-200/80 rounded-xl text-[10px] text-neutral-600 space-y-1">
+                      <div className="font-bold text-violet-900">
+                        ✨ Cómo funciona la etiqueta <code className="bg-violet-100 text-violet-900 px-1.5 py-0.5 rounded font-mono">{"{{saludo_clase}}"}</code>:
+                      </div>
+                      <ul className="list-disc pl-4 space-y-0.5">
+                        <li>Si su próxima clase es <strong>al día siguiente</strong> → escribe: <strong>&quot;¡Nos vemos mañana en clases!&quot;</strong></li>
+                        <li>Si su próxima clase es en <strong>2 o más días</strong> → escribe el día de su clase, ej.: <strong>&quot;¡Nos vemos el jueves en clases!&quot;</strong></li>
+                        <li>Si su clase es <strong>ese mismo día</strong> → escribe: <strong>&quot;¡Nos vemos hoy mismo en clases!&quot;</strong></li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* CABECERA PERSONALIZADA (BANNER / LOGO) */}
               <div 
@@ -1952,8 +2023,60 @@ export default function FunnelPage() {
                 )}
 
                 {editorTab === "preview" && (
-                  <div className="bg-neutral-100 p-4 sm:p-6 rounded-2xl border border-neutral-200/80 max-h-80 overflow-y-auto">
+                  <div className="bg-neutral-100 p-4 sm:p-6 rounded-2xl border border-neutral-200/80 max-h-96 overflow-y-auto space-y-3">
+                    {(editingStep?.step_order === 0 || creatingStepZero) && (
+                      <div className="flex flex-wrap items-center justify-center gap-1.5 bg-white p-1.5 rounded-xl border border-neutral-200 max-w-md mx-auto text-[11px] font-bold">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewSurpriseMode("new")}
+                          className={`px-2.5 py-1 rounded-lg transition-all ${
+                            previewSurpriseMode === "new"
+                              ? "bg-neutral-900 text-white"
+                              : "text-neutral-600 hover:bg-neutral-100"
+                          }`}
+                        >
+                          👋 Nuevo Suscriptor
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPreviewSurpriseMode("active_tomorrow")}
+                          className={`px-2.5 py-1 rounded-lg transition-all ${
+                            previewSurpriseMode === "active_tomorrow"
+                              ? "bg-violet-600 text-white"
+                              : "text-violet-700 hover:bg-violet-50"
+                          }`}
+                        >
+                          🎓 Alumno Activo (Clase mañana)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPreviewSurpriseMode("active_thursday")}
+                          className={`px-2.5 py-1 rounded-lg transition-all ${
+                            previewSurpriseMode === "active_thursday"
+                              ? "bg-violet-600 text-white"
+                              : "text-violet-700 hover:bg-violet-50"
+                          }`}
+                        >
+                          🎓 Alumno Activo (Clase jueves)
+                        </button>
+                      </div>
+                    )}
                     <div className="max-w-md mx-auto bg-white border border-neutral-200 rounded-2xl overflow-hidden shadow-md text-neutral-800">
+                      {(editingStep?.step_order === 0 || creatingStepZero) && (
+                        <div className="px-4 py-2 bg-neutral-50 border-b border-neutral-200 text-[11px] text-neutral-600">
+                          <span className="font-bold text-neutral-400 uppercase mr-1.5">Asunto:</span>
+                          <span className="font-bold text-neutral-900">
+                            {(previewSurpriseMode === "new" ? formSubject : activeStudentSubject)
+                              .replace(/{{nombre}}/g, "Alumno")
+                              .replace(
+                                /{{saludo_clase}}/g,
+                                previewSurpriseMode === "active_tomorrow"
+                                  ? "¡Nos vemos mañana en clases!"
+                                  : "¡Nos vemos el jueves en clases!"
+                              )}
+                          </span>
+                        </div>
+                      )}
                       {/* Email Header */}
                       {formHeaderImageUrl ? (
                         <div className="w-full bg-white border-b border-neutral-100 overflow-hidden">
@@ -1971,6 +2094,31 @@ export default function FunnelPage() {
                       {/* Email Content Body */}
                       <div className="p-5 text-xs text-neutral-700 leading-relaxed space-y-3">
                         <p className="text-sm font-bold text-neutral-900">¡Hola Alumno!</p>
+                        {(editingStep?.step_order === 0 || creatingStepZero) && previewSurpriseMode !== "new" && (
+                          <div className="bg-violet-50 border border-violet-200 border-l-4 border-l-violet-600 rounded-xl p-3.5 text-neutral-900 space-y-1">
+                            <div className="text-[10px] font-extrabold text-violet-700 uppercase tracking-wider">
+                              🥁 Nota especial para ti
+                            </div>
+                            <div
+                              className="text-xs leading-relaxed"
+                              dangerouslySetInnerHTML={{
+                                __html: (() => {
+                                  const saludo =
+                                    previewSurpriseMode === "active_tomorrow"
+                                      ? "¡Nos vemos mañana en clases!"
+                                      : "¡Nos vemos el jueves en clases!"
+                                  let msg = activeStudentMessage.replace(/{{nombre}}/g, "Alumno")
+                                  if (msg.includes("{{saludo_clase}}")) {
+                                    msg = msg.replace(/{{saludo_clase}}/g, `<strong>${saludo}</strong>`)
+                                  } else {
+                                    msg = `${msg} <strong>${saludo}</strong>`
+                                  }
+                                  return msg.replace(/\n/g, "<br />")
+                                })(),
+                              }}
+                            />
+                          </div>
+                        )}
                         <div 
                           className="prose prose-xs max-w-none text-neutral-700 leading-relaxed"
                           dangerouslySetInnerHTML={{ 

@@ -172,6 +172,12 @@ serve(async (req) => {
           title: customConfig.title || "Súmate a la comunidad de estudiantes",
           subtitle: customConfig.subtitle || "Recibe ejercicios de práctica, partituras, material de estudio y novedades directamente en tu correo.",
           ctaText: customConfig.ctaText || "Sumarme a la comunidad",
+          activeStudentSubject:
+            customConfig.activeStudentSubject ||
+            "¡{{nombre}}! Qué buena sorpresa verte también por aquí 🥁",
+          activeStudentMessage:
+            customConfig.activeStudentMessage ||
+            "¡Qué buena sorpresa verte en el newsletter, {{nombre}}! Ya nos vemos en clases, pero me alegra un montón que te sumes por aquí para recibir ejercicios y material extra entre semana. {{saludo_clase}}",
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
       )
@@ -330,19 +336,35 @@ serve(async (req) => {
       )
     }
 
-    // 1.b Guardar configuración editable de la Landing de Comunidad
+    // 1.b Guardar configuración editable de la Landing de Comunidad y/o Sorpresa de Correo #0
     if (body.action === 'save-community-config') {
       const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? ""
       const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
       const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.39.3")
       const supabaseAdmin = createClient(supabaseUrl, supabaseKey)
 
+      let prevConfig: any = {}
+      try {
+        const { data: fileBlob } = await supabaseAdmin.storage.from("landing").download("headers/community_config.json")
+        if (fileBlob) {
+          prevConfig = JSON.parse(await fileBlob.text())
+        }
+      } catch (_e) {}
+
       const configPayload = {
-        headerImageUrl: body.headerImageUrl ?? "",
-        badge: body.badge || "🥁 Comunidad de Batería",
-        title: body.title || "Súmate a la comunidad de estudiantes",
-        subtitle: body.subtitle || "Recibe ejercicios de práctica, partituras, material de estudio y novedades directamente en tu correo.",
-        ctaText: body.ctaText || "Sumarme a la comunidad",
+        headerImageUrl: body.headerImageUrl !== undefined ? body.headerImageUrl : (prevConfig.headerImageUrl ?? ""),
+        badge: body.badge !== undefined ? (body.badge || "🥁 Comunidad de Batería") : (prevConfig.badge || "🥁 Comunidad de Batería"),
+        title: body.title !== undefined ? (body.title || "Súmate a la comunidad de estudiantes") : (prevConfig.title || "Súmate a la comunidad de estudiantes"),
+        subtitle: body.subtitle !== undefined
+          ? (body.subtitle || "Recibe ejercicios de práctica, partituras, material de estudio y novedades directamente en tu correo.")
+          : (prevConfig.subtitle || "Recibe ejercicios de práctica, partituras, material de estudio y novedades directamente en tu correo."),
+        ctaText: body.ctaText !== undefined ? (body.ctaText || "Sumarme a la comunidad") : (prevConfig.ctaText || "Sumarme a la comunidad"),
+        activeStudentSubject: body.activeStudentSubject !== undefined
+          ? (body.activeStudentSubject || "¡{{nombre}}! Qué buena sorpresa verte también por aquí 🥁")
+          : (prevConfig.activeStudentSubject || "¡{{nombre}}! Qué buena sorpresa verte también por aquí 🥁"),
+        activeStudentMessage: body.activeStudentMessage !== undefined
+          ? (body.activeStudentMessage || "¡Qué buena sorpresa verte en el newsletter, {{nombre}}! Ya nos vemos en clases, pero me alegra un montón que te sumes por aquí para recibir ejercicios y material extra entre semana. {{saludo_clase}}")
+          : (prevConfig.activeStudentMessage || "¡Qué buena sorpresa verte en el newsletter, {{nombre}}! Ya nos vemos en clases, pero me alegra un montón que te sumes por aquí para recibir ejercicios y material extra entre semana. {{saludo_clase}}"),
         updatedAt: new Date().toISOString(),
       }
 
@@ -434,12 +456,13 @@ serve(async (req) => {
       // Verificar si ya tiene StudentProfile con Arnaldo
       const { data: existingSp } = await supabaseAdmin
         .from("StudentProfile")
-        .select("id, status, lead_source, nurture_step")
+        .select("id, status, lead_source, nurture_step, preferred_day")
         .eq("user_id", studentUserId)
         .eq("teacher_id", tp.id)
         .maybeSingle()
 
       let studentProfileId = existingSp?.id
+      const isExistingActiveStudent = existingSp?.status === "ACTIVE"
 
       if (!studentProfileId) {
         // Suscriptor nuevo exclusivo de Newsletter/Comunidad (no se mezcla con alumnos de clases)
@@ -551,7 +574,135 @@ serve(async (req) => {
               : ""
 
             const firstName = rawName.split(" ")[0] || "Alumno"
-            const parsedSubject = stepZero.subject.replace(/{{nombre}}/g, firstName)
+            let parsedSubject = stepZero.subject.replace(/{{nombre}}/g, firstName)
+            let surpriseBlockHtml = ""
+
+            if (isExistingActiveStudent) {
+              let customConfig: any = {}
+              try {
+                const { data: fileBlob } = await supabaseAdmin.storage.from("landing").download("headers/community_config.json")
+                if (fileBlob) {
+                  customConfig = JSON.parse(await fileBlob.text())
+                }
+              } catch (_e) {}
+
+              const surpriseSubjTemplate =
+                customConfig.activeStudentSubject ||
+                "¡{{nombre}}! Qué buena sorpresa verte también por aquí 🥁"
+              const surpriseMsgTemplate =
+                customConfig.activeStudentMessage ||
+                "¡Qué buena sorpresa verte en el newsletter, {{nombre}}! Ya nos vemos en clases, pero me alegra un montón que te sumes por aquí para recibir ejercicios y material extra entre semana. {{saludo_clase}}"
+
+              // Calcular guiño inteligente a su próxima clase en horario de Chile
+              const DIAS_SEMANA = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"]
+              const nowChileStr = new Intl.DateTimeFormat("en-CA", {
+                timeZone: "America/Santiago",
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+              }).format(new Date())
+              const [ty, tm, td] = nowChileStr.split("-").map(Number)
+              const todayUtcMs = Date.UTC(ty, tm - 1, td)
+              const todayDow = new Date(todayUtcMs).getUTCDay()
+
+              let saludoClase = "¡Nos vemos en nuestra próxima clase!"
+
+              const { data: nextClass } = await supabaseAdmin
+                .from("Class")
+                .select("date, start_time, status")
+                .eq("student_id", studentProfileId)
+                .gte("date", nowChileStr)
+                .neq("status", "CANCELLED")
+                .neq("status", "STUDENT_CLASS_CANCELLED")
+                .neq("status", "TEACHER_CLASS_CANCELLED")
+                .neq("status", "STUDENT_CLASS_DELETED")
+                .order("date", { ascending: true })
+                .order("start_time", { ascending: true })
+                .limit(1)
+                .maybeSingle()
+
+              if (nextClass?.date) {
+                const [cy, cm, cd] = String(nextClass.date).split("-").map(Number)
+                const classUtcMs = Date.UTC(cy, cm - 1, cd)
+                const diffDays = Math.round((classUtcMs - todayUtcMs) / (1000 * 60 * 60 * 24))
+                const classDowName = DIAS_SEMANA[new Date(classUtcMs).getUTCDay()]
+
+                if (diffDays === 0) {
+                  saludoClase = "¡Nos vemos hoy mismo en clases!"
+                } else if (diffDays === 1) {
+                  saludoClase = "¡Nos vemos mañana en clases!"
+                } else {
+                  saludoClase = `¡Nos vemos el ${classDowName} en clases!`
+                }
+              } else {
+                const normDay = (existingSp?.preferred_day || "")
+                  .toLowerCase()
+                  .normalize("NFD")
+                  .replace(/[\u0300-\u036f]/g, "")
+                  .trim()
+                const dayMap: Record<string, number> = {
+                  domingo: 0,
+                  lunes: 1,
+                  martes: 2,
+                  miercoles: 3,
+                  jueves: 4,
+                  viernes: 5,
+                  sabado: 6,
+                }
+                let targetDow: number | undefined = dayMap[normDay]
+
+                if (targetDow === undefined) {
+                  const { data: lastClass } = await supabaseAdmin
+                    .from("Class")
+                    .select("date, status")
+                    .eq("student_id", studentProfileId)
+                    .neq("status", "CANCELLED")
+                    .neq("status", "STUDENT_CLASS_CANCELLED")
+                    .neq("status", "TEACHER_CLASS_CANCELLED")
+                    .neq("status", "STUDENT_CLASS_DELETED")
+                    .order("date", { ascending: false })
+                    .limit(1)
+                    .maybeSingle()
+                  if (lastClass?.date) {
+                    const [ly, lm, ld] = String(lastClass.date).split("-").map(Number)
+                    targetDow = new Date(Date.UTC(ly, lm - 1, ld)).getUTCDay()
+                  }
+                }
+
+                if (targetDow !== undefined) {
+                  const daysUntil = (targetDow - todayDow + 7) % 7
+                  if (daysUntil === 0) {
+                    saludoClase = "¡Nos vemos hoy mismo en clases!"
+                  } else if (daysUntil === 1) {
+                    saludoClase = "¡Nos vemos mañana en clases!"
+                  } else {
+                    saludoClase = `¡Nos vemos el ${DIAS_SEMANA[targetDow]} en clases!`
+                  }
+                }
+              }
+
+              parsedSubject = surpriseSubjTemplate
+                .replace(/{{nombre}}/g, firstName)
+                .replace(/{{saludo_clase}}/g, saludoClase)
+
+              let surpriseBody = surpriseMsgTemplate.replace(/{{nombre}}/g, firstName)
+              if (surpriseBody.includes("{{saludo_clase}}")) {
+                surpriseBody = surpriseBody.replace(/{{saludo_clase}}/g, `<strong>${saludoClase}</strong>`)
+              } else {
+                surpriseBody = `${surpriseBody} <strong>${saludoClase}</strong>`
+              }
+              surpriseBody = surpriseBody.replace(/\n/g, "<br>")
+
+              surpriseBlockHtml = `
+                <div style="background-color: #f5f3ff; border: 1px solid #ddd6fe; border-left: 4px solid #7c3aed; border-radius: 14px; padding: 16px 18px; margin: 0 0 22px 0; color: #1e1b4b; font-size: 14.5px; line-height: 1.65;">
+                  <div style="font-size: 11px; font-weight: 800; color: #7c3aed; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px;">
+                    🥁 Nota especial para ti
+                  </div>
+                  <div>${surpriseBody}</div>
+                </div>
+              `
+            }
+
             const bodyWithName = stepZero.content_html.replace(/{{nombre}}/g, firstName)
             const rawParsedBody = bodyWithName.includes("<")
               ? bodyWithName
@@ -624,6 +775,7 @@ serve(async (req) => {
                               <p style="font-size: 16px; color: #0f172a; font-weight: 700; margin: 0 0 16px 0;">
                                 ¡Hola ${firstName}!
                               </p>
+                              ${surpriseBlockHtml}
                               <div style="color: #334155; line-height: 1.7;">
                                 ${parsedBody}
                               </div>
