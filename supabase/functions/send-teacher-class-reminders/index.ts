@@ -20,6 +20,22 @@ serve(async (req) => {
 
     console.log(`[TeacherPushReminders] Ejecutando chequeo para ${todayStr} a las ${currentTimeStr} (${currentMinutesFromMidnight} min desde medianoche)`)
 
+    // Disparar automáticamente el Funnel / Newsletter Drip todos los días a las 18:00 hrs (horario de Chile)
+    if (curH === 18 && curM < 30) {
+      try {
+        await fetch(`${supabaseUrl}/functions/v1/send-nurture-drip`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${supabaseKey}`,
+          },
+          body: JSON.stringify({ source: "cron_18h_chile" }),
+        })
+      } catch (dripErr) {
+        console.error("[TeacherPushReminders] Error invocando send-nurture-drip a las 18:00 hrs:", dripErr)
+      }
+    }
+
     // 2. Obtener todas las clases de HOY que no hayan recibido recordatorio al profesor aún
     const { data: classes, error: classErr } = await supabase
       .from("Class")

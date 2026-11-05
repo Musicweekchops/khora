@@ -1485,7 +1485,9 @@ export default function FunnelPage() {
                           <Clock className="w-3.5 h-3.5 text-neutral-400" />
                           {isStepZero
                             ? "Se envía inmediatamente al registrarse en la comunidad"
-                            : `Se envía ${step.delay_days} días después del anterior`}
+                            : step.step_order === 1
+                              ? "Se envía a las 18:00 hrs del día calendario siguiente al Correo #0"
+                              : `Se envía a las 18:00 hrs (${step.delay_days} días después del anterior)`}
                         </span>
                       </div>
 
@@ -1860,6 +1862,10 @@ export default function FunnelPage() {
                     <div className="px-3.5 py-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold flex items-center gap-2">
                       <span>⚡ Envío Inmediato (0 días) al registrarse</span>
                     </div>
+                  ) : editingStep?.step_order === 1 ? (
+                    <div className="px-3.5 py-2.5 rounded-xl bg-violet-50 border border-violet-200 text-violet-900 text-xs font-bold flex items-center gap-2">
+                      <span>🕕 Día calendario siguiente a las 18:00 hrs (Chile)</span>
+                    </div>
                   ) : (
                     <>
                       <input
@@ -1872,7 +1878,7 @@ export default function FunnelPage() {
                         className="kh-input w-full font-bold"
                       />
                       <p className="text-[10px] text-neutral-400 mt-1">
-                        Días a esperar tras el correo anterior (Recomendado: 7 días).
+                        Días calendario a esperar tras el correo anterior (se despacha a las 18:00 hrs Chile).
                       </p>
                     </>
                   )}

@@ -67,7 +67,46 @@ serve(async (req) => {
       .eq("teacher_id", teacherId)
 
     let sentCount = 0
-    const now = Date.now()
+    let reqBody: any = {}
+    try {
+      reqBody = await req.json()
+    } catch (_e) {}
+
+    const nowDate = new Date()
+    const chileDateFmt = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Santiago",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+    const chileTimeFmt = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "America/Santiago",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    })
+
+    const todayChileStr = chileDateFmt.format(nowDate) // YYYY-MM-DD en Chile
+    const currentChileTime = chileTimeFmt.format(nowDate) // HH:mm en Chile
+    const [curH] = currentChileTime.split(":").map(Number)
+
+    // Ejecutar el despacho automático únicamente en la ventana de las 18:00 hrs de Chile
+    if (!reqBody?.force && curH !== 18) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          skipped: true,
+          reason: `Esperando horario de las 18:00 hrs Chile (actual: ${currentChileTime})`,
+        }),
+        { headers: { "Content-Type": "application/json" }, status: 200 }
+      )
+    }
+
+    const toUtcMidnightMs = (ymd: string) => {
+      const [y, m, d] = ymd.split("-").map(Number)
+      return Date.UTC(y, m - 1, d)
+    }
+    const todayChileUtcMs = toUtcMidnightMs(todayChileStr)
 
     for (const student of students || []) {
       const u = Array.isArray(student.User) ? student.User[0] : student.User
@@ -83,13 +122,20 @@ serve(async (req) => {
       const isNewsletterSubscriber = student.lead_source === "NEWSLETTER" || student.lead_source === "NEWSLETTER_ONLY"
       if (!nextStep.target_audiences.includes(studentStatus) && !isNewsletterSubscriber) continue
 
-      // Verificar tiempo de espera (delay_days)
-      const lastSentTime = student.nurture_last_sent_at 
-        ? new Date(student.nurture_last_sent_at).getTime()
-        : new Date(student.created_at).getTime()
+      // Verificar diferencia por días calendario en Chile (America/Santiago)
+      const refIso = student.nurture_last_sent_at || student.created_at
+      const lastSentChileStr = chileDateFmt.format(new Date(refIso))
+      const lastSentChileUtcMs = toUtcMidnightMs(lastSentChileStr)
+      const calendarDaysDiff = Math.round((todayChileUtcMs - lastSentChileUtcMs) / (1000 * 60 * 60 * 24))
 
-      const daysDiff = (now - lastSentTime) / (1000 * 60 * 60 * 24)
-      if (daysDiff < nextStep.delay_days) continue
+      // Del Correo #0 al Paso #1 se lanza siempre al día calendario siguiente (1 día) a las 18:00 hrs;
+      // para los pasos siguientes (1 -> 2, 2 -> 3...) respeta delay_days en días calendario a las 18:00 hrs.
+      const requiredCalendarDays =
+        currentStepNum === 0 && nextStep.step_order === 1
+          ? 1
+          : Math.max(1, Number(nextStep.delay_days) || 7)
+
+      if (calendarDaysDiff < requiredCalendarDays) continue
 
       // 4. Crear registro previo en NurtureLog para obtener el ID del píxel de apertura/clic
       const { data: logRow } = await supabase
