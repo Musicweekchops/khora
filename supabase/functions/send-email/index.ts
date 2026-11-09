@@ -424,6 +424,7 @@ serve(async (req) => {
         .maybeSingle()
 
       let studentUserId = existingUser?.id
+      let createdNewNewsletterUser = false
 
       if (studentUserId) {
         await supabaseAdmin
@@ -434,23 +435,45 @@ serve(async (req) => {
           })
           .eq("id", studentUserId)
       } else {
-        const newId = crypto.randomUUID()
-        const { error: userInsertErr } = await supabaseAdmin
-          .from("User")
-          .insert({
-            id: newId,
-            email: rawEmail,
-            name: rawName,
-            role: "STUDENT",
-            marketing_consent: true,
-          })
-        if (userInsertErr) {
+        // public."User".id referencia auth.users(id): primero se crea la cuenta en Auth
+        // (sin contraseña, no puede iniciar sesión) y el trigger on_auth_user_created
+        // genera automáticamente el registro en public."User" (+ StudentProfile).
+        let authUserId: string | null = null
+        const { data: createdAuth, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+          email: rawEmail,
+          email_confirm: true,
+          user_metadata: { name: rawName, role: "STUDENT", teacher_id: tp.id, source: "NEWSLETTER" },
+        })
+
+        if (createdAuth?.user?.id) {
+          authUserId = createdAuth.user.id
+        } else {
+          // Si ya existía en Auth (pero no en public."User"), buscarlo por correo
+          for (let page = 1; page <= 20 && !authUserId; page++) {
+            const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 1000 })
+            const users = list?.users || []
+            const found = users.find((au: any) => (au.email || "").toLowerCase() === rawEmail)
+            if (found) authUserId = found.id
+            if (users.length < 1000) break
+          }
+        }
+
+        if (!authUserId) {
           return new Response(
-            JSON.stringify({ error: userInsertErr.message }),
+            JSON.stringify({ error: authErr?.message || "No se pudo crear la suscripción." }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
           )
         }
-        studentUserId = newId
+
+        // Asegurar fila en public."User" (por si el trigger no la creó) con consentimiento de marketing
+        await supabaseAdmin
+          .from("User")
+          .upsert(
+            { id: authUserId, email: rawEmail, name: rawName, role: "STUDENT", marketing_consent: true },
+            { onConflict: "id" }
+          )
+        studentUserId = authUserId
+        createdNewNewsletterUser = true
       }
 
       // Verificar si ya tiene StudentProfile con Arnaldo
@@ -462,9 +485,15 @@ serve(async (req) => {
         .maybeSingle()
 
       let studentProfileId = existingSp?.id
-      const isExistingActiveStudent = existingSp?.status === "ACTIVE"
+      const isExistingActiveStudent = !createdNewNewsletterUser && existingSp?.status === "ACTIVE"
 
-      if (!studentProfileId) {
+      if (createdNewNewsletterUser && studentProfileId) {
+        // El trigger creó el StudentProfile: marcarlo como suscriptor exclusivo del Newsletter
+        await supabaseAdmin
+          .from("StudentProfile")
+          .update({ status: "PROSPECT", lead_source: "NEWSLETTER_ONLY", nurture_step: 0 })
+          .eq("id", studentProfileId)
+      } else if (!studentProfileId) {
         // Suscriptor nuevo exclusivo de Newsletter/Comunidad (no se mezcla con alumnos de clases)
         const { data: insertedSp } = await supabaseAdmin
           .from("StudentProfile")
