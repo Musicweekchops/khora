@@ -36,3 +36,4 @@ WHERE NOT EXISTS (
   SELECT 1 FROM public."ExerciseSubmission" 
   WHERE video_url = 'https://ljazboprejtdrfsisfxu.supabase.co/storage/v1/object/public/submissions/70291ca5-bbaa-4281-b648-dc2d5380dde5/1794524641793_mf1rg.mp4'
 );
+
