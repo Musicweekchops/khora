@@ -52,21 +52,34 @@ export default function VideoExerciseRecorder({
     setErrorMsg(null)
 
     try {
+      // Si el profesor configuró una cámara / interfaz pro en Ajustes de Estudio, usarla
+      const preferredCam = typeof window !== "undefined" ? localStorage.getItem("khora_preferred_camera_id") : null
+      const preferredMic = typeof window !== "undefined" ? localStorage.getItem("khora_preferred_mic_id") : null
+      const usePro = Boolean(customTitle && preferredCam)
+
       // Configuración especializada para percusión y música acústica
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
+          ...(customTitle && preferredMic ? { deviceId: { ideal: preferredMic } } : {}),
           echoCancellation: false,   // Conserva resonancia de tambores y platillos
           noiseSuppression: false,   // Evita atenuar golpes de baqueta como "ruido"
           autoGainControl: false,    // No aplasta las dinámicas
           sampleRate: 48000,
           channelCount: { ideal: 2 },
         },
-        video: {
-          facingMode: mode,
-          width: { ideal: 720, max: 1280 },
-          height: { ideal: 1280, max: 1280 },
-          frameRate: { ideal: 30, max: 30 },
-        },
+        video: usePro
+          ? {
+              deviceId: { ideal: preferredCam as string },
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+              frameRate: { ideal: 60 },
+            }
+          : {
+              facingMode: mode,
+              width: { ideal: 720, max: 1280 },
+              height: { ideal: 1280, max: 1280 },
+              frameRate: { ideal: 30, max: 30 },
+            },
       })
 
       mediaStreamRef.current = stream

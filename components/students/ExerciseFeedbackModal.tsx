@@ -16,14 +16,21 @@ import {
   Loader2, 
   Send,
   Video,
-  Upload
+  Upload,
+  Sliders,
+  Sparkles
 } from "lucide-react"
 import { toast } from "sonner"
 import VideoExerciseRecorder from "@/components/students/VideoExerciseRecorder"
+import MicroReactionRecorder from "@/components/students/MicroReactionRecorder"
+import MediaDeviceSettingsModal from "@/components/media/MediaDeviceSettingsModal"
 
 export interface TimestampMarker {
   time: number
   note: string
+  video_reaction_url?: string
+  display_mode?: "bubble" | "fullscreen"
+  video_duration?: number
 }
 
 export interface SubmissionData {
@@ -80,6 +87,13 @@ export default function ExerciseFeedbackModal({
   const [isUploadingTeacherVideo, setIsUploadingTeacherVideo] = useState(false)
   const teacherVideoInputRef = useRef<HTMLInputElement | null>(null)
 
+  // Micro-reacciones en video (Opción C + Modo Pad/Batería)
+  const [showReactionRecorder, setShowReactionRecorder] = useState(false)
+  const [showSettingsModal, setShowSettingsModal] = useState(false)
+  const [activeReaction, setActiveReaction] = useState<TimestampMarker | null>(null)
+  const lastTriggeredMarkerTimeRef = useRef<number | null>(null)
+  const reactionVideoRef = useRef<HTMLVideoElement | null>(null)
+
   const videoRef = useRef<HTMLVideoElement | null>(null)
 
   useEffect(() => {
@@ -88,6 +102,8 @@ export default function ExerciseFeedbackModal({
     setStatus(submission.status)
     setTeacherVideoUrl(submission.teacher_feedback_video_url || null)
     setActiveVideoTab("student")
+    setActiveReaction(null)
+    lastTriggeredMarkerTimeRef.current = null
   }, [submission])
 
   // Subir video de demostración del profesor
@@ -114,6 +130,7 @@ export default function ExerciseFeedbackModal({
   // Manejo de reproducción
   const togglePlay = () => {
     if (!videoRef.current) return
+    if (activeReaction) setActiveReaction(null)
     if (videoRef.current.paused) {
       videoRef.current.play()
       setIsPlaying(true)
@@ -124,9 +141,51 @@ export default function ExerciseFeedbackModal({
   }
 
   const handleTimeUpdate = () => {
-    if (videoRef.current) {
-      setCurrentTime(videoRef.current.currentTime)
+    if (!videoRef.current) return
+    const cur = videoRef.current.currentTime
+    setCurrentTime(cur)
+
+    // Auto-pausa al llegar a una micro-reacción en video
+    if (activeVideoTab === "student" && !activeReaction && !videoRef.current.paused) {
+      const hit = markers.find(m =>
+        Boolean(m.video_reaction_url) &&
+        Math.abs(cur - m.time) < 0.35 &&
+        lastTriggeredMarkerTimeRef.current !== m.time
+      )
+      if (hit) {
+        videoRef.current.pause()
+        setIsPlaying(false)
+        setActiveReaction(hit)
+        lastTriggeredMarkerTimeRef.current = hit.time
+      }
     }
+  }
+
+  // Cerrar la reacción y continuar el video del alumno
+  const continueAfterReaction = () => {
+    setActiveReaction(null)
+    if (videoRef.current) {
+      videoRef.current.play()
+      setIsPlaying(true)
+    }
+  }
+
+  const replayReaction = () => {
+    if (reactionVideoRef.current) {
+      reactionVideoRef.current.currentTime = 0
+      reactionVideoRef.current.play()
+    }
+  }
+
+  const openReaction = (m: TimestampMarker) => {
+    if (videoRef.current) {
+      videoRef.current.pause()
+      videoRef.current.currentTime = m.time
+      setCurrentTime(m.time)
+    }
+    setIsPlaying(false)
+    lastTriggeredMarkerTimeRef.current = m.time
+    setActiveReaction(m)
   }
 
   const handleLoadedMetadata = () => {
@@ -139,6 +198,7 @@ export default function ExerciseFeedbackModal({
     if (videoRef.current) {
       videoRef.current.currentTime = sec
       setCurrentTime(sec)
+      lastTriggeredMarkerTimeRef.current = null
     }
   }
 
@@ -180,6 +240,11 @@ export default function ExerciseFeedbackModal({
     setMarkers(prev => prev.filter((_, i) => i !== index))
   }
 
+  const handleSaveMicroReaction = (newMarker: TimestampMarker) => {
+    setMarkers(prev => [...prev, newMarker].sort((a, b) => a.time - b.time))
+    setShowReactionRecorder(false)
+  }
+
   // Guardar feedback del profesor en Supabase
   const handleSaveFeedback = async () => {
     setIsSaving(true)
@@ -215,6 +280,7 @@ export default function ExerciseFeedbackModal({
           .maybeSingle()
 
         const sUser: any = Array.isArray(sProf?.User) ? sProf?.User[0] : sProf?.User
+        const videoReactionsCount = markers.filter(m => Boolean(m.video_reaction_url)).length
 
         if (sProf?.user_id) {
           await supabase.functions.invoke("notify-student-push", {
@@ -225,8 +291,10 @@ export default function ExerciseFeedbackModal({
                 teacherName: "Arnaldo Allende",
                 date: new Date().toISOString().split("T")[0],
                 time: new Date().toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }),
-                title: "🥁 Devolución de Ejercicio",
-                message: `Arnaldo revisó tu video "${submission.title}" y dejó correcciones técnicas.`,
+                title: "🥁 ¡Arnaldo respondió a tu video!",
+                message: videoReactionsCount > 0
+                  ? `Revisó "${submission.title}" y te dejó ${videoReactionsCount} video-reacción${videoReactionsCount > 1 ? "es" : ""} técnica${videoReactionsCount > 1 ? "s" : ""}. ¡Toca para verlas!`
+                  : `Revisó "${submission.title}" y te dejó correcciones técnicas. ¡Toca para verlas!`,
                 url: `/dashboard/videos`,
               },
             },
@@ -251,6 +319,10 @@ export default function ExerciseFeedbackModal({
             ? `<div style="background-color: #1f1f23; border: 1px dashed #3f3f46; border-radius: 14px; padding: 14px; margin-bottom: 20px; text-align: left;"><div style="font-size: 11px; font-weight: 800; color: #38bdf8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">⏱️ Notas al segundo exacto (${markers.length})</div><p style="font-size: 12px; color: #a1a1aa; margin: 0;">Tu profesor marcó momentos específicos en el video con indicaciones técnicas para que revises con slow-motion.</p></div>`
             : ""
 
+          const reactionsHtml = videoReactionsCount > 0
+            ? `<div style="background-color: #2e1065; border: 1px solid #7c3aed; border-radius: 14px; padding: 14px; margin-bottom: 20px; text-align: left;"><div style="font-size: 11px; font-weight: 800; color: #c4b5fd; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">🎥 ${videoReactionsCount} video-reacción${videoReactionsCount > 1 ? "es" : ""} de tu profesor</div><p style="font-size: 12px; color: #e9d5ff; margin: 0;">Al reproducir tu video, se pausará solo en los momentos exactos donde Arnaldo te explica o demuestra en el pad/batería cómo corregirlo.</p></div>`
+            : ""
+
           const demoNoticeHtml = teacherVideoUrl
             ? `<div style="background-color: #2e1065; border: 1px solid #7c3aed; border-radius: 14px; padding: 14px; margin-bottom: 20px; text-align: left;"><div style="font-size: 11px; font-weight: 800; color: #c4b5fd; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">🥁 Demostración grabada por tu profesor</div><p style="font-size: 12px; color: #e9d5ff; margin: 0;">Arnaldo te grabó un video demostrativo para que veas la técnica correcta.</p></div>`
             : ""
@@ -258,7 +330,7 @@ export default function ExerciseFeedbackModal({
           await supabase.functions.invoke("send-email", {
             body: {
               to: sUser.email,
-              subject: `🥁 Devolución de tu profesor: ${submission.title}`,
+              subject: `🥁 Arnaldo respondió a tu video: ${submission.title}`,
               customHtml: `
                 <!DOCTYPE html>
                 <html>
@@ -271,7 +343,7 @@ export default function ExerciseFeedbackModal({
                           <tr>
                             <td style="padding: 32px 32px 28px 32px; text-align: center;">
                               <div style="font-size: 32px; margin-bottom: 12px;">🥁</div>
-                              <h2 style="font-size: 20px; font-weight: 800; color: #ffffff; margin: 0 0 10px 0;">¡Devolución de tu práctica!</h2>
+                              <h2 style="font-size: 20px; font-weight: 800; color: #ffffff; margin: 0 0 10px 0;">¡Arnaldo respondió a tu video!</h2>
                               <p style="font-size: 14px; color: #a1a1aa; line-height: 1.6; margin: 0 0 16px 0;">
                                 ¡Hola <strong>${studentFirstName}</strong>! Arnaldo acaba de revisar tu video:
                               </p>
@@ -281,6 +353,7 @@ export default function ExerciseFeedbackModal({
                               </div>
                               ${feedbackNoteHtml}
                               ${markersHtml}
+                              ${reactionsHtml}
                               ${demoNoticeHtml}
                               <a href="https://khora.cl/dashboard/videos" style="display: inline-block; background-color: #7c3aed; color: #ffffff !important; text-decoration: none; font-size: 14px; font-weight: 700; padding: 12px 28px; border-radius: 12px; margin-top: 10px; box-shadow: 0 4px 14px rgba(124, 58, 237, 0.4);">
                                 Ver Corrección y Slow-Motion
@@ -337,12 +410,24 @@ export default function ExerciseFeedbackModal({
               <span className="text-[11px] text-neutral-400">Alumno: {submission.student_name}</span>
             )}
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 hover:bg-neutral-800 rounded-lg text-neutral-400 hover:text-white transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {isTeacher && (
+              <button
+                type="button"
+                onClick={() => setShowSettingsModal(true)}
+                className="p-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white transition-colors"
+                title="Ajustes de Estudio (Cámara Pro / Interfaz de Audio)"
+              >
+                <Sliders className="w-4 h-4" />
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-1.5 hover:bg-neutral-800 rounded-lg text-neutral-400 hover:text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Modal Body: Split view (Video Player on left, Feedback / Timestamps on right) */}
@@ -393,7 +478,7 @@ export default function ExerciseFeedbackModal({
               </div>
             )}
 
-            <div className="relative flex-1 flex items-center justify-center min-h-[260px] sm:min-h-[340px]">
+            <div className="relative flex-1 flex items-center justify-center min-h-[260px] sm:min-h-[340px] overflow-hidden rounded-lg">
               <video
                 ref={videoRef}
                 key={activeVideoTab}
@@ -402,8 +487,81 @@ export default function ExerciseFeedbackModal({
                 onTimeUpdate={handleTimeUpdate}
                 onLoadedMetadata={handleLoadedMetadata}
                 onEnded={() => setIsPlaying(false)}
-                className="w-full max-h-[420px] object-contain rounded-lg"
+                className={`w-full max-h-[420px] object-contain rounded-lg transition-opacity duration-300 ${
+                  activeReaction?.display_mode === "bubble" ? "opacity-40" : "opacity-100"
+                }`}
               />
+
+              {/* Modo Pad / Batería: cámara del profesor como principal */}
+              {activeReaction && activeReaction.display_mode === "fullscreen" && (
+                <div className="absolute inset-0 z-30 bg-black flex flex-col animate-in fade-in zoom-in-95 duration-200">
+                  <div className="flex items-center justify-between px-3 py-2 bg-neutral-950/90 border-b border-neutral-800">
+                    <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      🥁 Demostración en Pad / Batería · {formatSec(activeReaction.time)}
+                    </span>
+                    <button onClick={() => setActiveReaction(null)} className="p-1 text-neutral-400 hover:text-white rounded">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="relative flex-1 bg-black flex items-center justify-center min-h-0">
+                    <video
+                      ref={reactionVideoRef}
+                      src={activeReaction.video_reaction_url}
+                      playsInline
+                      autoPlay
+                      controls
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                  <div className="p-2.5 bg-neutral-950/90 border-t border-neutral-800 flex items-center justify-between gap-2">
+                    <span className="text-[11px] text-neutral-300 italic truncate">"{activeReaction.note}"</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button type="button" onClick={replayReaction} className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 text-white rounded-lg text-xs font-bold flex items-center gap-1">
+                        <RotateCcw className="w-3 h-3" /> Repetir
+                      </button>
+                      <button type="button" onClick={continueAfterReaction} className="px-3 py-1 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-bold flex items-center gap-1">
+                        <Play className="w-3 h-3 fill-current" /> Continuar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Modo Comentario: burbuja PiP sobre el fotograma del alumno */}
+              {activeReaction && activeReaction.display_mode !== "fullscreen" && (
+                <div className="absolute bottom-3 right-3 z-30 w-52 sm:w-64 bg-neutral-900 border-2 border-violet-500 rounded-xl overflow-hidden shadow-2xl animate-in slide-in-from-bottom-2 duration-200">
+                  <div className="flex items-center justify-between px-2.5 py-1.5 bg-violet-950/90 border-b border-violet-800/80">
+                    <span className="text-[11px] font-bold text-violet-300 flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse" />
+                      Arnaldo · {formatSec(activeReaction.time)}
+                    </span>
+                    <button onClick={() => setActiveReaction(null)} className="text-violet-400 hover:text-white">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <div className="relative aspect-video bg-black">
+                    <video
+                      ref={reactionVideoRef}
+                      src={activeReaction.video_reaction_url}
+                      playsInline
+                      autoPlay
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  {activeReaction.note && (
+                    <p className="px-2 pt-1.5 text-[10px] text-neutral-300 italic truncate">"{activeReaction.note}"</p>
+                  )}
+                  <div className="p-2 bg-neutral-950 flex items-center justify-between gap-1.5 text-[10px]">
+                    <button type="button" onClick={replayReaction} className="px-2 py-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded font-bold flex items-center gap-1">
+                      <RotateCcw className="w-2.5 h-2.5" /> Repetir
+                    </button>
+                    <button type="button" onClick={continueAfterReaction} className="px-2.5 py-1 bg-violet-600 hover:bg-violet-700 text-white rounded font-bold flex items-center gap-1">
+                      <Play className="w-2.5 h-2.5 fill-current" /> Continuar
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Custom Technical Controls */}
@@ -411,15 +569,35 @@ export default function ExerciseFeedbackModal({
               
               {/* Timeline Seek Bar */}
               <div className="space-y-1">
-                <input
-                  type="range"
-                  min="0"
-                  max={duration || 100}
-                  step="0.1"
-                  value={currentTime}
-                  onChange={e => seekTo(parseFloat(e.target.value))}
-                  className="w-full h-1.5 bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-violet-500"
-                />
+                <div className="relative flex items-center">
+                  <input
+                    type="range"
+                    min="0"
+                    max={duration || 100}
+                    step="0.1"
+                    value={currentTime}
+                    onChange={e => seekTo(parseFloat(e.target.value))}
+                    className="w-full h-1.5 bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-violet-500"
+                  />
+                  {/* Pines de correcciones sobre la línea de tiempo */}
+                  {duration > 0 && activeVideoTab === "student" && markers.map((m, idx) => {
+                    const pct = Math.min(100, Math.max(0, (m.time / duration) * 100))
+                    const hasVideo = Boolean(m.video_reaction_url)
+                    const isPad = m.display_mode === "fullscreen"
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => (hasVideo ? openReaction(m) : seekTo(m.time))}
+                        style={{ left: `${pct}%` }}
+                        title={`${formatSec(m.time)} · ${m.note}`}
+                        className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full border-2 border-neutral-900 transition-transform hover:scale-150 z-10 ${
+                          hasVideo ? (isPad ? "bg-emerald-400 shadow shadow-emerald-500/60" : "bg-violet-400 shadow shadow-violet-500/60") : "bg-amber-400"
+                        }`}
+                      />
+                    )
+                  })}
+                </div>
                 <div className="flex justify-between text-[11px] font-mono text-neutral-400">
                   <span>{formatSec(currentTime)}</span>
                   <span>{formatSec(duration)}</span>
@@ -465,15 +643,31 @@ export default function ExerciseFeedbackModal({
                   ))}
                 </div>
 
-                {/* Teacher button to drop a pin at the current frame */}
-                {isTeacher && (
-                  <button
-                    onClick={startAddingMarker}
-                    className="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/30 text-xs font-bold flex items-center gap-1.5 transition-colors"
-                  >
-                    <MessageSquarePlus className="w-3.5 h-3.5" />
-                    <span>Anotar en {formatSec(currentTime)}</span>
-                  </button>
+                {/* Teacher buttons: video-reaction + written note at the current frame */}
+                {isTeacher && activeVideoTab === "student" && (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => {
+                        if (videoRef.current) {
+                          videoRef.current.pause()
+                          setIsPlaying(false)
+                        }
+                        setShowReactionRecorder(true)
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg bg-violet-600/30 hover:bg-violet-600/50 text-violet-200 border border-violet-500/40 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                      title="Grabar video-reacción en este segundo"
+                    >
+                      <Video className="w-3.5 h-3.5" />
+                      <span>Reaccionar en {formatSec(currentTime)}</span>
+                    </button>
+                    <button
+                      onClick={startAddingMarker}
+                      className="p-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/30 transition-colors"
+                      title={`Nota escrita en ${formatSec(currentTime)}`}
+                    >
+                      <MessageSquarePlus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -533,24 +727,41 @@ export default function ExerciseFeedbackModal({
               {/* Markers items */}
               {markers.length === 0 ? (
                 <div className="p-4 text-center border border-dashed border-neutral-800 rounded-xl text-neutral-500 text-xs">
-                  Aún no hay marcadores temporales.
-                  {isTeacher && " Pausa el video y toca 'Anotar' para señalar un detalle técnico exacto."}
+                  Aún no hay correcciones.
+                  {isTeacher && " Pausa el video y toca 'Reaccionar' para grabar una corrección en video, o el ícono de nota para una escrita."}
                 </div>
               ) : (
-                <div className="space-y-1.5 max-h-[180px] overflow-y-auto pr-1">
-                  {markers.map((m, idx) => (
+                <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
+                  {markers.map((m, idx) => {
+                    const hasVideo = Boolean(m.video_reaction_url)
+                    const isPad = m.display_mode === "fullscreen"
+                    return (
                     <div
                       key={idx}
-                      className="group flex items-start justify-between gap-2 p-2 rounded-lg bg-neutral-800/80 hover:bg-neutral-800 border border-neutral-800 transition-colors cursor-pointer"
-                      onClick={() => seekTo(m.time)}
+                      className={`group flex items-start justify-between gap-2 p-2 rounded-lg border transition-colors cursor-pointer ${
+                        hasVideo
+                          ? isPad
+                            ? "bg-emerald-950/30 hover:bg-emerald-950/50 border-emerald-800/60"
+                            : "bg-violet-950/30 hover:bg-violet-950/50 border-violet-800/60"
+                          : "bg-neutral-800/80 hover:bg-neutral-800 border-neutral-800"
+                      }`}
+                      onClick={() => (hasVideo ? openReaction(m) : seekTo(m.time))}
                     >
-                      <div className="flex items-start gap-2">
+                      <div className="flex items-start gap-2 min-w-0">
                         <span className="px-1.5 py-0.5 bg-violet-950 text-violet-300 border border-violet-800 rounded font-mono text-[10px] font-bold shrink-0">
                           {formatSec(m.time)}
                         </span>
-                        <p className="text-xs text-neutral-200 leading-snug group-hover:text-white">
-                          {m.note}
-                        </p>
+                        <div className="min-w-0">
+                          {hasVideo && (
+                            <span className={`block text-[10px] font-bold uppercase tracking-wider ${isPad ? "text-emerald-400" : "text-violet-400"}`}>
+                              {isPad ? "🥁 Demostración Pad / Batería" : "🎥 Video-reacción"}
+                              {m.video_duration ? ` · ${m.video_duration}s` : ""}
+                            </span>
+                          )}
+                          <p className="text-xs text-neutral-200 leading-snug group-hover:text-white">
+                            {m.note}
+                          </p>
+                        </div>
                       </div>
                       {isTeacher && (
                         <button
@@ -562,7 +773,8 @@ export default function ExerciseFeedbackModal({
                         </button>
                       )}
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -730,6 +942,25 @@ export default function ExerciseFeedbackModal({
             setActiveVideoTab("teacher")
             toast.success("Demostración grabada y lista para adjuntar")
           }}
+        />
+      )}
+
+      {/* Grabador de micro-reacciones (Opción C + Modo Pad/Batería) */}
+      {showReactionRecorder && (
+        <MicroReactionRecorder
+          isOpen={showReactionRecorder}
+          onClose={() => setShowReactionRecorder(false)}
+          currentTime={currentTime}
+          submissionId={submission.id}
+          onSaveReaction={handleSaveMicroReaction}
+        />
+      )}
+
+      {/* Ajustes de estudio: cámara pro / interfaz de audio */}
+      {showSettingsModal && (
+        <MediaDeviceSettingsModal
+          isOpen={showSettingsModal}
+          onClose={() => setShowSettingsModal(false)}
         />
       )}
     </div>
