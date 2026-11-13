@@ -143,10 +143,16 @@ serve(async (req) => {
     const isRejected = type === 'REJECTED'
     const isDeleted = type === 'DELETED'
     
-    let notificationTitle = "🎸 ¡Clase Confirmada!"
-    let notificationBody = `${teacherName} confirmó tu clase del ${formatFriendlyDate(date)} a las ${formattedTime} hs.`
+    let notificationTitle = customParams?.title || "🎸 ¡Clase Confirmada!"
+    let notificationBody = customParams?.message || customParams?.body || `${teacherName} confirmó tu clase del ${formatFriendlyDate(date)} a las ${formattedTime} hs.`
     
-    if (isCancelled) {
+    if (type === "TEACHER_VIDEO") {
+      notificationTitle = customParams?.title || "🥁 Nuevo Video de tu Profesor"
+      notificationBody = customParams?.message || customParams?.body || `${teacherName} te envió un video de práctica.`
+    } else if (type === "VIDEO_FEEDBACK") {
+      notificationTitle = customParams?.title || "🥁 Devolución de Ejercicio"
+      notificationBody = customParams?.message || customParams?.body || `${teacherName} revisó tu video y te dejó comentarios.`
+    } else if (isCancelled) {
       notificationTitle = "✕ Clase Cancelada"
       notificationBody = `${teacherName} canceló tu clase del ${formatFriendlyDate(date)} a las ${formattedTime} hs.`
     } else if (isRejected) {
@@ -157,9 +163,11 @@ serve(async (req) => {
       notificationBody = `${teacherName} eliminó tu clase del ${formatFriendlyDate(date)} a las ${formattedTime} hs.`
     }
     
-    const notificationUrl = (isCancelled || isRejected || isDeleted || !finalClassId) 
-      ? "/dashboard" 
-      : `/dashboard/clases/detalles?id=${finalClassId}`
+    const notificationUrl = customParams?.url || (
+      (isCancelled || isRejected || isDeleted || !finalClassId) 
+        ? "/dashboard" 
+        : `/dashboard/clases/detalles?id=${finalClassId}`
+    )
 
     const payload = JSON.stringify({
       title: notificationTitle,

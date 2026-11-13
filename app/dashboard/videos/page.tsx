@@ -149,7 +149,7 @@ export default function VideosHubPage() {
 
     if (isTeacher) {
       if (activeTab === "pending") {
-        return (sub.status === "PENDING" || sub.status === "IN_REVIEW") && sub.created_by === "STUDENT"
+        return (sub.status === "PENDING" || sub.status === "IN_REVIEW") && (sub.created_by === "STUDENT" || !sub.created_by)
       }
       if (activeTab === "teacher_sent") {
         return sub.created_by === "TEACHER"
@@ -157,7 +157,7 @@ export default function VideosHubPage() {
       return true
     } else {
       if (activeTab === "pending") {
-        return sub.status === "PENDING" || sub.status === "IN_REVIEW"
+        return (sub.status === "PENDING" || sub.status === "IN_REVIEW") && (sub.created_by === "STUDENT" || !sub.created_by)
       }
       if (activeTab === "teacher_sent") {
         return !!sub.teacher_feedback_text || !!sub.teacher_feedback_video_url || sub.created_by === "TEACHER"
@@ -167,7 +167,7 @@ export default function VideosHubPage() {
   })
 
   // Contadores para badges
-  const pendingCount = submissions.filter(s => (s.status === "PENDING" || s.status === "IN_REVIEW") && s.created_by === "STUDENT").length
+  const pendingCount = submissions.filter(s => (s.status === "PENDING" || s.status === "IN_REVIEW") && (s.created_by === "STUDENT" || !s.created_by)).length
   const teacherSentCount = submissions.filter(s => s.created_by === "TEACHER").length
   const reviewedCount = submissions.filter(s => s.status === "APPROVED" || s.status === "NEEDS_WORK").length
 

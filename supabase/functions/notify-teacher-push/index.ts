@@ -150,11 +150,15 @@ serve(async (req) => {
       vapidPrivateKey
     )
 
-    let payloadTitle = "🎸 ¡Clase Confirmada!"
-    let payloadBody = `${studentName} confirmó su asistencia para la clase del ${formatFriendlyDate(date)} a las ${formattedTime} hs.`
-    let payloadUrl = finalClassId ? `/dashboard/clases/detalles?id=${finalClassId}&confirmed=true` : `/dashboard`
+    let payloadTitle = customParams?.title || "🎸 ¡Clase Confirmada!"
+    let payloadBody = customParams?.message || customParams?.body || `${studentName} confirmó su asistencia para la clase del ${formatFriendlyDate(date)} a las ${formattedTime} hs.`
+    let payloadUrl = customParams?.url || (finalClassId ? `/dashboard/clases/detalles?id=${finalClassId}&confirmed=true` : `/dashboard`)
 
-    if (type === "RESCHEDULED") {
+    if (type === "VIDEO_SUBMISSION") {
+      payloadTitle = customParams?.title || "🥁 Nuevo Video de Ejercicio"
+      payloadBody = customParams?.message || customParams?.body || `${studentName} te envió un video de práctica.`
+      payloadUrl = customParams?.url || "/dashboard/videos"
+    } else if (type === "RESCHEDULED") {
       payloadTitle = "🔄 Clase Reagendada"
       payloadBody = `${studentName} reagendó su clase del ${formatFriendlyDate(originalDate)} a las ${originalStartTime?.slice(0, 5)} hs para el ${formatFriendlyDate(newDate)} a las ${newStartTime?.slice(0, 5)} hs.`
       payloadUrl = finalClassId ? `/dashboard/clases/detalles?id=${finalClassId}` : `/dashboard`

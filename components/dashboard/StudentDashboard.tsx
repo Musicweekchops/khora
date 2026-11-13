@@ -493,12 +493,13 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
             <span>Grabar Video Ahora</span>
           </button>
           {submissions.length > 0 && (
-            <button
-              onClick={() => setSelectedSubmission(submissions[0])}
-              className="px-4 py-3.5 rounded-2xl border border-white/20 hover:bg-white/10 text-white text-xs font-bold transition-all text-center"
+            <Link
+              href="/dashboard/videos"
+              className="px-4 py-3.5 rounded-2xl border border-white/20 hover:bg-white/10 text-white text-xs font-bold transition-all text-center flex items-center justify-center gap-2"
             >
-              Ver Devoluciones ({submissions.length})
-            </button>
+              <Video className="w-4 h-4 text-violet-400" />
+              <span>Ver Videos y Devoluciones ({submissions.length})</span>
+            </Link>
           )}
         </div>
 

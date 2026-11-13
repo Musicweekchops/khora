@@ -252,6 +252,7 @@ export default function VideoExerciseRecorder({
           video_url: videoUrl,
           video_duration: recordingSeconds,
           student_notes: studentNotes.trim() || null,
+          created_by: "STUDENT",
           status: "PENDING",
         })
         .select("id")
@@ -281,6 +282,7 @@ export default function VideoExerciseRecorder({
         if (teacherUserId) {
           await supabase.functions.invoke("notify-teacher-push", {
             body: {
+              type: "VIDEO_SUBMISSION",
               customParams: {
                 teacherUserId,
                 studentName,
@@ -288,7 +290,7 @@ export default function VideoExerciseRecorder({
                 time: new Date().toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }),
                 title: "🥁 Nuevo Video de Ejercicio",
                 message: `${studentName} te envió un video de práctica: ${taskTitle || "Ejercicio"}`,
-                url: `/dashboard/alumnos`,
+                url: `/dashboard/videos`,
               },
             },
           })

@@ -1172,9 +1172,9 @@ serve(async (req) => {
 
     // Si params tiene información de la clase, generar y adjuntar el archivo .ics
     const isClassNotification = ['STUDENT_CLASS_CONFIRMED', 'TEACHER_CLASS_RESCHEDULED', 'STUDENT_CLASS_CANCELLED', 'STUDENT_CLASS_RESCHEDULED', 'CLASS_CONFIRMATION', 'STUDENT_BOOKING_REQUEST', 'STUDENT_CLASS_DELETED', 'TEACHER_CLASS_CANCELLED'].includes(type)
-    const hasDateAndTime = (params.date || params.rawDate) && (params.time || params.rawStartTime || params.startTime)
+    const hasDateAndTime = Boolean(params && (params.date || params.rawDate) && (params.time || params.rawStartTime || params.startTime))
 
-    if (isClassNotification || hasDateAndTime) {
+    if (params && (isClassNotification || hasDateAndTime)) {
       try {
         const icsContent = generateIcs({
           classId: params.classId,

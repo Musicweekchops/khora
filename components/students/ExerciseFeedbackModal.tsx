@@ -206,25 +206,94 @@ export default function ExerciseFeedbackModal({
           .eq("id", submission.task_id)
       }
 
-      // Notificar al alumno por Web Push
+      // Notificar al alumno por Web Push y Correo Electrónico
       try {
         const { data: sProf } = await supabase
           .from("StudentProfile")
-          .select("user_id")
+          .select("user_id, User(name, email)")
           .eq("id", submission.student_id)
           .maybeSingle()
+
+        const sUser: any = Array.isArray(sProf?.User) ? sProf?.User[0] : sProf?.User
 
         if (sProf?.user_id) {
           await supabase.functions.invoke("notify-student-push", {
             body: {
+              type: "VIDEO_FEEDBACK",
               customParams: {
                 studentUserId: sProf.user_id,
+                teacherName: "Arnaldo Allende",
                 date: new Date().toISOString().split("T")[0],
                 time: new Date().toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }),
                 title: "🥁 Devolución de Ejercicio",
-                message: `Tu profesor revisó tu video "${submission.title}" y dejó comentarios.`,
-                url: `/dashboard`,
+                message: `Arnaldo revisó tu video "${submission.title}" y dejó correcciones técnicas.`,
+                url: `/dashboard/videos`,
               },
+            },
+          })
+        }
+
+        if (sUser?.email) {
+          const studentFirstName = (sUser.name || submission.student_name || "Alumno").split(" ")[0]
+          const statusLabel = status === "APPROVED" 
+            ? "✅ ¡Aprobado!" 
+            : status === "NEEDS_WORK" 
+            ? "⚠️ Requiere ajuste de técnica" 
+            : "⏳ Revisado"
+
+          const statusColor = status === "APPROVED" ? "#10b981" : status === "NEEDS_WORK" ? "#f59e0b" : "#8b5cf6"
+
+          const feedbackNoteHtml = generalFeedback.trim()
+            ? `<div style="background-color: #27272a; border-radius: 14px; padding: 16px; margin: 20px 0; text-align: left;"><div style="font-size: 11px; font-weight: 800; color: #a78bfa; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Comentarios del profesor</div><p style="font-size: 13.5px; color: #e4e4e7; line-height: 1.6; margin: 0;">${generalFeedback.trim().replace(/\n/g, "<br>")}</p></div>`
+            : ""
+
+          const markersHtml = markers.length > 0
+            ? `<div style="background-color: #1f1f23; border: 1px dashed #3f3f46; border-radius: 14px; padding: 14px; margin-bottom: 20px; text-align: left;"><div style="font-size: 11px; font-weight: 800; color: #38bdf8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">⏱️ Notas al segundo exacto (${markers.length})</div><p style="font-size: 12px; color: #a1a1aa; margin: 0;">Tu profesor marcó momentos específicos en el video con indicaciones técnicas para que revises con slow-motion.</p></div>`
+            : ""
+
+          const demoNoticeHtml = teacherVideoUrl
+            ? `<div style="background-color: #2e1065; border: 1px solid #7c3aed; border-radius: 14px; padding: 14px; margin-bottom: 20px; text-align: left;"><div style="font-size: 11px; font-weight: 800; color: #c4b5fd; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">🥁 Demostración grabada por tu profesor</div><p style="font-size: 12px; color: #e9d5ff; margin: 0;">Arnaldo te grabó un video demostrativo para que veas la técnica correcta.</p></div>`
+            : ""
+
+          await supabase.functions.invoke("send-email", {
+            body: {
+              to: sUser.email,
+              subject: `🥁 Devolución de tu profesor: ${submission.title}`,
+              customHtml: `
+                <!DOCTYPE html>
+                <html>
+                <head><meta charset="utf-8"><title>Devolución técnica de ejercicio</title></head>
+                <body style="margin: 0; padding: 0; background-color: #0f0f13; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #ffffff;">
+                  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="padding: 40px 12px;">
+                    <tr>
+                      <td align="center">
+                        <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 500px; background-color: #18181b; border: 1px solid #27272a; border-radius: 24px; overflow: hidden;">
+                          <tr>
+                            <td style="padding: 32px 32px 28px 32px; text-align: center;">
+                              <div style="font-size: 32px; margin-bottom: 12px;">🥁</div>
+                              <h2 style="font-size: 20px; font-weight: 800; color: #ffffff; margin: 0 0 10px 0;">¡Devolución de tu práctica!</h2>
+                              <p style="font-size: 14px; color: #a1a1aa; line-height: 1.6; margin: 0 0 16px 0;">
+                                ¡Hola <strong>${studentFirstName}</strong>! Arnaldo acaba de revisar tu video:
+                              </p>
+                              <div style="background-color: #27272a; border: 1px solid #3f3f46; border-radius: 16px; padding: 16px; margin-bottom: 16px; text-align: left;">
+                                <div style="font-size: 15px; font-weight: 800; color: #ffffff; margin-bottom: 6px;">📹 ${submission.title}</div>
+                                <span style="display: inline-block; font-size: 11px; font-weight: 800; text-transform: uppercase; color: ${statusColor};">${statusLabel}</span>
+                              </div>
+                              ${feedbackNoteHtml}
+                              ${markersHtml}
+                              ${demoNoticeHtml}
+                              <a href="https://khora.cl/dashboard/videos" style="display: inline-block; background-color: #7c3aed; color: #ffffff !important; text-decoration: none; font-size: 14px; font-weight: 700; padding: 12px 28px; border-radius: 12px; margin-top: 10px; box-shadow: 0 4px 14px rgba(124, 58, 237, 0.4);">
+                                Ver Corrección y Slow-Motion
+                              </a>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+                </body>
+                </html>
+              `,
             },
           })
         }

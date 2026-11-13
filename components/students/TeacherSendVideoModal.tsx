@@ -145,8 +145,10 @@ export default function TeacherSendVideoModal({
         try {
           await supabase.functions.invoke("notify-student-push", {
             body: {
+              type: "TEACHER_VIDEO",
               customParams: {
                 studentUserId: selectedStudentUserId,
+                teacherName: "Arnaldo Allende",
                 date: new Date().toISOString().split("T")[0],
                 time: new Date().toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }),
                 title: "🥁 Nuevo Video de tu Profesor",
@@ -157,6 +159,63 @@ export default function TeacherSendVideoModal({
           })
         } catch (pushErr) {
           console.warn("Push error:", pushErr)
+        }
+
+        // 3. Notificar al alumno por Correo Electrónico
+        try {
+          const { data: uData } = await supabase
+            .from("User")
+            .select("email, name")
+            .eq("id", selectedStudentUserId)
+            .maybeSingle()
+
+          if (uData?.email) {
+            const studentFirstName = (uData.name || selectedStudentName || "Alumno").split(" ")[0]
+            const noteHtml = instructions.trim()
+              ? `<div style="background-color: #27272a; border-radius: 14px; padding: 16px; margin: 20px 0; text-align: left;"><div style="font-size: 11px; font-weight: 800; color: #a78bfa; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Indicaciones de práctica</div><p style="font-size: 13.5px; color: #e4e4e7; line-height: 1.6; margin: 0;">${instructions.trim().replace(/\n/g, "<br>")}</p></div>`
+              : ""
+
+            await supabase.functions.invoke("send-email", {
+              body: {
+                to: uData.email,
+                subject: `🥁 ¡Arnaldo te envió un nuevo video de práctica: ${finalTitle}!`,
+                customHtml: `
+                  <!DOCTYPE html>
+                  <html>
+                  <head><meta charset="utf-8"><title>Nuevo video de tu profesor</title></head>
+                  <body style="margin: 0; padding: 0; background-color: #0f0f13; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #ffffff;">
+                    <table width="100%" border="0" cellspacing="0" cellpadding="0" style="padding: 40px 12px;">
+                      <tr>
+                        <td align="center">
+                          <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 500px; background-color: #18181b; border: 1px solid #27272a; border-radius: 24px; overflow: hidden;">
+                            <tr>
+                              <td style="padding: 32px 32px 28px 32px; text-align: center;">
+                                <div style="font-size: 32px; margin-bottom: 12px;">🥁</div>
+                                <h2 style="font-size: 20px; font-weight: 800; color: #ffffff; margin: 0 0 10px 0;">¡Nuevo video de tu profesor!</h2>
+                                <p style="font-size: 14px; color: #a1a1aa; line-height: 1.6; margin: 0 0 20px 0;">
+                                  ¡Hola <strong>${studentFirstName}</strong>! Arnaldo te acaba de grabar un video demostrativo para que practiques:
+                                </p>
+                                <div style="background-color: #27272a; border: 1px solid #3f3f46; border-radius: 16px; padding: 16px; margin-bottom: 20px; text-align: left;">
+                                  <div style="font-size: 15px; font-weight: 800; color: #ffffff;">📹 ${finalTitle}</div>
+                                </div>
+                                ${noteHtml}
+                                <a href="https://khora.cl/dashboard/videos" style="display: inline-block; background-color: #7c3aed; color: #ffffff !important; text-decoration: none; font-size: 14px; font-weight: 700; padding: 12px 28px; border-radius: 12px; margin-top: 10px; box-shadow: 0 4px 14px rgba(124, 58, 237, 0.4);">
+                                  Ver Video en Khora
+                                </a>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                  </body>
+                  </html>
+                `,
+              },
+            })
+          }
+        } catch (emailErr) {
+          console.warn("Email error:", emailErr)
         }
       }
 
