@@ -4,7 +4,7 @@ import { KhoraPromo } from "./KhoraPromo"
 import "../app/globals.css"
 
 export const RemotionRoot: React.FC = () => {
-  const TOTAL_FRAMES = 645 // 21.5 segundos a 30 fps
+  const TOTAL_FRAMES = 495 // 16.5 segundos a 30 fps
 
   return (
     <>

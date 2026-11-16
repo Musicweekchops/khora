@@ -1,37 +1,31 @@
 import React from "react"
 import { Series } from "remotion"
-import { Scene1Hook } from "./scenes/Scene1Hook"
-import { Scene2VideoFeedback } from "./scenes/Scene2VideoFeedback"
-import { Scene3TasksAndProgress } from "./scenes/Scene3TasksAndProgress"
-import { Scene4PushNotification } from "./scenes/Scene4PushNotification"
-import { Scene5CTA } from "./scenes/Scene5CTA"
+import { Scene1Dashboard } from "./scenes/Scene1Dashboard"
+import { Scene2RealModal } from "./scenes/Scene2RealModal"
+import { Scene3PhonePush } from "./scenes/Scene3PhonePush"
+import { Scene4BrandOutro } from "./scenes/Scene4BrandOutro"
 
 export const KhoraPromo: React.FC = () => {
   return (
     <Series>
-      {/* Escena 1: El Gancho (4 segundos = 120 frames) */}
-      <Series.Sequence durationInFrames={120}>
-        <Scene1Hook />
+      {/* Escena 1: El Dashboard Real de Khora y clic en Gloria (3 segundos = 90 frames) */}
+      <Series.Sequence durationInFrames={90}>
+        <Scene1Dashboard />
       </Series.Sequence>
 
-      {/* Escena 2: Video-Reacción en el Segundo Exacto (6 segundos = 180 frames) */}
-      <Series.Sequence durationInFrames={180}>
-        <Scene2VideoFeedback />
+      {/* Escena 2: El Modal Real de Feedback y Reacción en Pad/Batería (6.5 segundos = 195 frames) */}
+      <Series.Sequence durationInFrames={195}>
+        <Scene2RealModal />
       </Series.Sequence>
 
-      {/* Escena 3: Tareas Semanales y Metas de BPM (4 segundos = 120 frames) */}
-      <Series.Sequence durationInFrames={120}>
-        <Scene3TasksAndProgress />
-      </Series.Sequence>
-
-      {/* Escena 4: Notificación Push en Teléfono Celular (3.5 segundos = 105 frames) */}
+      {/* Escena 3: Notificación Push en Teléfono y Apertura Móvil (3.5 segundos = 105 frames) */}
       <Series.Sequence durationInFrames={105}>
-        <Scene4PushNotification />
+        <Scene3PhonePush />
       </Series.Sequence>
 
-      {/* Escena 5: Cierre de Marca y Llamado a la Acción (4 segundos = 120 frames) */}
-      <Series.Sequence durationInFrames={120}>
-        <Scene5CTA />
+      {/* Escena 4: Cierre de Marca y Llamado a la Acción (3.5 segundos = 105 frames) */}
+      <Series.Sequence durationInFrames={105}>
+        <Scene4BrandOutro />
       </Series.Sequence>
     </Series>
   )

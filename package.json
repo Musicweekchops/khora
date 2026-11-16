@@ -8,9 +8,9 @@
     "start": "next start",
     "lint": "next lint",
     "remotion:studio": "remotion studio remotion/index.ts",
-    "remotion:render": "remotion render remotion/index.ts KhoraPromoLandscape out/khora_promo.mp4",
-    "remotion:render:reel": "remotion render remotion/index.ts KhoraPromoVertical out/khora_reel.mp4",
-    "remotion:still": "remotion still remotion/index.ts KhoraPromoLandscape out/preview_frame.png --frame=100"
+    "remotion:render": "remotion render remotion/index.ts KhoraPromoLandscape public/videos/khora_promo.mp4",
+    "remotion:render:reel": "remotion render remotion/index.ts KhoraPromoVertical public/videos/khora_reel.mp4",
+    "remotion:still": "remotion still remotion/index.ts KhoraPromoLandscape public/videos/preview_frame.png --frame=100"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
