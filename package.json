@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build && rm -rf dist && mv out dist",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "remotion:studio": "remotion studio remotion/index.ts",
+    "remotion:render": "remotion render remotion/index.ts KhoraPromoLandscape out/khora_promo.mp4",
+    "remotion:render:reel": "remotion render remotion/index.ts KhoraPromoVertical out/khora_reel.mp4",
+    "remotion:still": "remotion still remotion/index.ts KhoraPromoLandscape out/preview_frame.png --frame=100"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
@@ -43,6 +47,7 @@
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@types/web-push": "^3.6.4",
+    "ajv": "^8.20.0",
     "autoprefixer": "^10.4.20",
     "eslint": "^9.39.2",
     "eslint-config-next": "^16.1.4",
