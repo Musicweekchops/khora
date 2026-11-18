@@ -39,6 +39,7 @@ import TeacherSendVideoModal from "@/components/students/TeacherSendVideoModal"
 import { checkTeacherConflict, getAvailableSlots, addMinutes } from "@/lib/availability"
 import { logClassEvent } from "@/lib/classLogger"
 import { calculateClassCounters, formatSpanishShortDate, getClassDurationMinutes, getClassUnits } from "@/lib/classCounter"
+import { resolveRecoveryPolicy, RecoveryOriginType } from "@/lib/billingRules"
 
 interface ClassData {
   id: string; date: string; start_time: string; end_time: string
@@ -89,6 +90,7 @@ export default function ClassDetailView({ classId }: { classId: string }) {
   const [editing, setEditing] = useState(false)
   const [editForm, setEditForm] = useState({ date: "", start_time: "", end_time: "", student_id: "", modalidad: "", status: "" })
   const [savingEdit, setSavingEdit] = useState(false)
+  const [showRecoveryOriginModal, setShowRecoveryOriginModal] = useState(false)
 
   // Student availability picker state
   const [availableSlots, setAvailableSlots] = useState<string[]>([])
@@ -1896,26 +1898,143 @@ export default function ClassDetailView({ classId }: { classId: string }) {
 
                 {profile?.role === "TEACHER" && (
                   <button
-                    onClick={async () => {
-                      if (!cls) return
-                      const nextState = !cls.is_recovery_pending
-                      const { error } = await supabase.from("Class").update({ is_recovery_pending: nextState }).eq("id", cls.id)
-                      if (error) {
-                        toast("Error al actualizar recuperación: " + error.message, "error")
-                      } else {
-                        setCls(prev => prev ? { ...prev, is_recovery_pending: nextState } : null)
-                        toast(nextState ? "Clase marcada como pendiente por recuperar" : "Marcado de recuperación removido", "success")
-                      }
-                    }}
+                    onClick={() => setShowRecoveryOriginModal(true)}
                     className={`px-3 py-2 md:px-4 md:py-2.5 rounded-xl md:rounded-2xl text-[9px] md:text-xs font-black uppercase tracking-wider border transition-all ${
                       cls.is_recovery_pending
                         ? "bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200"
                         : "bg-neutral-100 text-neutral-600 border-neutral-200 hover:bg-neutral-200"
                     }`}
-                    title="Marcar si esta clase debe incluirse en el correo de cobro como pendiente por recuperar"
+                    title="Clasificar sesión pendiente por recuperar (profesor/feriado, falta justificada o falta sin aviso)"
                   >
                     {cls.is_recovery_pending ? "🔄 Pendiente por Recuperar" : "➕ Marcar p/ Recuperar"}
                   </button>
+                )}
+
+                {showRecoveryOriginModal && cls && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-neutral-100 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-base font-black text-neutral-900">
+                          Clasificar sesión ({formatSpanishShortDate(cls.date)})
+                        </h3>
+                        <button
+                          type="button"
+                          onClick={() => setShowRecoveryOriginModal(false)}
+                          className="w-8 h-8 rounded-full bg-neutral-100 text-neutral-500 flex items-center justify-center"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <p className="text-xs text-neutral-500">
+                        Elige el motivo según las reglas de recuperación. Las sesiones pendientes no afectan el estado de pago mensual.
+                      </p>
+
+                      <div className="space-y-2.5">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const policy = resolveRecoveryPolicy("TEACHER_OR_HOLIDAY", cls.date)
+                            const { error } = await supabase.from("Class").update(policy).eq("id", cls.id)
+                            if (error) {
+                              toast("Error: " + error.message, "error")
+                            } else {
+                              toast("Marcada como pendiente por profesor/feriado (no vence)", "success")
+                              setShowRecoveryOriginModal(false)
+                              await loadAll()
+                            }
+                          }}
+                          className="w-full p-3.5 rounded-2xl border border-emerald-200 bg-emerald-50/60 hover:bg-emerald-100/70 text-left transition-all"
+                        >
+                          <span className="block text-xs font-black text-emerald-900">
+                            1. Cancela el profesor o es feriado
+                          </span>
+                          <span className="block text-[11px] text-emerald-700 mt-0.5">
+                            Queda como sesión pendiente por coordinar y no tiene fecha de vencimiento.
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const policy = resolveRecoveryPolicy("STUDENT_JUSTIFIED", cls.date)
+                            const { error } = await supabase.from("Class").update(policy).eq("id", cls.id)
+                            if (error) {
+                              toast("Error: " + error.message, "error")
+                            } else {
+                              toast(`Marcada con plazo de 30 días (vence ${formatSpanishShortDate(policy.recovery_expires_at)})`, "success")
+                              setShowRecoveryOriginModal(false)
+                              await loadAll()
+                            }
+                          }}
+                          className="w-full p-3.5 rounded-2xl border border-amber-200 bg-amber-50/60 hover:bg-amber-100/70 text-left transition-all"
+                        >
+                          <span className="block text-xs font-black text-amber-900">
+                            2. Falta justificada del alumno
+                          </span>
+                          <span className="block text-[11px] text-amber-800 mt-0.5">
+                            Queda como sesión pendiente con un plazo de 30 días para recuperar.
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const policy = resolveRecoveryPolicy("NO_SHOW", cls.date)
+                            const { error } = await supabase
+                              .from("Class")
+                              .update({
+                                is_recovery_pending: policy.is_recovery_pending,
+                                recovery_origin_type: policy.recovery_origin_type,
+                                recovery_expires_at: policy.recovery_expires_at,
+                                recovery_reason: policy.recovery_reason,
+                                status: "COMPLETED",
+                              })
+                              .eq("id", cls.id)
+                            if (error) {
+                              toast("Error: " + error.message, "error")
+                            } else {
+                              toast("Falta sin aviso: dada por realizada sin recuperación", "success")
+                              setShowRecoveryOriginModal(false)
+                              await loadAll()
+                            }
+                          }}
+                          className="w-full p-3.5 rounded-2xl border border-neutral-200 bg-neutral-50 hover:bg-neutral-100 text-left transition-all"
+                        >
+                          <span className="block text-xs font-black text-neutral-900">
+                            3. Falta sin aviso
+                          </span>
+                          <span className="block text-[11px] text-neutral-500 mt-0.5">
+                            Se da por realizada dentro del mes, sin derecho a recuperación.
+                          </span>
+                        </button>
+
+                        {cls.is_recovery_pending && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const { error } = await supabase
+                                .from("Class")
+                                .update({
+                                  is_recovery_pending: false,
+                                  recovery_origin_type: null,
+                                  recovery_expires_at: null,
+                                  recovery_reason: null,
+                                })
+                                .eq("id", cls.id)
+                              if (!error) {
+                                toast("Marca de recuperación removida", "success")
+                                setShowRecoveryOriginModal(false)
+                                await loadAll()
+                              }
+                            }}
+                            className="w-full py-2.5 rounded-xl bg-red-50 text-red-700 text-xs font-bold"
+                          >
+                            Quitar marca de pendiente por recuperar
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 )}
 
                 {profile?.role === "TEACHER" && (

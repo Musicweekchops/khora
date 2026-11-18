@@ -28,6 +28,18 @@ import VideoPlayer from "@/components/ui/VideoPlayer"
 import { RichText } from "@/components/ui/RichText"
 import VideoExerciseRecorder from "@/components/students/VideoExerciseRecorder"
 import ExerciseFeedbackModal from "@/components/students/ExerciseFeedbackModal"
+import StudentMonthlyPlanCard from "@/components/dashboard/student/StudentMonthlyPlanCard"
+import {
+  calculateClassCounters,
+  getStudentMonthSessionsSummary,
+  StudentMonthSessionsSummary,
+} from "@/lib/classCounter"
+import {
+  DEFAULT_BILLING_RULES,
+  getMonthlyPaymentStatus,
+  getSantiagoTodayStr,
+  MonthlyPaymentStatus,
+} from "@/lib/billingRules"
 
 interface StudentStats {
   upcomingClasses: number
@@ -93,6 +105,15 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
   // Classroom Active states
   const [activeCourseId, setActiveCourseId] = useState<string | null>(null)
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null)
+
+  // Monthly membership & session tracking states
+  const [currentMonthKey, setCurrentMonthKey] = useState<string>(() => getSantiagoTodayStr().slice(0, 7))
+  const [monthSummary, setMonthSummary] = useState<StudentMonthSessionsSummary | null>(null)
+  const [monthlyPaymentStatus, setMonthlyPaymentStatus] = useState<MonthlyPaymentStatus>("AL_DIA")
+  const [bankDetails, setBankDetails] = useState<string | null>(null)
+  const [billingDay, setBillingDay] = useState<number>(DEFAULT_BILLING_RULES.billingDay)
+  const [graceDay, setGraceDay] = useState<number>(DEFAULT_BILLING_RULES.graceDay)
+  const [nextClassLabel, setNextClassLabel] = useState<string>("")
 
   // CONFIRMATION STATE HOOKS
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
@@ -277,87 +298,147 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
       totalMaterials: allowedItems.size
     })
 
-    // Submissions y profesor asignado
-    const [spRes, submRes] = await Promise.all([
-      supabase.from("StudentProfile").select("teacher_id").eq("id", profile.studentProfileId!).maybeSingle(),
-      supabase.from("ExerciseSubmission").select("*").eq("student_id", profile.studentProfileId!).order("created_at", { ascending: false })
+    // Submissions, perfil de alumno, clases y pagos para seguimiento mensual
+    const todayStr = getSantiagoTodayStr()
+    const activeMonthKey = todayStr.slice(0, 7)
+    setCurrentMonthKey(activeMonthKey)
+
+    const [spRes, submRes, allClassesRes, paymentsRes] = await Promise.all([
+      supabase
+        .from("StudentProfile")
+        .select("teacher_id, monthly_fee, status, subscription_expires_at, paused_months")
+        .eq("id", profile.studentProfileId!)
+        .maybeSingle(),
+      supabase
+        .from("ExerciseSubmission")
+        .select("*")
+        .eq("student_id", profile.studentProfileId!)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("Class")
+        .select("id, student_id, date, start_time, end_time, duration, status, modalidad, is_recovery_pending, is_recovery, original_class_date, recovery_origin_type, recovery_expires_at, recovery_reason, is_special, special_note")
+        .eq("student_id", profile.studentProfileId!)
+        .order("date", { ascending: true }),
+      supabase
+        .from("Payment")
+        .select("id, student_id, amount, date, billing_month, method, notes")
+        .eq("student_id", profile.studentProfileId!)
+        .order("date", { ascending: false }),
     ])
-    if (spRes.data?.teacher_id) setAssignedTeacherId(spRes.data.teacher_id)
+
+    const studentData: any = spRes.data
+    const effectiveTeacherId = studentData?.teacher_id || profile.teacherProfileId || null
+    if (effectiveTeacherId) setAssignedTeacherId(effectiveTeacherId)
     if (submRes.data) setSubmissions(submRes.data)
 
-    // 4. Mercado Pago Paid Student Experience (Any Teacher)
+    if (studentData) {
+      setMonthlyFee(Number(studentData.monthly_fee) || 90000)
+      setStudentStatus(studentData.status || "PROSPECT")
+      setSubscriptionExpiresAt(studentData.subscription_expires_at || null)
+    }
+
+    const loadedClasses = allClassesRes.data || []
+    const loadedPayments = paymentsRes.data || []
+
+    // Calcular etiquetas de sesión ("Sesión X · [Mes]") y resumen mensual
+    const countersMap = calculateClassCounters(loadedClasses)
+    if (nc && countersMap.has(nc.id)) {
+      setNextClassLabel(countersMap.get(nc.id)?.counterLabel || "")
+    } else {
+      setNextClassLabel("")
+    }
+
+    const summary = getStudentMonthSessionsSummary({
+      classes: loadedClasses,
+      monthKey: activeMonthKey,
+      studentId: profile.studentProfileId!,
+      todayStr,
+    })
+    setMonthSummary(summary)
+
+    // 4. Configuración de cobro del profesor y pasarela
     try {
-      // Cargar Billing Config
-      const { data: config } = await supabase
-        .from("TeacherBillingConfig")
-        .select("gateway_enabled")
-        .eq("teacher_id", profile.teacherProfileId!)
-        .maybeSingle()
+      let cfgBillingDay = DEFAULT_BILLING_RULES.billingDay
+      let cfgGraceDay = DEFAULT_BILLING_RULES.graceDay
 
-      const isEnabled = config?.gateway_enabled || false
-      setGatewayEnabled(isEnabled)
-
-      if (isEnabled) {
-        // Cargar detalles de mensualidad y membresía
-        const { data: student } = await supabase
-          .from("StudentProfile")
-          .select("monthly_fee, status, subscription_expires_at")
-          .eq("id", profile.studentProfileId!)
+      if (effectiveTeacherId) {
+        const { data: config } = await supabase
+          .from("TeacherBillingConfig")
+          .select("gateway_enabled, bank_details, billing_day, grace_day")
+          .eq("teacher_id", effectiveTeacherId)
           .maybeSingle()
 
-        if (student) {
-          setMonthlyFee(Number(student.monthly_fee) || 90000)
-          setStudentStatus(student.status || "PROSPECT")
-          setSubscriptionExpiresAt(student.subscription_expires_at || null)
+        const isEnabled = config?.gateway_enabled || false
+        setGatewayEnabled(isEnabled)
+        if (config?.bank_details) setBankDetails(config.bank_details)
+        if (config?.billing_day) {
+          cfgBillingDay = Number(config.billing_day)
+          setBillingDay(cfgBillingDay)
+        }
+        if (config?.grace_day) {
+          cfgGraceDay = Number(config.grace_day)
+          setGraceDay(cfgGraceDay)
         }
 
-        // Cargar compras realizadas
-        const { data: purchasesData } = await supabase
-          .from("Purchase")
-          .select("id, product_id, amount_paid, payment_method, purchase_date, created_at, Product(*)")
-          .eq("student_id", profile.studentProfileId!)
+        const mStatus = getMonthlyPaymentStatus({
+          monthKey: activeMonthKey,
+          payments: loadedPayments,
+          pausedMonths: studentData?.paused_months || [],
+          todayStr,
+          config: { billingDay: cfgBillingDay, graceDay: cfgGraceDay },
+        })
+        setMonthlyPaymentStatus(mStatus)
 
-        const loadedPurchases = purchasesData || []
-        setPurchases(loadedPurchases)
+        if (isEnabled) {
+          // Cargar compras realizadas
+          const { data: purchasesData } = await supabase
+            .from("Purchase")
+            .select("id, product_id, amount_paid, payment_method, purchase_date, created_at, Product(*)")
+            .eq("student_id", profile.studentProfileId!)
 
-        // Cargar clases y descargas de los productos comprados
-        const purchasedIds = loadedPurchases.map(p => p.product_id)
-        if (purchasedIds.length > 0) {
-          // Lecciones
-          const { data: lessData } = await supabase
-            .from("Lesson")
+          const loadedPurchases = purchasesData || []
+          setPurchases(loadedPurchases)
+
+          const purchasedIds = loadedPurchases.map(p => p.product_id)
+          if (purchasedIds.length > 0) {
+            const { data: lessData } = await supabase
+              .from("Lesson")
+              .select("*")
+              .in("product_id", purchasedIds)
+              .order("sort_order", { ascending: true })
+            setLessons(lessData || [])
+
+            const { data: rescData } = await supabase
+              .from("ProductResource")
+              .select("*")
+              .in("product_id", purchasedIds)
+            setResources(rescData || [])
+          }
+
+          const { data: products } = await supabase
+            .from("Product")
             .select("*")
-            .in("product_id", purchasedIds)
-            .order("sort_order", { ascending: true })
-          setLessons(lessData || [])
+            .eq("teacher_id", effectiveTeacherId)
+            .eq("is_active", true)
 
-          // Recursos
-          const { data: rescData } = await supabase
-            .from("ProductResource")
-            .select("*")
-            .in("product_id", purchasedIds)
-          setResources(rescData || [])
+          const purchasedIdsSet = new Set(purchasedIds)
+          const filteredProducts = (products || []).filter(p => !purchasedIdsSet.has(p.id))
+          setAvailableCourses(filteredProducts)
+
+          if (loadedPurchases.length > 0) {
+            setActiveTab('purchases')
+          } else {
+            setActiveTab('store')
+          }
         }
-
-        // Cargar todos los productos del profesor
-        const { data: products } = await supabase
-          .from("Product")
-          .select("*")
-          .eq("teacher_id", profile.teacherProfileId!)
-          .eq("is_active", true)
-
-        const purchasedIdsSet = new Set(purchasedIds)
-
-        // Filtrar productos no comprados aún para la Tienda
-        const filteredProducts = (products || []).filter(p => !purchasedIdsSet.has(p.id))
-        setAvailableCourses(filteredProducts)
-
-        // Determinar pestaña activa por defecto
-        if (loadedPurchases.length > 0) {
-          setActiveTab('purchases')
-        } else {
-          setActiveTab('store')
-        }
+      } else {
+        const mStatus = getMonthlyPaymentStatus({
+          monthKey: activeMonthKey,
+          payments: loadedPayments,
+          pausedMonths: studentData?.paused_months || [],
+          todayStr,
+        })
+        setMonthlyPaymentStatus(mStatus)
       }
     } catch (err) {
       console.error("Error loading student billing panel:", err)
@@ -434,11 +515,18 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="flex items-center gap-4 md:gap-6">
               <div className="w-14 h-14 md:w-16 md:h-16 bg-neutral-50 rounded-2xl md:rounded-3xl flex flex-col items-center justify-center border border-neutral-100">
-                <span className="text-[9px] font-black text-neutral-400 uppercase">{new Date(nextClass.date).toLocaleDateString('es-CL', { month: 'short' })}</span>
-                <span className="text-lg md:text-xl font-black text-neutral-900 leading-none">{new Date(nextClass.date).getDate() + 1}</span>
+                <span className="text-[9px] font-black text-neutral-400 uppercase">{new Date(nextClass.date + "T12:00").toLocaleDateString('es-CL', { month: 'short' })}</span>
+                <span className="text-lg md:text-xl font-black text-neutral-900 leading-none">{new Date(nextClass.date + "T12:00").getDate()}</span>
               </div>
               <div>
-                <h4 className="text-lg md:text-xl font-black text-neutral-900 tracking-tight">Próxima Clase</h4>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h4 className="text-lg md:text-xl font-black text-neutral-900 tracking-tight">Próxima Clase</h4>
+                  {nextClassLabel && (
+                    <span className="px-2.5 py-0.5 rounded-lg bg-violet-100 text-violet-800 text-[11px] font-black">
+                      {nextClassLabel}
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center gap-3 mt-1 text-xs md:text-sm text-neutral-500 font-medium">
                   <span className="flex items-center gap-1.5"><Clock className="w-4 h-4 opacity-40" /> {nextClass.start_time.slice(0,5)}</span>
                   <span className="w-1 h-1 rounded-full bg-neutral-200" />
@@ -465,6 +553,26 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
             </div>
           </div>
         </div>
+      )}
+
+      {/* TARJETA DE MENSUALIDAD Y CAJA DE CLASES PENDIENTES POR COORDINAR */}
+      {monthSummary && profile.studentProfileId && (
+        <StudentMonthlyPlanCard
+          studentId={profile.studentProfileId}
+          teacherId={assignedTeacherId}
+          studentName={profile.name || "Alumno"}
+          monthKey={currentMonthKey}
+          paymentStatus={monthlyPaymentStatus}
+          monthlyFee={monthlyFee}
+          bankDetails={bankDetails}
+          billingDay={billingDay}
+          graceDay={graceDay}
+          summary={monthSummary}
+          gatewayEnabled={gatewayEnabled}
+          onPayGateway={handlePayMonthly}
+          payingGateway={paying === "monthly"}
+          onPaymentRegistered={loadData}
+        />
       )}
 
       {/* ZONA DE PRÁCTICA Y VIDEOS DIRECTA */}
@@ -663,101 +771,10 @@ export default function StudentDashboard({ profile }: { profile: UserProfile }) 
         </div>
       )}
 
-      {/* SECCIÓN DE PAGOS & CURSOS DE MERCADO PAGO (Pasarela Activa) */}
+      {/* SECCIÓN DE CURSOS DE MERCADO PAGO (Pasarela Activa) */}
       {gatewayEnabled && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
-          {/* Tarjeta de Cobro Mensual o Membresía Activa */}
-          {(() => {
-            const isSubscriptionActive = subscriptionExpiresAt && new Date(subscriptionExpiresAt) > new Date()
-            
-            return (
-              <div className="bg-white rounded-3xl md:rounded-[40px] border border-neutral-100 p-6 md:p-8 shadow-sm flex flex-col justify-between relative overflow-hidden">
-                <div className="absolute top-[-20%] right-[-10%] w-36 h-36 bg-violet-500/5 blur-[50px] rounded-full pointer-events-none" />
-                
-                <div className="space-y-4 relative z-10">
-                  <span className="bg-violet-50 text-violet-700 border border-violet-100 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 w-fit">
-                    <CreditCard className="w-3.5 h-3.5" />
-                    {isSubscriptionActive ? "Membresía Khora Activa" : "Control de Mensualidad"}
-                  </span>
-                  
-                  {isSubscriptionActive ? (
-                    <div className="space-y-1">
-                      <h3 className="text-xl font-black text-neutral-900 tracking-tight">Tu Plan de Clases</h3>
-                      <p className="text-neutral-500 text-xs font-semibold leading-relaxed">
-                        Cuentas con una membresía prepaga activa en Khora. Tus clases fijas, bloques asignados y material de estudio están completamente vigentes.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-1">
-                      <h3 className="text-xl font-black text-neutral-900 tracking-tight">Tu Mensualidad de Clases</h3>
-                      <p className="text-neutral-500 text-xs font-semibold leading-relaxed">
-                        Realiza el pago seguro de tu mensualidad fija para mantener activo tu horario y bloque de clases.
-                      </p>
-                    </div>
-                  )}
-
-                  {isSubscriptionActive ? (
-                    <div className="bg-neutral-50 border border-neutral-100 rounded-2xl p-4 flex items-center justify-between">
-                      <div>
-                        <p className="text-[9px] font-black text-neutral-400 uppercase tracking-widest">Válida hasta el</p>
-                        <p className="text-sm font-black text-neutral-900 mt-1">
-                          {new Date(subscriptionExpiresAt!).toLocaleDateString("es-CL", { day: 'numeric', month: 'long', year: 'numeric' })}
-                        </p>
-                      </div>
-                      <span className="px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-700 border border-emerald-100">
-                        ✓ Activo
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="bg-neutral-50 border border-neutral-100 rounded-2xl p-4 flex items-center justify-between">
-                      <div>
-                        <p className="text-[9px] font-black text-neutral-400 uppercase tracking-widest">Monto a pagar</p>
-                        <p className="text-2xl font-black text-neutral-900 mt-0.5">
-                          ${monthlyFee.toLocaleString("es-CL")} <span className="text-xs font-bold text-neutral-400">CLP</span>
-                        </p>
-                      </div>
-                      <span className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest ${
-                        studentStatus === "ACTIVE" 
-                          ? "bg-emerald-50 text-emerald-700 border border-emerald-100" 
-                          : "bg-amber-50 text-amber-700 border border-amber-100 animate-pulse"
-                      }`}>
-                        {studentStatus === "ACTIVE" ? "✓ Al Día" : "⚠️ Pendiente"}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="pt-6 relative z-10">
-                  {isSubscriptionActive ? (
-                    <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl flex items-center gap-3 text-emerald-800 text-xs font-bold">
-                      <ShieldCheck className="w-5 h-5 text-emerald-500 flex-shrink-0" />
-                      <span>¡Tu membresía está al día! Acceso total garantizado.</span>
-                    </div>
-                  ) : studentStatus === "ACTIVE" ? (
-                    <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl flex items-center gap-3 text-emerald-800 text-xs font-bold">
-                      <ShieldCheck className="w-5 h-5 text-emerald-500 flex-shrink-0" />
-                      <span>Tu cuenta de clases se encuentra al día. ¡Gracias por tu puntualidad!</span>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={handlePayMonthly}
-                      disabled={paying !== null}
-                      className="w-full py-4 bg-neutral-900 hover:bg-emerald-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-xl disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                      {paying === "monthly" ? (
-                        <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                      ) : (
-                        <CreditCard className="w-4 h-4" />
-                      )}
-                      <span>Pagar Mensualidad Seguro</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            )
-          })()}
- 
-          {/* Catálogo de Cursos & Mis Compras (Split Decoupled Panel) */}
+        <div className="grid grid-cols-1 gap-6 pt-2">
+          {/* Catálogo de Cursos & Mis Compras */}
           <div className="bg-white rounded-3xl md:rounded-[40px] border border-neutral-100 p-6 md:p-8 shadow-sm flex flex-col justify-between relative overflow-hidden">
             <div className="absolute bottom-[-15%] left-[5%] w-36 h-36 bg-indigo-500/5 blur-[50px] rounded-full pointer-events-none" />
             

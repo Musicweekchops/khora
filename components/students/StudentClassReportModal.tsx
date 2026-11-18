@@ -3,7 +3,13 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { formatCurrency, formatDate } from "@/lib/utils"
-import { calculateClassCounters, formatSpanishShortDate, getClassUnits, getClassDurationMinutes } from "@/lib/classCounter"
+import { calculateClassCounters, formatSpanishShortDate, getClassUnits } from "@/lib/classCounter"
+import {
+  getMonthlyPaymentStatus,
+  getMonthYearLabelEs,
+  getPaymentBillingMonth,
+  getSantiagoTodayStr,
+} from "@/lib/billingRules"
 import { toast } from "sonner"
 import { 
   X, 
@@ -106,14 +112,10 @@ export default function StudentClassReportModal({
     }
   })
   payments.forEach(p => {
-    if (p.date && p.date.length >= 7) {
-      const monthKey = p.date.slice(0, 7)
+    const monthKey = getPaymentBillingMonth(p)
+    if (monthKey && monthKey.length >= 7) {
       if (!availableMonthsMap.has(monthKey)) {
-        const [yr, mo] = monthKey.split("-")
-        const dateObj = new Date(Number(yr), Number(mo) - 1, 1)
-        const label = dateObj.toLocaleDateString("es-CL", { month: "long", year: "numeric" })
-        const capitalized = label.charAt(0).toUpperCase() + label.slice(1)
-        availableMonthsMap.set(monthKey, capitalized)
+        availableMonthsMap.set(monthKey, getMonthYearLabelEs(monthKey))
       }
     }
   })
@@ -125,42 +127,44 @@ export default function StudentClassReportModal({
   // Filtrar pagos y clases según el mes seleccionado
   const filteredPayments = selectedMonth === "ALL" 
     ? payments 
-    : payments.filter(p => p.date && p.date.startsWith(selectedMonth))
+    : payments.filter(p => getPaymentBillingMonth(p) === selectedMonth)
 
   const filteredClasses = selectedMonth === "ALL" 
     ? classes 
     : classes.filter(c => c.date && c.date.startsWith(selectedMonth))
 
-  // Helper para determinar cuántas clases incluye un pago
-  const getPaymentClassesCount = (p: any) => {
-    if (p.classes_included && p.classes_included > 1) return Number(p.classes_included)
-    const monthlyFee = student?.monthly_fee && student.monthly_fee > 0 ? Number(student.monthly_fee) : 90000
-    if (Number(p.amount) >= monthlyFee * 0.7 || (p.notes && p.notes.toLowerCase().includes("mensual"))) {
-      return 4
-    }
-    return Number(p.classes_included || 1)
-  }
-
-  // Métricas financieras y de clases calculadas sobre los datos filtrados
+  // Métricas financieras y de sesiones calculadas sobre el período seleccionado
   const totalPaidAmount = filteredPayments.reduce((acc, p) => acc + Number(p.amount || 0), 0)
-  const totalClassesPaid = filteredPayments.reduce((acc, p) => acc + getPaymentClassesCount(p), 0)
   
   const completedClasses = filteredClasses.filter(c => c.status === "COMPLETED")
   const scheduledClasses = filteredClasses.filter(c => c.status === "SCHEDULED" || c.status === "CONFIRMED")
   const recoveryPendingClasses = filteredClasses.filter(c => c.is_recovery_pending)
   const recoveryTakenClasses = filteredClasses.filter(c => c.is_recovery || c.original_class_date)
 
-  // Unidades reales ponderadas (cada hora cuenta como 1 clase; bloques dobles = 2 clases)
   const completedClassesUnits = completedClasses.reduce((acc, c) => acc + getClassUnits(c), 0)
   const scheduledClassesUnits = scheduledClasses.reduce((acc, c) => acc + getClassUnits(c), 0)
 
-  const classesUsedCount = completedClassesUnits + scheduledClassesUnits
-  const balanceClasses = totalClassesPaid - classesUsedCount
+  const targetMonthKey = selectedMonth === "ALL" ? getSantiagoTodayStr().slice(0, 7) : selectedMonth
+  const periodPaymentStatus = getMonthlyPaymentStatus({
+    monthKey: targetMonthKey,
+    payments,
+    pausedMonths: student?.paused_months || [],
+  })
 
   const getBalanceStatus = () => {
-    if (balanceClasses > 0) return { label: `+${balanceClasses} clase(s) a favor`, color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30" }
-    if (balanceClasses === 0) return { label: "Al día (0 clases pendientes)", color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30" }
-    return { label: `Deuda de ${Math.abs(balanceClasses)} clase(s)`, color: "text-amber-400 bg-amber-500/10 border-amber-500/30" }
+    if (periodPaymentStatus === "EN_PAUSA") {
+      return { label: "Mes en pausa (sin cobro)", color: "text-slate-300 bg-slate-500/10 border-slate-500/30" }
+    }
+    if (periodPaymentStatus === "AL_DIA" || (selectedMonth === "ALL" && filteredPayments.length > 0)) {
+      return { label: "Mensualidad al día", color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30" }
+    }
+    if (periodPaymentStatus === "PENDIENTE") {
+      return { label: "Mensualidad pendiente (en plazo)", color: "text-amber-300 bg-amber-500/10 border-amber-500/30" }
+    }
+    if (periodPaymentStatus === "ATRASADO") {
+      return { label: "Mensualidad atrasada", color: "text-red-400 bg-red-500/10 border-red-500/30" }
+    }
+    return { label: "Período histórico", color: "text-zinc-400 bg-zinc-500/10 border-zinc-500/30" }
   }
 
   const balanceBadge = getBalanceStatus()
@@ -174,17 +178,16 @@ export default function StudentClassReportModal({
   const handleCopyWhatsApp = () => {
     const today = new Date().toLocaleDateString("es-CL", { day: "2-digit", month: "2-digit", year: "numeric" })
     
-    let text = `📊 *REPORTE DE CLASES Y PAGOS — KHORA ACADEMY*\n`
+    let text = `📊 *REPORTE DE SESIONES Y MENSUALIDAD — KHORA ACADEMY*\n`
     text += `👤 *Alumno/a:* ${student?.User?.name || "Alumno"}\n`
     text += `📅 *Período:* ${selectedPeriodLabel} (Emitido ${today})\n\n`
 
     text += `💵 *RESUMEN DEL PERÍODO:*
 • Total Abonado: ${formatCurrency(totalPaidAmount)} CLP
-• Clases Pagadas/Cubiertas: ${totalClassesPaid} clases
-• Clases Realizadas: ${completedClassesUnits} clases${completedClasses.length !== completedClassesUnits ? ` (${completedClasses.length} sesiones)` : ''}
-• Clases Programadas: ${scheduledClassesUnits} clases
+• Sesiones Realizadas: ${completedClasses.length}
+• Sesiones por Venir: ${scheduledClasses.length}
 • Clases Pendientes por Recuperar: ${recoveryPendingClasses.length}
-📌 *BALANCE:* ${balanceBadge.label}\n\n`
+📌 *ESTADO:* ${balanceBadge.label}\n\n`
 
     text += `💳 *DETALLE DE PAGOS (${filteredPayments.length}):*\n`
     if (filteredPayments.length === 0) {
@@ -192,8 +195,8 @@ export default function StudentClassReportModal({
     } else {
       filteredPayments.forEach((p, idx) => {
         const pDate = formatSpanishShortDate(p.date)
-        const count = getPaymentClassesCount(p)
-        text += `${idx + 1}. ${pDate} — ${formatCurrency(Number(p.amount))} (${count} clases) [${p.method || 'Transferencia'}]\n`
+        const bMonth = getMonthYearLabelEs(getPaymentBillingMonth(p))
+        text += `${idx + 1}. ${pDate} — ${formatCurrency(Number(p.amount))} (Mensualidad ${bMonth}) [${p.method || 'Transferencia'}]\n`
       })
     }
     text += `\n`
@@ -334,7 +337,7 @@ export default function StudentClassReportModal({
                 <CreditCard className="w-4 h-4 text-purple-400 print:text-purple-700" />
               </div>
               <p className="text-lg font-bold text-white print:text-black">{formatCurrency(totalPaidAmount)}</p>
-              <span className="text-[10px] text-zinc-500 print:text-gray-500">{totalClassesPaid} clases pagadas</span>
+              <span className="text-[10px] text-zinc-500 print:text-gray-500">{filteredPayments.length} pago(s) en el período</span>
             </div>
 
             <div className="bg-zinc-950/60 print:bg-gray-100 border border-zinc-800 print:border-gray-300 rounded-xl p-3">
@@ -385,7 +388,7 @@ export default function StudentClassReportModal({
                     <th className="p-3">Fecha</th>
                     <th className="p-3">Método</th>
                     <th className="p-3">Monto</th>
-                    <th className="p-3">Clases Incluidas</th>
+                    <th className="p-3">Mes Cubierto</th>
                     <th className="p-3">Notas / Comprobante</th>
                   </tr>
                 </thead>
@@ -404,7 +407,7 @@ export default function StudentClassReportModal({
                           </span>
                         </td>
                         <td className="p-3 font-bold text-white print:text-black">{formatCurrency(Number(p.amount))}</td>
-                        <td className="p-3 font-semibold text-purple-300 print:text-black">{getPaymentClassesCount(p)} clase(s)</td>
+                        <td className="p-3 font-semibold text-purple-300 print:text-black">{getMonthYearLabelEs(getPaymentBillingMonth(p))}</td>
                         <td className="p-3 text-zinc-400 print:text-gray-600 truncate max-w-[200px]">{p.notes || p.transfer_id || '—'}</td>
                       </tr>
                     ))

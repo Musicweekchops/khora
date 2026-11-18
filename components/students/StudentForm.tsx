@@ -20,6 +20,7 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
     status: "PROSPECT", lead_source: "", modalidad: "presencial",
     preferred_day: "", preferred_time: "",
     emergency_contact: "", emergency_phone: "",
+    billing_contact_name: "", billing_contact_phone: "", billing_contact_email: "",
     payment_frequency: "MONTHLY", payment_day: "5", monthly_fee: "0",
   })
 
@@ -48,6 +49,9 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
       preferred_time: data.preferred_time ?? "",
       emergency_contact: data.emergency_contact ?? "",
       emergency_phone: data.emergency_phone ?? "",
+      billing_contact_name: data.billing_contact_name ?? data.emergency_contact ?? "",
+      billing_contact_phone: data.billing_contact_phone ?? data.emergency_phone ?? "",
+      billing_contact_email: data.billing_contact_email ?? "",
       payment_frequency: data.payment_frequency ?? "MONTHLY",
       payment_day: data.payment_day ? String(data.payment_day) : "5",
       monthly_fee: data.monthly_fee ? String(data.monthly_fee) : "0",
@@ -117,8 +121,11 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
             lead_source: form.lead_source || null,
             preferred_day: form.preferred_day || null,
             preferred_time: form.preferred_time || null,
-            emergency_contact: form.emergency_contact || null,
-            emergency_phone: form.emergency_phone || null,
+            emergency_contact: form.billing_contact_name || form.emergency_contact || null,
+            emergency_phone: form.billing_contact_phone || form.emergency_phone || null,
+            billing_contact_name: form.billing_contact_name || form.emergency_contact || null,
+            billing_contact_phone: form.billing_contact_phone || form.emergency_phone || null,
+            billing_contact_email: form.billing_contact_email || null,
             payment_frequency: form.payment_frequency,
             payment_day: parseInt(form.payment_day) || 5,
             monthly_fee: parseFloat(form.monthly_fee) || 0,
@@ -185,8 +192,11 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
             modalidad: form.modalidad,
             preferred_day: form.preferred_day || null,
             preferred_time: form.preferred_time || null,
-            emergency_contact: form.emergency_contact || null,
-            emergency_phone: form.emergency_phone || null,
+            emergency_contact: form.billing_contact_name || form.emergency_contact || null,
+            emergency_phone: form.billing_contact_phone || form.emergency_phone || null,
+            billing_contact_name: form.billing_contact_name || form.emergency_contact || null,
+            billing_contact_phone: form.billing_contact_phone || form.emergency_phone || null,
+            billing_contact_email: form.billing_contact_email || null,
             payment_frequency: form.payment_frequency,
             payment_day: parseInt(form.payment_day) || 5,
             monthly_fee: parseFloat(form.monthly_fee) || 0,
@@ -317,12 +327,20 @@ export default function StudentForm({ mode, studentId }: StudentFormProps) {
           </Section>
 
           <div className="bg-neutral-50 rounded-3xl p-8 border border-neutral-100 space-y-4">
-            <h3 className="text-lg font-black text-neutral-900">🚨 Contacto de Emergencia</h3>
-            <Field label="Nombre" icon="👤">
-              <input type="text" value={form.emergency_contact} onChange={e => set("emergency_contact", e.target.value)} className="input-field" placeholder="Familiar / Amigo" />
+            <div>
+              <h3 className="text-lg font-black text-neutral-900">👨‍👩‍👧 Contacto de Pago / Apoderado (Opcional)</h3>
+              <p className="text-xs text-neutral-500 mt-0.5">
+                Si un familiar o apoderado gestiona la mensualidad, los recordatorios de inicio de mes irán dirigidos a esta persona.
+              </p>
+            </div>
+            <Field label="Nombre Apoderado / Responsable" icon="👤">
+              <input type="text" value={form.billing_contact_name} onChange={e => set("billing_contact_name", e.target.value)} className="input-field" placeholder="Ej: Roberto (Papá)" />
             </Field>
-            <Field label="Teléfono" icon="📞">
-              <input type="tel" value={form.emergency_phone} onChange={e => set("emergency_phone", e.target.value)} className="input-field" placeholder="+56 9 ..." />
+            <Field label="WhatsApp / Teléfono Apoderado" icon="📞">
+              <input type="tel" value={form.billing_contact_phone} onChange={e => set("billing_contact_phone", e.target.value)} className="input-field" placeholder="+56 9 ..." />
+            </Field>
+            <Field label="Correo Apoderado" icon="✉️">
+              <input type="email" value={form.billing_contact_email} onChange={e => set("billing_contact_email", e.target.value)} className="input-field" placeholder="apoderado@correo.cl" />
             </Field>
           </div>
         </div>

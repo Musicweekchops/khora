@@ -8,11 +8,14 @@ import { formatCurrency } from "@/lib/utils"
 import { toast } from "sonner"
 import { Trash2, ChevronDown, Users, CheckCircle2, AlertCircle, Clock, ArrowUpDown, DollarSign, Wallet } from "lucide-react"
 import ReceiptUploader, { ParsedReceiptData } from "@/components/ui/ReceiptUploader"
+import MonthlyBillingTracker, { MonthlyTrackerStudent } from "@/components/dashboard/teacher/MonthlyBillingTracker"
+import { DEFAULT_BILLING_RULES } from "@/lib/billingRules"
 
 interface PaymentRow { 
   id: string
   amount: number
   date: string
+  billing_month?: string | null
   student_id: string
   method?: string
   notes?: string | null
@@ -42,6 +45,10 @@ export default function FinancieroPage() {
   const [confirmDeletePayments, setConfirmDeletePayments] = useState<PaymentRow[] | null>(null)
   const [deletingPayments, setDeletingPayments] = useState(false)
   const [students, setStudents] = useState<StudentRow[]>([])
+  const [trackerStudents, setTrackerStudents] = useState<MonthlyTrackerStudent[]>([])
+  const [bankDetailsCfg, setBankDetailsCfg] = useState<string | null>(null)
+  const [billingDayCfg, setBillingDayCfg] = useState<number>(DEFAULT_BILLING_RULES.billingDay)
+  const [graceDayCfg, setGraceDayCfg] = useState<number>(DEFAULT_BILLING_RULES.graceDay)
   const [unpaidStudents, setUnpaidStudents] = useState<UnpaidStudent[]>([])
   const [feeFilter, setFeeFilter] = useState<"ALL" | "UNDER_90K" | "NO_FEE">("ALL")
   const [editingFee, setEditingFee] = useState<{ id: string, amount: string } | null>(null)
@@ -67,7 +74,7 @@ export default function FinancieroPage() {
 
     let { data: py, error: pyErr } = await supabase
       .from("Payment")
-      .select("id, amount, date, method, notes, created_at, receipt_url, transfer_id, student_id, StudentProfile ( User ( name ) )")
+      .select("id, amount, date, billing_month, method, notes, created_at, receipt_url, transfer_id, student_id, StudentProfile ( User ( name ) )")
       .eq("teacher_id", teacherId)
       .order("date", { ascending: false })
 
@@ -78,16 +85,46 @@ export default function FinancieroPage() {
         .select("id, amount, date, method, notes, created_at, student_id, StudentProfile ( User ( name ) )")
         .eq("teacher_id", teacherId)
         .order("date", { ascending: false })
-      py = (fallback.data || []).map((p: any) => ({ ...p, receipt_url: null, transfer_id: null }))
+      py = (fallback.data || []).map((p: any) => ({ ...p, billing_month: null, receipt_url: null, transfer_id: null }))
     }
 
-    const [{ data: sp }, { data: activeStudents }] = await Promise.all([
-      supabase.from("StudentProfile").select("id, status, lifetime_value, created_at, lead_source, monthly_fee, modalidad, User ( name, email )").eq("teacher_id", teacherId),
+    const [{ data: sp }, { data: activeStudents }, { data: billingCfg }] = await Promise.all([
+      supabase.from("StudentProfile").select("id, status, lifetime_value, created_at, lead_source, monthly_fee, modalidad, paused_months, billing_contact_name, billing_contact_phone, billing_contact_email, emergency_contact, emergency_phone, User ( name, email, phone )").eq("teacher_id", teacherId),
       supabase.from("StudentProfile")
-        .select("id, modalidad, monthly_fee, User ( name, email )")
+        .select("id, modalidad, monthly_fee, paused_months, billing_contact_name, billing_contact_phone, billing_contact_email, emergency_contact, emergency_phone, User ( name, email, phone )")
         .eq("teacher_id", teacherId)
         .eq("status", "ACTIVE"),
+      supabase.from("TeacherBillingConfig")
+        .select("bank_details, billing_day, grace_day")
+        .eq("teacher_id", teacherId)
+        .maybeSingle(),
     ])
+
+    if (billingCfg) {
+      if (billingCfg.bank_details) setBankDetailsCfg(billingCfg.bank_details)
+      if (billingCfg.billing_day) setBillingDayCfg(Number(billingCfg.billing_day))
+      if (billingCfg.grace_day) setGraceDayCfg(Number(billingCfg.grace_day))
+    }
+
+    if (activeStudents) {
+      setTrackerStudents(activeStudents.map((s: any) => {
+        const u = Array.isArray(s?.User) ? s.User[0] : s?.User
+        return {
+          id: s.id,
+          name: u?.name ?? "—",
+          email: u?.email ?? "",
+          phone: u?.phone ?? null,
+          modalidad: s.modalidad ?? "online",
+          monthly_fee: Number(s.monthly_fee ?? 0),
+          paused_months: s.paused_months ?? [],
+          billing_contact_name: s.billing_contact_name ?? null,
+          billing_contact_phone: s.billing_contact_phone ?? null,
+          billing_contact_email: s.billing_contact_email ?? null,
+          emergency_contact: s.emergency_contact ?? null,
+          emergency_phone: s.emergency_phone ?? null,
+        }
+      }))
+    }
 
     if (py) {
       setPayments(py.map((p: any) => {
@@ -97,6 +134,7 @@ export default function FinancieroPage() {
           id: p.id,
           amount: Number(p.amount ?? 0),
           date: p.date,
+          billing_month: p.billing_month || (p.date ? p.date.slice(0, 7) : null),
           method: p.method,
           notes: p.notes,
           created_at: p.created_at || p.date,
@@ -236,6 +274,7 @@ export default function FinancieroPage() {
       amount: Number(modal.amount),
       method: modal.method || "TRANSFER",
       date: paymentDate,
+      billing_month: paymentDate.slice(0, 7),
       notes: modal.notes || null,
       receipt_url: modal.receipt_url || null,
       transfer_id: modal.transfer_id || null,
@@ -1123,6 +1162,19 @@ export default function FinancieroPage() {
           </>
         )}
       </div>
+
+      {/* ── Seguimiento Mensual deInicio de Mes (Al día, Pendiente, Atrasado, En pausa) ── */}
+      {teacherId && (
+        <MonthlyBillingTracker
+          teacherId={teacherId}
+          students={trackerStudents}
+          payments={payments}
+          initialBankDetails={bankDetailsCfg}
+          initialBillingDay={billingDayCfg}
+          initialGraceDay={graceDayCfg}
+          onRefresh={() => loadAll(teacherId)}
+        />
+      )}
 
       {/* ── Unpaid Students Section ── */}
       <div className="bg-white rounded-3xl border border-neutral-100 overflow-hidden">
