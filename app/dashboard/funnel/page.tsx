@@ -345,6 +345,10 @@ export default function FunnelPage() {
         .select(`
           id,
           step_order,
+          step_type,
+          scheduled_date,
+          scheduled_time,
+          broadcast_sent_at,
           subject,
           content_html,
           delay_days,
@@ -433,6 +437,10 @@ export default function FunnelPage() {
           .select(`
             id,
             step_order,
+            step_type,
+            scheduled_date,
+            scheduled_time,
+            broadcast_sent_at,
             subject,
             content_html,
             delay_days,
@@ -509,14 +517,17 @@ export default function FunnelPage() {
   }
 
   const sequenceSteps = useMemo(
-    () => steps.filter(s => !s.step_type || s.step_type === "SEQUENCE").sort((a, b) => a.step_order - b.step_order),
+    () =>
+      steps
+        .filter(s => s.step_type !== "SCHEDULED" && s.step_order >= 0)
+        .sort((a, b) => a.step_order - b.step_order),
     [steps]
   )
 
   const scheduledSteps = useMemo(
     () =>
       steps
-        .filter(s => s.step_type === "SCHEDULED")
+        .filter(s => s.step_type === "SCHEDULED" || s.step_order < 0)
         .sort(
           (a, b) =>
             (a.scheduled_date || "").localeCompare(b.scheduled_date || "") ||
