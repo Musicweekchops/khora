@@ -1521,148 +1521,162 @@ export default function FunnelPage() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {scheduledSteps.map((step) => {
               const isSent = Boolean(step.broadcast_sent_at)
-              const formattedDate = step.scheduled_date
-                ? new Date(step.scheduled_date + "T12:00").toLocaleDateString("es-CL", {
-                    weekday: "short",
-                    day: "numeric",
-                    month: "long",
-                    year: "numeric",
-                  })
-                : "Sin fecha"
+              const dateObj = step.scheduled_date ? new Date(step.scheduled_date + "T12:00") : null
+              const dayNum = dateObj ? dateObj.getDate() : "--"
+              const monthShort = dateObj
+                ? dateObj.toLocaleDateString("es-CL", { month: "short" }).replace(".", "").toUpperCase()
+                : "---"
               const formattedTime = (step.scheduled_time || "18:00").slice(0, 5)
+              const plainSnippet = (step.content_html || "")
+                .replace(/<[^>]+>/g, " ")
+                .replace(/\s+/g, " ")
+                .trim()
+              const openRate = step.stats?.sent
+                ? Math.round(((step.stats?.opened || 0) / step.stats.sent) * 100)
+                : 0
+              const clickRate = step.stats?.sent
+                ? Math.round(((step.stats?.clicked || 0) / step.stats.sent) * 100)
+                : 0
 
               return (
                 <div
                   key={step.id}
-                  className={`bg-white border rounded-3xl p-5 sm:p-6 transition-all shadow-sm ${
+                  className={`bg-white border rounded-2xl p-4 transition-all shadow-sm flex flex-col justify-between gap-3 ${
                     isSent
-                      ? "border-emerald-200/80 bg-emerald-50/10"
+                      ? "border-emerald-200 bg-emerald-50/15"
                       : step.is_active
-                        ? "border-indigo-200 hover:border-indigo-400"
+                        ? "border-indigo-200/90 hover:border-indigo-400 hover:shadow-md"
                         : "border-neutral-200 opacity-60 bg-neutral-50"
                   }`}
                 >
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-neutral-100 pb-4">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-black uppercase tracking-wider px-3 py-1 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-200 flex items-center gap-1.5">
-                        <Calendar className="w-3.5 h-3.5 text-indigo-600" />
-                        {formattedDate} · {formattedTime} hrs
-                      </span>
-                      {isSent ? (
-                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          ✅ Enviado el {new Date(step.broadcast_sent_at!).toLocaleDateString("es-CL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                        </span>
-                      ) : (
-                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
-                          ⏳ Programado
-                        </span>
-                      )}
-                      <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-neutral-100 text-neutral-600 border border-neutral-200">
-                        🔒 Independiente del flujo
-                      </span>
+                  {/* Top: Mini calendario cuadrado + estado + editar/eliminar */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center shrink-0 border ${
+                        isSent
+                          ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                          : "bg-indigo-50 border-indigo-200 text-indigo-800"
+                      }`}>
+                        <span className="text-[9px] font-black leading-none tracking-wider">{monthShort}</span>
+                        <span className="text-base font-black leading-tight">{dayNum}</span>
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-extrabold text-neutral-900 flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-indigo-500" />
+                          <span>{formattedTime} hrs</span>
+                        </div>
+                        {isSent ? (
+                          <span className="inline-block mt-0.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                            ✅ Enviado
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleToggleActive(step)}
+                            className={`inline-block mt-0.5 text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors ${
+                              step.is_active
+                                ? "bg-amber-100 text-amber-800 hover:bg-amber-200"
+                                : "bg-neutral-200 text-neutral-600 hover:bg-neutral-300"
+                            }`}
+                            title="Clic para pausar o activar"
+                          >
+                            {step.is_active ? "⏳ Programado" : "⏸️ Pausado"}
+                          </button>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
-                      {!isSent && (
-                        <button
-                          onClick={() => handleToggleActive(step)}
-                          className={`text-xs font-bold px-3 py-1 rounded-xl transition-colors ${
-                            step.is_active
-                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60"
-                              : "bg-neutral-100 text-neutral-500 border border-neutral-200"
-                          }`}
-                        >
-                          {step.is_active ? "🟢 Activo" : "⏸️ Pausado"}
-                        </button>
-                      )}
-                      <button
-                        onClick={() => handleSendTest(step)}
-                        disabled={testingSend === step.id}
-                        className="text-xs text-neutral-600 hover:text-neutral-900 border border-neutral-200 hover:bg-neutral-50 px-3 py-1 rounded-xl transition-colors font-medium flex items-center gap-1"
-                      >
-                        <Send className="w-3 h-3 text-neutral-400" />
-                        {testingSend === step.id ? "Enviando..." : "Probar"}
-                      </button>
-                      <button
-                        onClick={() => handleSendNow(step)}
-                        disabled={sendingNow === step.id}
-                        className="text-xs text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1 rounded-xl transition-colors font-bold flex items-center gap-1 disabled:opacity-60"
-                        title="Despachar ahora mismo a los contactos pendientes sin esperar a la fecha programada"
-                      >
-                        <Send className="w-3 h-3" />
-                        {sendingNow === step.id ? "Enviando..." : "Enviar ahora"}
-                      </button>
+                    <div className="flex items-center gap-0.5 shrink-0">
                       <button
                         onClick={() => openEditModal(step)}
                         className="p-1.5 text-neutral-400 hover:text-neutral-900 rounded-lg hover:bg-neutral-100 transition-colors"
                         title="Editar fecha, hora o contenido"
                       >
-                        <Edit3 className="w-4 h-4" />
+                        <Edit3 className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => handleDeleteStep(step.id)}
                         className="p-1.5 text-neutral-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
                         title="Eliminar correo programado"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
 
-                  <div className="py-4 space-y-3">
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block mb-0.5">Asunto:</span>
-                      <h3 className="text-base font-bold text-neutral-900">{step.subject}</h3>
-                    </div>
-                    <p className="text-xs text-neutral-600 line-clamp-2 leading-relaxed bg-neutral-50 p-3 rounded-2xl border border-neutral-100 font-mono">
-                      {step.content_html}
+                  {/* Body: Asunto + extracto limpio + audiencias compactas */}
+                  <div className="space-y-2 flex-1">
+                    <h3 className="text-sm font-extrabold text-neutral-900 leading-snug line-clamp-2">
+                      {step.subject}
+                    </h3>
+                    <p className="text-[11px] text-neutral-500 line-clamp-2 leading-relaxed">
+                      {plainSnippet || "Sin contenido"}
                     </p>
-                    <div className="pt-1 flex flex-wrap items-center gap-1.5">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mr-1">Se envía a:</span>
+
+                    <div className="flex flex-wrap gap-1 pt-0.5">
                       {AUDIENCE_OPTIONS.map(opt => {
-                        const isIncluded = (step.target_audiences || []).includes(opt.key)
-                        if (!isIncluded) return null
+                        if (!(step.target_audiences || []).includes(opt.key)) return null
                         return (
-                          <span key={opt.key} className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-lg border ${opt.color}`}>
-                            <span>{opt.icon}</span> {opt.label}
+                          <span
+                            key={opt.key}
+                            title={opt.label}
+                            className={`inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${opt.color}`}
+                          >
+                            <span>{opt.icon}</span>
+                            <span className="truncate max-w-[70px]">{opt.label}</span>
                           </span>
                         )
                       })}
                     </div>
                   </div>
 
-                  <div className="pt-3 border-t border-neutral-100 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
-                    <button
-                      type="button"
-                      onClick={() => openActivityModal(step, "sent")}
-                      className="flex items-center gap-1.5 font-semibold text-neutral-700 hover:text-indigo-700 bg-neutral-50 hover:bg-indigo-50 border border-neutral-200/80 px-2.5 py-1 rounded-xl transition-colors"
-                    >
-                      <Send className="w-3.5 h-3.5 text-neutral-400" />
-                      <span>{step.stats?.sent || 0} enviados</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openActivityModal(step, "opened")}
-                      className="flex items-center gap-1.5 font-semibold text-neutral-700 hover:text-indigo-700 bg-neutral-50 hover:bg-indigo-50 border border-neutral-200/80 px-2.5 py-1 rounded-xl transition-colors"
-                    >
-                      <Eye className="w-3.5 h-3.5 text-indigo-500" />
-                      <span>
-                        {step.stats?.opened || 0} abiertos ({step.stats?.sent ? Math.round(((step.stats?.opened || 0) / step.stats.sent) * 100) : 0}%)
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openActivityModal(step, "clicked")}
-                      className="flex items-center gap-1.5 font-semibold text-neutral-700 hover:text-indigo-700 bg-neutral-50 hover:bg-indigo-50 border border-neutral-200/80 px-2.5 py-1 rounded-xl transition-colors"
-                    >
-                      <MousePointer className="w-3.5 h-3.5 text-violet-500" />
-                      <span>
-                        {step.stats?.clicked || 0} clics ({step.stats?.sent ? Math.round(((step.stats?.clicked || 0) / step.stats.sent) * 100) : 0}%)
-                      </span>
-                    </button>
+                  {/* Footer: Métricas compactas + botones */}
+                  <div className="pt-2.5 border-t border-neutral-100 space-y-2">
+                    <div className="flex items-center justify-between text-[10px] font-bold text-neutral-500">
+                      <button
+                        type="button"
+                        onClick={() => openActivityModal(step, "sent")}
+                        className="hover:text-indigo-700 transition-colors"
+                      >
+                        📤 {step.stats?.sent || 0} env.
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openActivityModal(step, "opened")}
+                        className="hover:text-indigo-700 transition-colors"
+                      >
+                        👁️ {openRate}% ab.
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openActivityModal(step, "clicked")}
+                        className="hover:text-indigo-700 transition-colors"
+                      >
+                        🖱️ {clickRate}% clic
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        onClick={() => handleSendTest(step)}
+                        disabled={testingSend === step.id}
+                        className="py-1.5 px-2 rounded-xl text-[11px] font-bold text-neutral-600 hover:text-neutral-900 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 transition-colors flex items-center justify-center gap-1"
+                      >
+                        <Send className="w-3 h-3 text-neutral-400" />
+                        <span>{testingSend === step.id ? "..." : "Probar"}</span>
+                      </button>
+                      <button
+                        onClick={() => handleSendNow(step)}
+                        disabled={sendingNow === step.id}
+                        className="py-1.5 px-2 rounded-xl text-[11px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors flex items-center justify-center gap-1 disabled:opacity-60"
+                      >
+                        <Send className="w-3 h-3" />
+                        <span>{sendingNow === step.id ? "..." : "Enviar ya"}</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               )
