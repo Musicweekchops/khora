@@ -28,12 +28,17 @@ import {
   Copy,
   RefreshCw,
   Image as ImageIcon,
-  Upload
+  Upload,
+  Calendar
 } from "lucide-react"
 
 interface NurtureStep {
   id: string
   step_order: number
+  step_type?: "SEQUENCE" | "SCHEDULED" | null
+  scheduled_date?: string | null
+  scheduled_time?: string | null
+  broadcast_sent_at?: string | null
   subject: string
   content_html: string
   delay_days: number
@@ -138,6 +143,13 @@ export default function FunnelPage() {
   const [saving, setSaving] = useState(false)
 
   // Form State
+  const [formStepType, setFormStepType] = useState<"SEQUENCE" | "SCHEDULED">("SEQUENCE")
+  const [formScheduledDate, setFormScheduledDate] = useState<string>(() => {
+    const tmr = new Date()
+    tmr.setDate(tmr.getDate() + 1)
+    return tmr.toISOString().split("T")[0]
+  })
+  const [formScheduledTime, setFormScheduledTime] = useState<string>("18:00")
   const [formSubject, setFormSubject] = useState("")
   const [formContent, setFormContent] = useState("")
   const [formDelay, setFormDelay] = useState(7)
@@ -496,9 +508,27 @@ export default function FunnelPage() {
     }
   }
 
+  const sequenceSteps = useMemo(
+    () => steps.filter(s => !s.step_type || s.step_type === "SEQUENCE").sort((a, b) => a.step_order - b.step_order),
+    [steps]
+  )
+
+  const scheduledSteps = useMemo(
+    () =>
+      steps
+        .filter(s => s.step_type === "SCHEDULED")
+        .sort(
+          (a, b) =>
+            (a.scheduled_date || "").localeCompare(b.scheduled_date || "") ||
+            (a.scheduled_time || "").localeCompare(b.scheduled_time || "")
+        ),
+    [steps]
+  )
+
   function openCreateModal() {
     setEditingStep(null)
     setCreatingStepZero(false)
+    setFormStepType("SEQUENCE")
     setFormSubject("")
     setFormContent("")
     setFormDelay(7)
@@ -510,9 +540,29 @@ export default function FunnelPage() {
     setShowModal(true)
   }
 
+  function openCreateScheduledModal() {
+    setEditingStep(null)
+    setCreatingStepZero(false)
+    setFormStepType("SCHEDULED")
+    const tmr = new Date()
+    tmr.setDate(tmr.getDate() + 1)
+    setFormScheduledDate(tmr.toISOString().split("T")[0])
+    setFormScheduledTime("18:00")
+    setFormSubject("")
+    setFormContent("")
+    setFormDelay(0)
+    setFormAudiences(["PROSPECT", "TRIAL", "PAUSED", "INACTIVE"])
+    setFormLibraryId("")
+    setFormHeaderImageUrl(globalDefaultHeader || "")
+    setFormIsActive(true)
+    setEditorTab("text")
+    setShowModal(true)
+  }
+
   function openCreateStepZeroModal() {
     setEditingStep(null)
     setCreatingStepZero(true)
+    setFormStepType("SEQUENCE")
     setFormSubject("¡Bienvenido/a a la comunidad de estudiantes, {{nombre}}! 🥁")
     setFormContent(
       "Qué alegría tenerte en la comunidad de estudiantes.\n\nPor aquí te iré compartiendo ejercicios de práctica, partituras, ideas de estudio y novedades para acompañarte en tu avance en la batería.\n\nGuarda este correo en tu bandeja principal para que no te pierdas el material de los próximos días."
@@ -528,7 +578,11 @@ export default function FunnelPage() {
 
   function openEditModal(step: NurtureStep) {
     setEditingStep(step)
-    setCreatingStepZero(step.step_order === 0)
+    const isSched = step.step_type === "SCHEDULED"
+    setCreatingStepZero(!isSched && step.step_order === 0)
+    setFormStepType(isSched ? "SCHEDULED" : "SEQUENCE")
+    if (step.scheduled_date) setFormScheduledDate(step.scheduled_date)
+    if (step.scheduled_time) setFormScheduledTime(step.scheduled_time.slice(0, 5))
     setFormSubject(step.subject)
     setFormContent(step.content_html)
     setFormDelay(step.step_order === 0 ? 0 : step.delay_days)
@@ -753,19 +807,29 @@ export default function FunnelPage() {
     setSaving(true)
 
     try {
-      const maxOrder = steps.reduce((max, s) => Math.max(max, s.step_order), 0)
-      const nextOrder = editingStep
-        ? editingStep.step_order
-        : creatingStepZero
-          ? 0
-          : maxOrder + 1
+      const isSched = formStepType === "SCHEDULED" && !creatingStepZero && editingStep?.step_order !== 0
+      const maxOrder = sequenceSteps.reduce((max, s) => Math.max(max, s.step_order), 0)
+      const nextOrder = isSched
+        ? -1
+        : editingStep && editingStep.step_order >= 0
+          ? editingStep.step_order
+          : creatingStepZero
+            ? 0
+            : maxOrder + 1
 
       const payload: any = {
         teacher_id: profile.teacherProfileId,
         step_order: nextOrder,
+        step_type: isSched ? "SCHEDULED" : "SEQUENCE",
+        scheduled_date: isSched ? formScheduledDate : null,
+        scheduled_time: isSched ? (formScheduledTime || "18:00") : null,
+        // Si se reprograma un correo programado cambiando su fecha/hora, permitir que vuelva a enviarse en la nueva fecha
+        ...(isSched && editingStep && (editingStep.scheduled_date !== formScheduledDate || (editingStep.scheduled_time || "18:00").slice(0, 5) !== formScheduledTime)
+          ? { broadcast_sent_at: null }
+          : {}),
         subject: formSubject.trim(),
         content_html: formContent.trim(),
-        delay_days: nextOrder === 0 ? 0 : (Number(formDelay) || 7),
+        delay_days: isSched || nextOrder === 0 ? 0 : (Number(formDelay) || 7),
         target_audiences: formAudiences,
         library_content_id: formLibraryId || null,
         header_image_url: formHeaderImageUrl.trim() || null,
@@ -1097,8 +1161,8 @@ export default function FunnelPage() {
           }
         } else {
           ok++
-          // Avanzar el progreso solo si este paso es posterior al actual del alumno
-          if (step.step_order > r.nurtureStep) {
+          // Avanzar el progreso solo si es un paso de la secuencia lineal (NUNCA si es un correo programado por fecha)
+          if (step.step_type !== "SCHEDULED" && step.step_order > r.nurtureStep) {
             await supabase.from("StudentProfile").update({
               nurture_step: step.step_order,
               nurture_last_sent_at: new Date().toISOString()
@@ -1106,6 +1170,13 @@ export default function FunnelPage() {
           }
         }
         await new Promise(res => setTimeout(res, 600))
+      }
+
+      if (step.step_type === "SCHEDULED" && ok > 0) {
+        await supabase
+          .from("NurtureStep")
+          .update({ broadcast_sent_at: new Date().toISOString() })
+          .eq("id", step.id)
       }
 
       alert(`Enviados: ${ok} de ${recipients.length}.${failed.length ? `\nFallaron:\n${failed.join("\n")}` : ""}`)
@@ -1272,6 +1343,15 @@ export default function FunnelPage() {
           </button>
 
           <button
+            type="button"
+            onClick={openCreateScheduledModal}
+            className="px-4 py-3 rounded-2xl bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 text-xs font-extrabold uppercase tracking-wider flex items-center gap-2 transition-colors shadow-sm"
+            title="Programar un correo para una fecha y hora exacta sin alterar el flujo del funnel"
+          >
+            <Calendar className="w-4 h-4 text-indigo-600" /> Programar en Fecha / Hora
+          </button>
+
+          <button
             onClick={openCreateModal}
             className="kh-btn-primary py-3 px-5 text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-violet-500/10"
           >
@@ -1381,11 +1461,203 @@ export default function FunnelPage() {
             <span>Pasos en la Secuencia</span>
             <Mail className="w-4 h-4 text-indigo-500" />
           </div>
-          <div className="text-3xl font-extrabold text-neutral-900">{steps.length}</div>
+          <div className="text-3xl font-extrabold text-neutral-900">{sequenceSteps.length}</div>
           <p className="text-[11px] text-neutral-400">
-            {steps.length > 0 ? `Cubre ${steps.reduce((acc, s) => acc + s.delay_days, 0)} días de seguimiento continuo` : "Sin correos aún"}
+            {sequenceSteps.length > 0 ? `Cubre ${sequenceSteps.reduce((acc, s) => acc + s.delay_days, 0)} días de seguimiento continuo` : "Sin correos aún"}
+            {scheduledSteps.length > 0 ? ` · +${scheduledSteps.length} programado${scheduledSteps.length > 1 ? "s" : ""}` : ""}
           </p>
         </div>
+      </div>
+
+      {/* SECCIÓN: CORREOS PROGRAMADOS EN FECHAS ESPECÍFICAS (INDEPENDIENTES DEL FLUJO) */}
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-bold text-neutral-900 flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-indigo-600" />
+              <span>Correos Programados en Fechas Específicas</span>
+              <span className="text-xs font-semibold text-neutral-400">({scheduledSteps.length})</span>
+            </h2>
+            <p className="text-xs text-neutral-500 mt-0.5">
+              Se envían exactamente el día y hora (Chile) que elijas. <strong>No modifican el paso actual ni los días de espera</strong> de ningún alumno en el funnel.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={openCreateScheduledModal}
+            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm self-start sm:self-auto"
+          >
+            <Plus className="w-3.5 h-3.5" /> Programar Nuevo Correo
+          </button>
+        </div>
+
+        {scheduledSteps.length === 0 ? (
+          <div className="bg-indigo-50/40 border border-dashed border-indigo-200 rounded-3xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <h3 className="text-sm font-bold text-indigo-950">
+                ¿Quieres enviar un aviso especial, saludo de fecha clave o taller puntual?
+              </h3>
+              <p className="text-xs text-indigo-800/80">
+                Programa un correo para cualquier día y hora exacta (ej. viernes a las 19:00 o 24 de diciembre al mediodía) sin interrumpir ni reiniciar la secuencia de tus alumnos.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={openCreateScheduledModal}
+              className="px-4 py-2.5 rounded-xl bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold shrink-0 shadow-xs"
+            >
+              📅 Programar Fecha / Hora
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4">
+            {scheduledSteps.map((step) => {
+              const isSent = Boolean(step.broadcast_sent_at)
+              const formattedDate = step.scheduled_date
+                ? new Date(step.scheduled_date + "T12:00").toLocaleDateString("es-CL", {
+                    weekday: "short",
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })
+                : "Sin fecha"
+              const formattedTime = (step.scheduled_time || "18:00").slice(0, 5)
+
+              return (
+                <div
+                  key={step.id}
+                  className={`bg-white border rounded-3xl p-5 sm:p-6 transition-all shadow-sm ${
+                    isSent
+                      ? "border-emerald-200/80 bg-emerald-50/10"
+                      : step.is_active
+                        ? "border-indigo-200 hover:border-indigo-400"
+                        : "border-neutral-200 opacity-60 bg-neutral-50"
+                  }`}
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-neutral-100 pb-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-black uppercase tracking-wider px-3 py-1 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-200 flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+                        {formattedDate} · {formattedTime} hrs
+                      </span>
+                      {isSent ? (
+                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          ✅ Enviado el {new Date(step.broadcast_sent_at!).toLocaleDateString("es-CL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      ) : (
+                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                          ⏳ Programado
+                        </span>
+                      )}
+                      <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-neutral-100 text-neutral-600 border border-neutral-200">
+                        🔒 Independiente del flujo
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {!isSent && (
+                        <button
+                          onClick={() => handleToggleActive(step)}
+                          className={`text-xs font-bold px-3 py-1 rounded-xl transition-colors ${
+                            step.is_active
+                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60"
+                              : "bg-neutral-100 text-neutral-500 border border-neutral-200"
+                          }`}
+                        >
+                          {step.is_active ? "🟢 Activo" : "⏸️ Pausado"}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleSendTest(step)}
+                        disabled={testingSend === step.id}
+                        className="text-xs text-neutral-600 hover:text-neutral-900 border border-neutral-200 hover:bg-neutral-50 px-3 py-1 rounded-xl transition-colors font-medium flex items-center gap-1"
+                      >
+                        <Send className="w-3 h-3 text-neutral-400" />
+                        {testingSend === step.id ? "Enviando..." : "Probar"}
+                      </button>
+                      <button
+                        onClick={() => handleSendNow(step)}
+                        disabled={sendingNow === step.id}
+                        className="text-xs text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1 rounded-xl transition-colors font-bold flex items-center gap-1 disabled:opacity-60"
+                        title="Despachar ahora mismo a los contactos pendientes sin esperar a la fecha programada"
+                      >
+                        <Send className="w-3 h-3" />
+                        {sendingNow === step.id ? "Enviando..." : "Enviar ahora"}
+                      </button>
+                      <button
+                        onClick={() => openEditModal(step)}
+                        className="p-1.5 text-neutral-400 hover:text-neutral-900 rounded-lg hover:bg-neutral-100 transition-colors"
+                        title="Editar fecha, hora o contenido"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteStep(step.id)}
+                        className="p-1.5 text-neutral-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                        title="Eliminar correo programado"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="py-4 space-y-3">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block mb-0.5">Asunto:</span>
+                      <h3 className="text-base font-bold text-neutral-900">{step.subject}</h3>
+                    </div>
+                    <p className="text-xs text-neutral-600 line-clamp-2 leading-relaxed bg-neutral-50 p-3 rounded-2xl border border-neutral-100 font-mono">
+                      {step.content_html}
+                    </p>
+                    <div className="pt-1 flex flex-wrap items-center gap-1.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mr-1">Se envía a:</span>
+                      {AUDIENCE_OPTIONS.map(opt => {
+                        const isIncluded = (step.target_audiences || []).includes(opt.key)
+                        if (!isIncluded) return null
+                        return (
+                          <span key={opt.key} className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-lg border ${opt.color}`}>
+                            <span>{opt.icon}</span> {opt.label}
+                          </span>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-neutral-100 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
+                    <button
+                      type="button"
+                      onClick={() => openActivityModal(step, "sent")}
+                      className="flex items-center gap-1.5 font-semibold text-neutral-700 hover:text-indigo-700 bg-neutral-50 hover:bg-indigo-50 border border-neutral-200/80 px-2.5 py-1 rounded-xl transition-colors"
+                    >
+                      <Send className="w-3.5 h-3.5 text-neutral-400" />
+                      <span>{step.stats?.sent || 0} enviados</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openActivityModal(step, "opened")}
+                      className="flex items-center gap-1.5 font-semibold text-neutral-700 hover:text-indigo-700 bg-neutral-50 hover:bg-indigo-50 border border-neutral-200/80 px-2.5 py-1 rounded-xl transition-colors"
+                    >
+                      <Eye className="w-3.5 h-3.5 text-indigo-500" />
+                      <span>
+                        {step.stats?.opened || 0} abiertos ({step.stats?.sent ? Math.round(((step.stats?.opened || 0) / step.stats.sent) * 100) : 0}%)
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openActivityModal(step, "clicked")}
+                      className="flex items-center gap-1.5 font-semibold text-neutral-700 hover:text-indigo-700 bg-neutral-50 hover:bg-indigo-50 border border-neutral-200/80 px-2.5 py-1 rounded-xl transition-colors"
+                    >
+                      <MousePointer className="w-3.5 h-3.5 text-violet-500" />
+                      <span>
+                        {step.stats?.clicked || 0} clics ({step.stats?.sent ? Math.round(((step.stats?.clicked || 0) / step.stats.sent) * 100) : 0}%)
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* TIMELINE / PIPELINE CONTAINER */}
@@ -1393,7 +1665,7 @@ export default function FunnelPage() {
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-neutral-900 flex items-center gap-2">
             <span>Línea de Tiempo de la Secuencia</span>
-            <span className="text-xs font-semibold text-neutral-400">({steps.length} correos)</span>
+            <span className="text-xs font-semibold text-neutral-400">({sequenceSteps.length} correos)</span>
           </h2>
         </div>
 
@@ -1401,7 +1673,7 @@ export default function FunnelPage() {
           <div className="bg-white border border-neutral-200 rounded-3xl p-12 text-center text-neutral-400 text-sm font-semibold animate-pulse">
             Cargando secuencia de correos...
           </div>
-        ) : steps.length === 0 ? (
+        ) : sequenceSteps.length === 0 ? (
           <div className="bg-white border-2 border-dashed border-neutral-200 rounded-3xl p-12 text-center space-y-4">
             <div className="w-12 h-12 bg-violet-50 text-violet-600 rounded-2xl flex items-center justify-center mx-auto text-xl">
               ✉️
@@ -1421,7 +1693,7 @@ export default function FunnelPage() {
           </div>
         ) : (
           <div className="relative pl-6 sm:pl-8 border-l-2 border-violet-200/80 space-y-8 ml-2 sm:ml-4">
-            {!steps.some(s => s.step_order === 0) && (
+            {!sequenceSteps.some(s => s.step_order === 0) && (
               <div className="relative">
                 <div className="absolute -left-[33px] sm:-left-[41px] top-6 w-6 h-6 rounded-full bg-amber-500 border-4 border-amber-200 shadow-sm flex items-center justify-center text-[10px] font-black text-white">
                   0
@@ -1449,7 +1721,7 @@ export default function FunnelPage() {
               </div>
             )}
 
-            {steps.map((step) => {
+            {sequenceSteps.map((step) => {
               const conversionCount = step.stats?.converted || 0
               const isStepZero = step.step_order === 0
               return (
@@ -1647,7 +1919,7 @@ export default function FunnelPage() {
                 onClick={openCreateModal}
                 className="w-full py-4 border-2 border-dashed border-violet-300 hover:border-violet-500 rounded-3xl text-violet-700 hover:text-violet-900 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 bg-violet-50/30 hover:bg-violet-50/70 transition-all"
               >
-                <Plus className="w-4 h-4" /> Agregar Paso #{steps.reduce((max, s) => Math.max(max, s.step_order), 0) + 1} a la Secuencia
+                <Plus className="w-4 h-4" /> Agregar Paso #{sequenceSteps.reduce((max, s) => Math.max(max, s.step_order), 0) + 1} a la Secuencia
               </button>
             </div>
           </div>
@@ -1663,17 +1935,23 @@ export default function FunnelPage() {
               <div>
                 <h3 className="font-extrabold text-neutral-900 text-lg">
                   {editingStep
-                    ? editingStep.step_order === 0
-                      ? "Editar Correo #0 (Bienvenida Inmediata)"
-                      : `Editar Paso #${editingStep.step_order}`
+                    ? editingStep.step_type === "SCHEDULED" || formStepType === "SCHEDULED"
+                      ? "Editar Correo Programado en Fecha Específica"
+                      : editingStep.step_order === 0
+                        ? "Editar Correo #0 (Bienvenida Inmediata)"
+                        : `Editar Paso #${editingStep.step_order}`
                     : creatingStepZero
                       ? "Configurar Correo #0 (Bienvenida Inmediata)"
-                      : `Crear Paso #${steps.reduce((max, s) => Math.max(max, s.step_order), 0) + 1} del Funnel`}
+                      : formStepType === "SCHEDULED"
+                        ? "Programar Correo en Fecha y Hora Específica"
+                        : `Crear Paso #${sequenceSteps.reduce((max, s) => Math.max(max, s.step_order), 0) + 1} del Funnel`}
                 </h3>
                 <p className="text-xs text-neutral-500 mt-0.5">
                   {editingStep?.step_order === 0 || creatingStepZero
                     ? "Este correo se envía automáticamente en el mismo instante en que alguien se suscribe en la comunidad."
-                    : "Este correo se enviará en automático siguiendo el orden de la secuencia infinita."}
+                    : formStepType === "SCHEDULED"
+                      ? "Se despacha en la fecha y hora exacta que elijas, sin alterar el paso ni el reloj del funnel de los alumnos."
+                      : "Este correo se enviará en automático siguiendo el orden de la secuencia infinita."}
                 </p>
               </div>
               <button onClick={() => setShowModal(false)} className="p-2 text-neutral-400 hover:text-neutral-900 rounded-xl">
@@ -1683,6 +1961,42 @@ export default function FunnelPage() {
 
             {/* Modal Body */}
             <form onSubmit={handleSaveStep} className="p-6 overflow-y-auto space-y-5 flex-1">
+              {/* SELECTOR DE TIPO: SECUENCIA LINEAL vs FECHA Y HORA ESPECÍFICA */}
+              {!creatingStepZero && editingStep?.step_order !== 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-1.5 bg-neutral-100 rounded-2xl border border-neutral-200">
+                  <button
+                    type="button"
+                    onClick={() => setFormStepType("SEQUENCE")}
+                    className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all text-left flex items-center gap-2 ${
+                      formStepType === "SEQUENCE"
+                        ? "bg-white text-violet-800 shadow-sm border border-violet-200"
+                        : "text-neutral-500 hover:text-neutral-800"
+                    }`}
+                  >
+                    <span>🔄</span>
+                    <div>
+                      <div className="font-extrabold">Paso de la Secuencia</div>
+                      <div className="text-[10px] font-medium opacity-75">Avanza el funnel por días de espera</div>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormStepType("SCHEDULED")}
+                    className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all text-left flex items-center gap-2 ${
+                      formStepType === "SCHEDULED"
+                        ? "bg-white text-indigo-800 shadow-sm border border-indigo-200"
+                        : "text-neutral-500 hover:text-neutral-800"
+                    }`}
+                  >
+                    <span>📅</span>
+                    <div>
+                      <div className="font-extrabold">Fecha y Hora Específica</div>
+                      <div className="text-[10px] font-medium opacity-75">Independiente · no altera el flujo</div>
+                    </div>
+                  </button>
+                </div>
+              )}
+
               <div>
                 <label className="kh-label block text-xs font-bold text-neutral-700 mb-1">
                   {editingStep?.step_order === 0 || creatingStepZero
@@ -1856,9 +2170,35 @@ export default function FunnelPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="kh-label block text-xs font-bold text-neutral-700 mb-1">
-                    {editingStep?.step_order === 0 || creatingStepZero ? "Momento de Envío" : "Tiempo de Espera (Días)"}
+                    {formStepType === "SCHEDULED"
+                      ? "Fecha y Hora Exacta de Envío (Chile)"
+                      : editingStep?.step_order === 0 || creatingStepZero
+                        ? "Momento de Envío"
+                        : "Tiempo de Espera (Días)"}
                   </label>
-                  {editingStep?.step_order === 0 || creatingStepZero ? (
+                  {formStepType === "SCHEDULED" ? (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="date"
+                          required
+                          value={formScheduledDate}
+                          onChange={e => setFormScheduledDate(e.target.value)}
+                          className="kh-input w-full text-xs font-bold"
+                        />
+                        <input
+                          type="time"
+                          required
+                          value={formScheduledTime}
+                          onChange={e => setFormScheduledTime(e.target.value)}
+                          className="kh-input w-full text-xs font-bold"
+                        />
+                      </div>
+                      <p className="text-[10px] text-indigo-700 bg-indigo-50/80 border border-indigo-200/70 rounded-lg px-2.5 py-1.5 font-medium">
+                        🔒 Se despacha en horario de Chile (America/Santiago) sin modificar el paso actual ni los tiempos del funnel de los alumnos.
+                      </p>
+                    </div>
+                  ) : editingStep?.step_order === 0 || creatingStepZero ? (
                     <div className="px-3.5 py-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold flex items-center gap-2">
                       <span>⚡ Envío Inmediato (0 días) al registrarse</span>
                     </div>
